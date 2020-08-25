@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_I8I8_POOLING_HPP
-#define CPU_X64_JIT_UNI_I8I8_POOLING_HPP
+#ifndef CPU_AARCH64_JIT_UNI_I8I8_POOLING_HPP
+#define CPU_AARCH64_JIT_UNI_I8I8_POOLING_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/primitive.hpp"
@@ -23,13 +23,13 @@
 
 #include "cpu/cpu_pooling_pd.hpp"
 
-#include "cpu/x64/cpu_isa_traits.hpp"
-#include "cpu/x64/jit_primitive_conf.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/jit_primitive_conf.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 template <cpu_isa_t isa>
 struct jit_uni_i8i8_pooling_fwd_ker_t;
@@ -87,7 +87,7 @@ private:
     jit_uni_i8i8_pooling_fwd_ker_t<isa> *ker_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

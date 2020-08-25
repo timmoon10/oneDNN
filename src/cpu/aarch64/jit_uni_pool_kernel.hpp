@@ -15,23 +15,23 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_POOL_KERNEL_HPP
-#define CPU_X64_JIT_UNI_POOL_KERNEL_HPP
+#ifndef CPU_AARCH64_JIT_UNI_POOL_KERNEL_HPP
+#define CPU_AARCH64_JIT_UNI_POOL_KERNEL_HPP
 
 #include <cfloat>
 
 #include "common/c_types_map.hpp"
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
-#include "cpu/x64/jit_primitive_conf.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_primitive_conf.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 template <cpu_isa_t isa>
 struct jit_uni_pool_kernel : public jit_generator {
@@ -250,7 +250,7 @@ private:
     bf16_emulation_t *bf16_emu_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

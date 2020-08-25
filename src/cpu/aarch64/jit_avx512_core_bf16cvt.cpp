@@ -16,17 +16,17 @@
 
 #include <assert.h>
 
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 
 #include "common/bfloat16.hpp"
 
-#include "cpu/x64/cpu_isa_traits.hpp"
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace Xbyak;
 
@@ -150,7 +150,7 @@ void jit_avx512_core_cvt_bf16_to_ps_t::generate() {
     return safe_ret();
 }
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_POOLING_HPP
-#define CPU_X64_JIT_UNI_POOLING_HPP
+#ifndef CPU_AARCH64_JIT_UNI_POOLING_HPP
+#define CPU_AARCH64_JIT_UNI_POOLING_HPP
 
 #include <assert.h>
 #include <memory>
@@ -27,13 +27,13 @@
 #include "common/utils.hpp"
 
 #include "cpu/cpu_pooling_pd.hpp"
-#include "cpu/x64/jit_uni_pool_kernel.hpp"
-#include "cpu/x64/jit_uni_reorder.hpp"
+#include "cpu/aarch64/jit_uni_pool_kernel.hpp"
+#include "cpu/aarch64/jit_uni_reorder.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 namespace jit_uni_pooling_utils {
 struct trans_wrapper_t;
@@ -167,7 +167,7 @@ private:
     static constexpr data_type_t wsp_dt_ = data_type::f32;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

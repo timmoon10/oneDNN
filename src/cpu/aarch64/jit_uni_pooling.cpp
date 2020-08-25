@@ -21,12 +21,12 @@
 #include "common/nstl.hpp"
 #include "common/type_helpers.hpp"
 
-#include "cpu/x64/jit_uni_pooling.hpp"
+#include "cpu/aarch64/jit_uni_pooling.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 namespace jit_uni_pooling_utils {
 
@@ -41,7 +41,7 @@ struct trans_wrapper_t {
         , nb_y_(ysize / 8)
         , x_tail_(xsize % 8)
         , y_tail_(ysize % 8) {
-        using namespace cpu::x64::tr;
+        using namespace cpu::aarch64::tr;
 
         auto create_ker = [=](dim_t ys, dim_t y_inp_str, dim_t y_out_str,
                                   dim_t xs, dim_t x_inp_str, dim_t x_out_str) {
@@ -988,7 +988,7 @@ template struct jit_uni_pooling_bwd_t<avx512_common, data_type::f32>;
 template struct jit_uni_pooling_fwd_t<avx512_core, data_type::bf16>;
 template struct jit_uni_pooling_bwd_t<avx512_core, data_type::bf16>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

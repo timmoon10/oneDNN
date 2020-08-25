@@ -14,24 +14,24 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_AVX512_CORE_BF16CVT_HPP
-#define CPU_X64_JIT_AVX512_CORE_BF16CVT_HPP
+#ifndef CPU_AARCH64_JIT_AVX512_CORE_BF16CVT_HPP
+#define CPU_AARCH64_JIT_AVX512_CORE_BF16CVT_HPP
 
 #include <assert.h>
 
 #include "common/c_types_map.hpp"
 #include "common/nstl.hpp"
 #include "common/type_helpers.hpp"
-#include "cpu/x64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
 #include "dnnl_debug.h"
 
 #include "common/bfloat16.hpp"
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 namespace bf16_support {
 struct jit_call_t {
@@ -572,7 +572,7 @@ private:
 };
 
 #undef GET_OFF
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
