@@ -23,10 +23,10 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
-#include "cpu/x64/jit_uni_softmax.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_uni_softmax.hpp"
 
 #if __INTEL_COMPILER && __INTEL_COMPILER < 1900
 // Intel Compilers 17.x and 18.x do not like that diff_src_ptr() is only used
@@ -39,7 +39,7 @@
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 namespace {
 
@@ -792,7 +792,7 @@ template struct jit_uni_softmax_fwd_t<avx2>;
 template struct jit_uni_softmax_fwd_t<avx512_common>;
 template struct jit_uni_softmax_bwd_t<avx512_common>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

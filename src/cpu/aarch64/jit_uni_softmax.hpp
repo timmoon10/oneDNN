@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_SOFTMAX_HPP
-#define CPU_X64_JIT_UNI_SOFTMAX_HPP
+#ifndef CPU_AARCH64_JIT_UNI_SOFTMAX_HPP
+#define CPU_AARCH64_JIT_UNI_SOFTMAX_HPP
 
 #include <assert.h>
 
@@ -25,13 +25,13 @@
 #include "common/utils.hpp"
 
 #include "cpu/cpu_softmax_pd.hpp"
-#include "cpu/x64/cpu_isa_traits.hpp"
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 namespace softmax_impl {
 template <cpu_isa_t isa>
@@ -163,7 +163,7 @@ private:
     softmax_impl::driver_t<isa> *softmax_driver_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
