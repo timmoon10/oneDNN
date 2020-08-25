@@ -20,14 +20,14 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_uni_dw_conv_kernel_f32.hpp"
+#include "cpu/aarch64/jit_uni_dw_conv_kernel_f32.hpp"
 
 #define GET_OFF(field) offsetof(jit_conv_call_s, field)
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace dnnl::impl::prop_kind;
 using namespace dnnl::impl::memory_tracking::names;
@@ -380,10 +380,9 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     if (jcp.with_eltwise) eltwise_injector_->prepare_table();
 }
 
-template struct jit_uni_dw_conv_fwd_kernel_f32<avx512_common>;
-template struct jit_uni_dw_conv_fwd_kernel_f32<avx2>;
-template struct jit_uni_dw_conv_fwd_kernel_f32<sse41>;
+template struct jit_uni_dw_conv_fwd_kernel_f32<sve>;
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::load_ddst(
         int ur_ch_blocks, int ur_str_w) {
@@ -1063,8 +1062,8 @@ void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
 template struct jit_uni_dw_conv_bwd_weights_kernel_f32<avx512_common>;
 template struct jit_uni_dw_conv_bwd_weights_kernel_f32<avx2>;
 template struct jit_uni_dw_conv_bwd_weights_kernel_f32<sse41>;
-
-} // namespace x64
+#endif
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
