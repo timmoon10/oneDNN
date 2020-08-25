@@ -560,6 +560,7 @@ struct jit_pool_conf_t {
     bool pad_w_is_null;
     bool is_backward;
     bool simple_alg;
+    bool is_c_padded;
     data_type_t ind_dt;
 
     int c_block, c_tail, nb_c;
@@ -600,6 +601,7 @@ struct jit_pool_call_s {
     float ker_area_h;
     size_t ur_bc;
     size_t padded_mask;
+    size_t b_c; // contains number of channel blocks already processed
 };
 
 } // namespace aarch64
