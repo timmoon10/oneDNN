@@ -20,12 +20,12 @@
 
 #include "common/bfloat16.hpp"
 
-#include "cpu/x64/jit_uni_dw_convolution.hpp"
+#include "cpu/aarch64/jit_uni_dw_convolution.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace dnnl::impl::status;
 using namespace dnnl::impl::memory_tracking::names;
@@ -159,13 +159,10 @@ void jit_uni_dw_convolution_fwd_t<isa, src_type, dst_type>::execute_forward(
         ctx.memory(DNNL_ARG_DST)->zero_pad(ctx.stream());
 }
 
-template struct jit_uni_dw_convolution_fwd_t<avx512_core, data_type::bf16,
-        data_type::f32>;
-template struct jit_uni_dw_convolution_fwd_t<avx512_core, data_type::bf16>;
-template struct jit_uni_dw_convolution_fwd_t<avx512_common, data_type::f32>;
-template struct jit_uni_dw_convolution_fwd_t<avx2, data_type::f32>;
-template struct jit_uni_dw_convolution_fwd_t<sse41, data_type::f32>;
+template struct jit_uni_dw_convolution_fwd_t<sve, data_type::f32>;
 
+
+#if 0
 template <cpu_isa_t isa, data_type_t diff_dst_type, data_type_t diff_src_type>
 void jit_uni_dw_convolution_bwd_data_t<isa, diff_dst_type,
         diff_src_type>::execute_backward_data(const exec_ctx_t &ctx) const {
@@ -589,7 +586,8 @@ template struct jit_uni_dw_convolution_bwd_weights_t<avx512_common,
         data_type::f32>;
 template struct jit_uni_dw_convolution_bwd_weights_t<avx2, data_type::f32>;
 template struct jit_uni_dw_convolution_bwd_weights_t<sse41, data_type::f32>;
-} // namespace x64
+#endif
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
