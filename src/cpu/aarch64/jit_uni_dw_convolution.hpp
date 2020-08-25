@@ -14,23 +14,23 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_DW_CONVOLUTION_HPP
-#define CPU_X64_JIT_UNI_DW_CONVOLUTION_HPP
+#ifndef CPU_AARCH64_JIT_UNI_DW_CONVOLUTION_HPP
+#define CPU_AARCH64_JIT_UNI_DW_CONVOLUTION_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
 #include "common/primitive.hpp"
 
 #include "cpu/cpu_convolution_pd.hpp"
-#include "cpu/x64/cpu_barrier.hpp"
-#include "cpu/x64/cpu_reducer.hpp"
+#include "cpu/aarch64/cpu_barrier.hpp"
+#include "cpu/aarch64/cpu_reducer.hpp"
 
-#include "cpu/x64/jit_uni_dw_conv_kernel_utils.hpp"
+#include "cpu/aarch64/jit_uni_dw_conv_kernel_utils.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 template <cpu_isa_t isa, data_type_t src_type, data_type_t dst_type = src_type>
 struct jit_uni_dw_convolution_fwd_t : public primitive_t {
@@ -273,7 +273,7 @@ using jit_avx2_dw_convolution_bwd_weights_t
 using jit_sse41_dw_convolution_bwd_weights_t
         = jit_uni_dw_convolution_bwd_weights_t<sse41, data_type::f32>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
