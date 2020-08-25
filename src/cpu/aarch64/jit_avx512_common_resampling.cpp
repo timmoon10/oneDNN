@@ -22,15 +22,15 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/x64/jit_avx512_common_resampling.hpp"
+#include "cpu/aarch64/jit_avx512_common_resampling.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace Xbyak;
 
@@ -1021,7 +1021,7 @@ status_t jit_avx512_common_resampling_bwd_t<d_type>::execute(
 template struct jit_avx512_common_resampling_bwd_t<data_type::bf16>;
 template struct jit_avx512_common_resampling_bwd_t<data_type::f32>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

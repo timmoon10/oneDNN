@@ -14,20 +14,20 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_AVX512_COMMON_RESAMPLING_HPP
-#define CPU_X64_JIT_AVX512_COMMON_RESAMPLING_HPP
+#ifndef CPU_AARCH64_JIT_AVX512_COMMON_RESAMPLING_HPP
+#define CPU_AARCH64_JIT_AVX512_COMMON_RESAMPLING_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/primitive.hpp"
 
 #include "cpu/cpu_resampling_pd.hpp"
-#include "cpu/x64/cpu_isa_traits.hpp"
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 struct jit_avx512_common_resampling_kernel;
 
@@ -89,7 +89,7 @@ private:
     std::unique_ptr<jit_avx512_common_resampling_kernel> kernel_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
