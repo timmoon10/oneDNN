@@ -94,13 +94,9 @@ private:
     jit_uni_dw_conv_fwd_kernel<isa, src_type> *kernel_;
 };
 
-using jit_avx512_common_dw_convolution_fwd_t
-        = jit_uni_dw_convolution_fwd_t<avx512_common, data_type::f32>;
-using jit_avx2_dw_convolution_fwd_t
-        = jit_uni_dw_convolution_fwd_t<avx2, data_type::f32>;
-using jit_sse41_dw_convolution_fwd_t
-        = jit_uni_dw_convolution_fwd_t<sse41, data_type::f32>;
-
+using jit_aarch64_sve512_common_dw_convolution_fwd_t
+        = jit_uni_dw_convolution_fwd_t<sve, data_type::f32>;
+#if 0
 template <cpu_isa_t isa, data_type_t diff_dst_type,
         data_type_t diff_src_type = diff_dst_type>
 struct jit_uni_dw_convolution_bwd_data_t : public primitive_t {
@@ -272,7 +268,7 @@ using jit_avx2_dw_convolution_bwd_weights_t
         = jit_uni_dw_convolution_bwd_weights_t<avx2, data_type::f32>;
 using jit_sse41_dw_convolution_bwd_weights_t
         = jit_uni_dw_convolution_bwd_weights_t<sse41, data_type::f32>;
-
+#endif
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl
