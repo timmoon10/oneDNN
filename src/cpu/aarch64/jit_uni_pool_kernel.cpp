@@ -735,9 +735,12 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                 } else {
                     if (is_tail_processing(bci)) {
                         if (jpp.is_c_padded) {
+#ifdef DNNL_INDIRECT_JIT_AARCH64
+#else
                             knotw(k_c_tail_mask, k_c_tail_mask);
                             vpxord(vr | k_c_tail_mask, vr, vr);
                             knotw(k_c_tail_mask, k_c_tail_mask);
+#endif
                             vpmovusdb(ptr[reg_index + step_index], vr);
                         } else
                             vpmovusdb(ptr[reg_index + step_index],

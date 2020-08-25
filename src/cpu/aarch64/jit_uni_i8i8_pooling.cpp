@@ -1049,7 +1049,9 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::generate() {
 
     compute_c_block();
 
+#ifndef DNNL_INDIRECT_JIT_AARCH64
     emms();
+#endif
     postamble();
 }
 
