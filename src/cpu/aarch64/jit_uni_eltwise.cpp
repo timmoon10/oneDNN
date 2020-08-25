@@ -20,18 +20,18 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/x64/jit_uni_eltwise.hpp"
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_uni_eltwise.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
 #define GET_OFF(field) offsetof(jit_args, field)
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace Xbyak;
 
@@ -421,7 +421,7 @@ template struct jit_uni_eltwise_bwd_t<avx2, data_type::f32>;
 template struct jit_uni_eltwise_bwd_t<avx512_common, data_type::f32>;
 template struct jit_uni_eltwise_bwd_t<avx512_core, data_type::bf16>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

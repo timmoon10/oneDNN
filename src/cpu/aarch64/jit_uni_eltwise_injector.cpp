@@ -19,12 +19,12 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace Xbyak;
 
@@ -1952,7 +1952,7 @@ template struct jit_uni_eltwise_injector_f32<avx512_common>;
 template struct jit_uni_eltwise_injector_f32<avx2>;
 template struct jit_uni_eltwise_injector_f32<sse41>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

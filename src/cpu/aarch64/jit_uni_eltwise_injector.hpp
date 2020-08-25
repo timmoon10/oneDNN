@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_ELTWISE_INJECTOR_HPP
-#define CPU_X64_JIT_UNI_ELTWISE_INJECTOR_HPP
+#ifndef CPU_AARCH64_JIT_UNI_ELTWISE_INJECTOR_HPP
+#define CPU_AARCH64_JIT_UNI_ELTWISE_INJECTOR_HPP
 
 #include <assert.h>
 
@@ -24,12 +24,12 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 template <cpu_isa_t isa>
 struct jit_uni_eltwise_injector_f32 {
@@ -267,7 +267,7 @@ private:
     mapped_table_t entry_map_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

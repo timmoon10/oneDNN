@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_ELTWISE_INT_HPP
-#define CPU_X64_JIT_UNI_ELTWISE_INT_HPP
+#ifndef CPU_AARCH64_JIT_UNI_ELTWISE_INT_HPP
+#define CPU_AARCH64_JIT_UNI_ELTWISE_INT_HPP
 
 #include <assert.h>
 
@@ -26,12 +26,12 @@
 
 #include "cpu/cpu_eltwise_pd.hpp"
 
-#include "cpu/x64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 struct jit_uni_eltwise_int_kernel;
 
@@ -62,7 +62,7 @@ private:
     jit_uni_eltwise_int_kernel *kernel_ = nullptr;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

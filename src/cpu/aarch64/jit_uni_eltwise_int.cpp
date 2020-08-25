@@ -19,14 +19,14 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_generator.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/x64/jit_uni_eltwise_int.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_int.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace Xbyak;
 
@@ -472,7 +472,7 @@ template struct jit_uni_eltwise_int_fwd_t<sse41, u8>;
 template struct jit_uni_eltwise_int_fwd_t<avx2, u8>;
 template struct jit_uni_eltwise_int_fwd_t<avx512_common, u8>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
