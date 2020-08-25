@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_BINARY_HPP
-#define CPU_X64_JIT_UNI_BINARY_HPP
+#ifndef CPU_AARCH64_JIT_UNI_BINARY_HPP
+#define CPU_AARCH64_JIT_UNI_BINARY_HPP
 
 #include <assert.h>
 
@@ -25,14 +25,14 @@
 #include "common/utils.hpp"
 
 #include "cpu/cpu_eltwise_pd.hpp"
-#include "cpu/x64/cpu_isa_traits.hpp"
+#include "cpu/aarch64/cpu_isa_traits.hpp"
 
 #include "cpu/cpu_binary_pd.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 struct binary_kernel_t;
 
@@ -141,7 +141,7 @@ private:
     std::unique_ptr<binary_kernel_t> kernel_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

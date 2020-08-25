@@ -23,16 +23,16 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
-#include "cpu/x64/jit_generator.hpp"
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-#include "cpu/x64/jit_uni_binary.hpp"
+#include "cpu/aarch64/jit_uni_binary.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace Xbyak;
 
@@ -839,7 +839,7 @@ using namespace data_type;
 template struct jit_uni_binary_t<f32>;
 template struct jit_uni_binary_t<bf16>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

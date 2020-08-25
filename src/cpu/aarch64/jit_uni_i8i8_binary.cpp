@@ -23,15 +23,15 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/x64/jit_generator.hpp"
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-#include "cpu/x64/jit_uni_i8i8_binary.hpp"
+#include "cpu/aarch64/jit_uni_i8i8_binary.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 using namespace dnnl::impl::data_type;
 using namespace Xbyak;
@@ -625,7 +625,7 @@ template struct jit_uni_i8i8_binary_t<u8, s8>;
 template struct jit_uni_i8i8_binary_t<s8, s8>;
 template struct jit_uni_i8i8_binary_t<s8, u8>;
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
