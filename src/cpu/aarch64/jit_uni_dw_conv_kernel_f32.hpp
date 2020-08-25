@@ -14,20 +14,20 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_DW_CONV_KERNEL_F32_HPP
-#define CPU_X64_JIT_UNI_DW_CONV_KERNEL_F32_HPP
+#ifndef CPU_AARCH64_JIT_UNI_DW_CONV_KERNEL_F32_HPP
+#define CPU_AARCH64_JIT_UNI_DW_CONV_KERNEL_F32_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
 
-#include "cpu/x64/jit_generator.hpp"
-#include "cpu/x64/jit_primitive_conf.hpp"
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_primitive_conf.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 template <cpu_isa_t isa>
 struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
@@ -111,7 +111,7 @@ private:
 
     void generate();
 };
-
+#if 0
 template <cpu_isa_t isa>
 struct jit_uni_dw_conv_bwd_data_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_bwd_data_kernel_f32)
@@ -237,8 +237,8 @@ private:
 
     void generate();
 };
-
-} // namespace x64
+#endif
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
