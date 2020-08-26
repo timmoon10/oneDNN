@@ -3,7 +3,7 @@ on: [push]
 jobs:
   ci_test_job:
     runs-on: ubuntu-latest
-    name: Test for xbyak_translator_aarch64
+    name: Test for oneDNN
     steps:
     - name: Checkout
       uses: actions/checkout@v2
