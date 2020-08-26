@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # imitations under the License.
 # *******************************************************************************/CMakeFiles/
-cd tests/gtests
+cd /github/workspace/build/tests/gtests
 
 /local_qemu_5.0.0/bin/qemu-aarch64 -cpu max,sve512=on ./test_batch_normalization_f32
 /local_qemu_5.0.0/bin/qemu-aarch64 -cpu max,sve512=on ./test_batch_normalization_s8
