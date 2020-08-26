@@ -30,6 +30,7 @@ CI_XED_PATH=`pwd`
 cd ../../../../../
 source dot.zshrc.xbyak.ci
 export LD_LIBRARY_PATH=/github/workspace/src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/build_xed_aarch64/kits/xed/lib:${LD_LIBRARY_PATH}
+export XED_ROOT_PATH=/github/workspace/src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/build_xed_aarch64/kits/xed
 cd ../../../../../
 mkdir build
 cd build
