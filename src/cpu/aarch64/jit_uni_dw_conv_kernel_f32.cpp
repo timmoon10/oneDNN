@@ -34,7 +34,7 @@ using namespace dnnl::impl::memory_tracking::names;
 using namespace dnnl::impl::utils;
 
 using namespace Xbyak;
-
+#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
 
@@ -319,11 +319,12 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
         }
     }
 }
+#endif
 
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     this->preamble();
-
+#if 0
     if (jcp.is_fused_conv) {
         mov(reg_input_buffer_ptr, ptr[this->param1 + GET_OFF(src)]);
         /* In case of fused depthwise convolution, `param.src` is not a pointer
@@ -374,10 +375,11 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
 
         L(exit_label);
     }
-
+#endif
     this->postamble();
-
+#if 0
     if (jcp.with_eltwise) eltwise_injector_->prepare_table();
+#endif
 }
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve>;

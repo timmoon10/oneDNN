@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_X64_JIT_UNI_DW_CONV_KERNEL_UTILS_HPP
-#define CPU_X64_JIT_UNI_DW_CONV_KERNEL_UTILS_HPP
+#ifndef CPU_AARCH64_JIT_UNI_DW_CONV_KERNEL_UTILS_HPP
+#define CPU_AARCH64_JIT_UNI_DW_CONV_KERNEL_UTILS_HPP
 
 #include "common/nstl.hpp"
 #include "common/type_helpers.hpp"
@@ -24,24 +24,25 @@
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
 
-#include "cpu/x64/jit_generator.hpp"
-#include "cpu/x64/jit_primitive_conf.hpp"
-#include "cpu/x64/jit_uni_eltwise_injector.hpp"
+#include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_primitive_conf.hpp"
+#if 0
+#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
+#endif
 
-#include "cpu/x64/jit_avx512_core_bf16_dw_conv_kernel.hpp"
-#include "cpu/x64/jit_uni_dw_conv_kernel_f32.hpp"
+#include "cpu/aarch64/jit_uni_dw_conv_kernel_f32.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_fwd_kernel {
 
     jit_uni_dw_conv_fwd_kernel(jit_conv_conf_t ajcp)
         : jit_ker(nullptr), ker_(nullptr) {
-        ker_ = new jit_kernel_t(ajcp);
+        ker_ = new jit_uni_dw_conv_fwd_kernel_f32<isa>(ajcp);
         jit_ker = ker_->jit_ker;
     }
     ~jit_uni_dw_conv_fwd_kernel() { delete ker_; }
@@ -59,11 +60,7 @@ struct jit_uni_dw_conv_fwd_kernel {
     void (*jit_ker)(jit_conv_call_s *);
 
 private:
-    using jit_kernel_t = typename utils::conditional<isa == avx512_core
-                    && kernel_dt == data_type::bf16,
-            jit_avx512_dw_conv_fwd_kernel_bf16,
-            jit_uni_dw_conv_fwd_kernel_f32<isa>>::type;
-    jit_kernel_t *ker_;
+    jit_uni_dw_conv_fwd_kernel_f32<isa> *ker_;
 };
 
 template <cpu_isa_t isa, data_type_t kernel_dt>
@@ -140,15 +137,14 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
     const auto data_tag = jcp.src_tag;
     const bool is_data_layout_nxc = data_tag == nxc_tag;
 
-    const bool is_bf16 = src_d.data_type() == data_type::bf16;
 
     jcp.dst_dt = cd.dst_desc.data_type;
-    jcp.isa = (is_bf16 && mayiuse(avx512_core_bf16)) ? avx512_core_bf16 : isa;
+    jcp.isa = isa;
 
-    if (!mayiuse(isa) || (is_bf16 && !mayiuse(avx512_core)))
+    if (!mayiuse(isa))
         return status::unimplemented;
 
-    const int simd_w = one_of(isa, avx512_common, avx512_core) ? 16 : 8;
+    const int simd_w = 16; //one_of(isa, avx512_common, avx512_core) ? 16 : 8;
 
     jcp.prop_kind = cd.prop_kind;
 
@@ -186,8 +182,7 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
 
     jcp.loop_order = loop_ngcw;
 
-    jcp.ur_w = is_bf16 ? (isa_has_bf16(jcp.isa) ? 6 : 4)
-                       : isa == avx512_common ? 6 : isa == avx2 ? 4 : 3;
+    jcp.ur_w = 6; //isa == avx512_common ? 6 : isa == avx2 ? 4 : 3;
     jcp.ur_w = nstl::min(jcp.ur_w, jcp.ow);
 
     if (is_data_layout_nxc) {
@@ -258,17 +253,13 @@ template <cpu_isa_t isa, data_type_t kernel_dt>
 void jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_scratchpad(
         memory_tracking::registrar_t &scratchpad, const jit_conv_conf_t &jcp) {
     using namespace dnnl::impl::memory_tracking::names;
-    if (jcp.bia_dt == data_type::bf16)
-        scratchpad.book<float>(key_conv_bias_bf16_convert_wsp, jcp.oc);
-    else if (jcp.with_bias && jcp.oc_without_padding != jcp.oc)
+    if (jcp.with_bias && jcp.oc_without_padding != jcp.oc)
         scratchpad.book<float>(key_conv_padded_bias, jcp.oc);
 }
 
-template struct jit_uni_dw_conv_fwd_kernel<avx512_core, data_type::bf16>;
-template struct jit_uni_dw_conv_fwd_kernel<avx512_common, data_type::f32>;
-template struct jit_uni_dw_conv_fwd_kernel<avx2, data_type::f32>;
-template struct jit_uni_dw_conv_fwd_kernel<sse41, data_type::f32>;
+template struct jit_uni_dw_conv_fwd_kernel<sve, data_type::f32>;
 
+#if 0
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_bwd_data_kernel {
 
@@ -584,7 +575,8 @@ template struct jit_uni_dw_conv_bwd_weights_kernel<avx512_common,
         data_type::f32>;
 template struct jit_uni_dw_conv_bwd_weights_kernel<avx2, data_type::f32>;
 template struct jit_uni_dw_conv_bwd_weights_kernel<sse41, data_type::f32>;
-} // namespace x64
+#endif
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
