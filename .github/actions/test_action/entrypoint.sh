@@ -33,7 +33,7 @@ mkdir build
 cd build
 export LD_LIBRARY_PATH=/github/workspace/src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/build_xed_aarch64/kits/xed/lib:${LD_LIBRARY_PATH} && \
 export XED_ROOT_DIR=/github/workspace/src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/build_xed_aarch64/kits/xed && \
-cmake -DCMAKE_BUILD_TYPE=Debug -DDNNL_INDIRECT_JIT_AARCH64=ON -DDNNL_TARGET_ARCH=AARCH64 -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=AARCH64 -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++  -DCMAKE_FIND_ROOT_PATH=/usr/aarch64-linux-gnu ..
+cmake -DDNNL_INDIRECT_JIT_AARCH64=ON -DDNNL_TARGET_ARCH=AARCH64 -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=AARCH64 -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++  -DCMAKE_FIND_ROOT_PATH=/usr/aarch64-linux-gnu ..
 make -j2
 cd /
 ./gtest_all.sh
