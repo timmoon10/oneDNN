@@ -250,6 +250,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
         compute(ur_ch_blocks);
     }
 }
+#endif
 
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
@@ -278,49 +279,48 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
     assert(jcp.nb_ow <= 1);
 
     if (r_pad1 > 0) n_oi--;
-    xor_(reg_oi, reg_oi);
+    CGA64::mov(reg_oi, 0);
     if (ow == ur_w) {
-        compute_loop(ur_w, ur_ch_blocks, l_pad, r_pad);
+        //compute_loop(ur_w, ur_ch_blocks, l_pad, r_pad);
     } else {
         if (n_oi == 0) {
-            compute_loop(ur_w, ur_ch_blocks, l_pad, r_pad1);
-            add(reg_input, inp_shift_pad);
-            add(reg_output, out_shift);
+            //compute_loop(ur_w, ur_ch_blocks, l_pad, r_pad1);
+            CGA64::add_imm(reg_input, reg_input, inp_shift_pad, reg_tmp_imm);
+            CGA64::add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
             if (ur_w_tail != 0) {
-                compute_loop(ur_w_tail, ur_ch_blocks, 0, r_pad);
+                //compute_loop(ur_w_tail, ur_ch_blocks, 0, r_pad);
             }
         } else {
             if (l_pad > 0) {
-                compute_loop(ur_w, ur_ch_blocks, l_pad, 0);
-                add(reg_input, inp_shift_pad);
-                add(reg_output, out_shift);
-                inc(reg_oi);
+                //compute_loop(ur_w, ur_ch_blocks, l_pad, 0);
+                CGA64::add_imm(reg_input, reg_input, inp_shift_pad, reg_tmp_imm);
+                CGA64::add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
+                CGA64::add(reg_oi, reg_oi, 1);
             }
             if ((l_pad <= 0 && n_oi > 0) || (l_pad > 0 && n_oi > 1)) {
-                Label ow_loop_label;
-                L(ow_loop_label);
+                xa::LabelAArch64 ow_loop_label;
+                CGA64::L_aarch64(ow_loop_label);
                 {
-                    compute_loop(ur_w, ur_ch_blocks, 0, 0);
-                    add(reg_input, inp_shift);
-                    add(reg_output, out_shift);
+                    //compute_loop(ur_w, ur_ch_blocks, 0, 0);
+                    CGA64::add_imm(reg_input, reg_input, inp_shift, reg_tmp_imm);
+                    CGA64::add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
 
-                    inc(reg_oi);
-                    cmp(reg_oi, n_oi);
-                    jl(ow_loop_label, T_NEAR);
+                    CGA64::add(reg_oi, reg_oi, 1);
+                    CGA64::cmp(reg_oi, n_oi);
+                    CGA64::b(xa::LT, ow_loop_label);
                 }
             }
             if (r_pad1 > 0) {
-                compute_loop(ur_w, ur_ch_blocks, 0, r_pad1);
-                add(reg_input, inp_shift);
-                add(reg_output, out_shift);
+                //compute_loop(ur_w, ur_ch_blocks, 0, r_pad1);
+                CGA64::add_imm(reg_input, reg_input, inp_shift, reg_tmp_imm);
+                CGA64::add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
             }
             if (ur_w_tail != 0) {
-                compute_loop(ur_w_tail, ur_ch_blocks, 0, r_pad);
+                //compute_loop(ur_w_tail, ur_ch_blocks, 0, r_pad);
             }
         }
     }
 }
-#endif
 
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
@@ -364,12 +364,12 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     int ch_blocks_tail = jcp.nb_ch % jcp.nb_ch_blocking;
 
     if (is_src_layout_nxc()) {
-        //ow_loop(jcp.nb_ch);
+        ow_loop(jcp.nb_ch);
     } else {
         CGA64::cmp(reg_ch_blocks, jcp.nb_ch_blocking);
         CGA64::b(xa::NE, ch_blocks_tail ? ch_blocks_tail_label : exit_label);
 
-        //ow_loop(jcp.nb_ch_blocking); // channel main loop
+        ow_loop(jcp.nb_ch_blocking); // channel main loop
 
         if (ch_blocks_tail) {
             CGA64::L_aarch64(ch_blocks_tail_label);
@@ -377,7 +377,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
             CGA64::cmp(reg_ch_blocks, ch_blocks_tail);
             CGA64::b(xa::NE, exit_label);
 
-            //ow_loop(ch_blocks_tail); // channel tail loop
+            ow_loop(ch_blocks_tail); // channel tail loop
         }
 
         CGA64::L_aarch64(exit_label);

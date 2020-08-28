@@ -83,6 +83,9 @@ private:
     reg64_t aux_reg_input_buffer_ptr    = x13; //rbp;
     reg64_t reg_iw_offset               = reg_input; //Hack: clear reg_input early in kernel
 
+    /* Temprary regs */
+    reg64_t reg_tmp_imm                 = x14;
+
     inline void load_src(int ur_ch_blocks, int ur_w);
     inline void compute_loop(int ur_w, int ur_ch_blocks, int pad_l, int pad_r);
     inline void ow_loop(int ur_ch_blocks);
