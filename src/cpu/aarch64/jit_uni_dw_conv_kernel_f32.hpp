@@ -85,6 +85,10 @@ private:
 
     /* Temprary regs */
     reg64_t reg_tmp_imm                 = x14;
+    reg64_t reg_kernel_stack            = x15;
+    reg64_t reg_input_stack             = x16;
+    reg64_t reg_output_stack            = x17;
+    reg64_t reg_bias_stack              = x18;
 
     inline void load_src(int ur_ch_blocks, int ur_w);
     inline void compute_loop(int ur_w, int ur_ch_blocks, int pad_l, int pad_r);
