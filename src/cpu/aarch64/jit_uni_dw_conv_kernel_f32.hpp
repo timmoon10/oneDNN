@@ -31,6 +31,9 @@ namespace impl {
 namespace cpu {
 namespace aarch64 {
 
+#define CGA64 CodeGeneratorAArch64
+namespace xa = Xbyak::Xbyak_aarch64;
+
 template <cpu_isa_t isa>
 struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_fwd_kernel_f32)
@@ -60,29 +63,25 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
     void (*jit_ker)(jit_conv_call_s *);
 
 private:
-    using Vmm = typename utils::conditional3<isa == sse41, Xbyak::Xmm,
-            isa == avx2, Xbyak::Ymm, Xbyak::Zmm>::type;
-    using reg64_t = const Xbyak::Reg64;
-    const Xbyak::AddressFrame &vmmword
-            = (isa == sse41) ? xword : (isa == avx2) ? yword : zword;
+    using reg64_t = const xa::XReg;
     const int vlen = cpu_isa_traits<isa>::vlen;
 
     // dw convolution
-    reg64_t reg_input = r8;
-    reg64_t aux_reg_input = r9;
-    reg64_t reg_kernel = r10;
-    reg64_t aux_reg_kernel = r11;
-    reg64_t reg_ch_blocks = r12;
-    reg64_t reg_output = r13;
-    reg64_t reg_bias = r14;
-    reg64_t reg_kh = r15;
-    reg64_t iter_kh = rax;
-    reg64_t reg_oi = rbx;
-    reg64_t aux_reg_ch_blocks = rsi;
+    reg64_t reg_input                   = x1;  //r8;
+    reg64_t aux_reg_input               = x2;  //r9;
+    reg64_t reg_kernel                  = x3;  //r10;
+    reg64_t aux_reg_kernel              = x4;  //r11;
+    reg64_t reg_ch_blocks               = x5;  //r12;
+    reg64_t reg_output                  = x6;  //r13;
+    reg64_t reg_bias                    = x7;  //r14;
+    reg64_t reg_kh                      = x8;  //r15;
+    reg64_t iter_kh                     = x9;  //rax;
+    reg64_t reg_oi                      = x10; //rbx;
+    reg64_t aux_reg_ch_blocks           = x11; //rsi;
     // fused convolution
-    reg64_t reg_input_buffer_ptr = rdx;
-    reg64_t aux_reg_input_buffer_ptr = rbp;
-    reg64_t reg_iw_offset = reg_input; //Hack: clear reg_input early in kernel
+    reg64_t reg_input_buffer_ptr        = x12; //rdx;
+    reg64_t aux_reg_input_buffer_ptr    = x13; //rbp;
+    reg64_t reg_iw_offset               = reg_input; //Hack: clear reg_input early in kernel
 
     inline void load_src(int ur_ch_blocks, int ur_w);
     inline void compute_loop(int ur_w, int ur_ch_blocks, int pad_l, int pad_r);
@@ -92,9 +91,9 @@ private:
     inline void apply_activation(int ur_ch_blocks, int ur_w);
     inline void store_dst(int ur_ch_blocks, int ur_w);
 
-    inline Vmm get_ker_reg(int idx) { return Vmm(idx + 0); }
-    inline Vmm get_src_reg(int idx) { return Vmm(idx + 1); }
-    inline Vmm get_acc_reg(int idx) { return Vmm(idx + 4); }
+    inline xa::ZReg get_ker_reg(int idx) { return xa::ZReg(idx + 0); }
+    inline xa::ZReg get_src_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZReg get_acc_reg(int idx) { return xa::ZReg(idx + 4); }
 
     int get_ow_start(int ki, int pad_l) {
         return nstl::max(0,

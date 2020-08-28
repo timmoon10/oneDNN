@@ -22,7 +22,7 @@
 
 #include "cpu/aarch64/jit_uni_dw_conv_kernel_f32.hpp"
 
-#define GET_OFF(field) offsetof(jit_conv_call_s, field)
+#define GET_OFF(field) static_cast<int32_t>(offsetof(jit_conv_call_s, field))
 
 namespace dnnl {
 namespace impl {
@@ -34,6 +34,7 @@ using namespace dnnl::impl::memory_tracking::names;
 using namespace dnnl::impl::utils;
 
 using namespace Xbyak;
+
 #if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
@@ -324,9 +325,9 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     this->preamble();
-#if 0
+
     if (jcp.is_fused_conv) {
-        mov(reg_input_buffer_ptr, ptr[this->param1 + GET_OFF(src)]);
+        CGA64::ldr(reg_input_buffer_ptr, xa::ptr(abi_param1_aarch64, GET_OFF(src)));
         /* In case of fused depthwise convolution, `param.src` is not a pointer
         to input, instead it points to a buffer containing pointers to
         consecutive rows of input in format Cwc with blocking nb_ch_blocking.
@@ -341,41 +342,47 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
             mov(reg_data, ptr[reg_input_buffer_ptr])
             ... process row2 ...
         */
-        xor_(reg_iw_offset, reg_iw_offset);
+        CGA64::mov(reg_iw_offset, 0);
     } else {
-        mov(reg_input, ptr[this->param1 + GET_OFF(src)]);
+        CGA64::ldr(reg_input, xa::ptr(abi_param1_aarch64, GET_OFF(src)));
     }
-    mov(reg_output, ptr[this->param1 + GET_OFF(dst)]);
-    mov(reg_kernel, ptr[this->param1 + GET_OFF(filt)]);
-    if (jcp.with_bias) mov(reg_bias, ptr[this->param1 + GET_OFF(bias)]);
-    mov(reg_kh, ptr[this->param1 + GET_OFF(kh_padding)]);
-    mov(reg_ch_blocks, ptr[this->param1 + GET_OFF(ch_blocks)]);
+    CGA64::ldr(reg_output, xa::ptr(abi_param1_aarch64, GET_OFF(dst)));
+    CGA64::ldr(reg_kernel, xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
+    if (jcp.with_bias){
+#if 1
+        assert(NULL);
+#else
+        CGA64::ldr(reg_bias, xa::ptr(this->param1, GET_OFF(bias)));
+#endif
+    }
+    CGA64::ldr(reg_kh, xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
+    CGA64::ldr(reg_ch_blocks, xa::ptr(abi_param1_aarch64, GET_OFF(ch_blocks)));
 
-    Label ch_blocks_tail_label;
-    Label exit_label;
+    xa::LabelAArch64 ch_blocks_tail_label;
+    xa::LabelAArch64 exit_label;
 
     int ch_blocks_tail = jcp.nb_ch % jcp.nb_ch_blocking;
 
     if (is_src_layout_nxc()) {
-        ow_loop(jcp.nb_ch);
+        //ow_loop(jcp.nb_ch);
     } else {
-        cmp(reg_ch_blocks, jcp.nb_ch_blocking);
-        jne(ch_blocks_tail ? ch_blocks_tail_label : exit_label, T_NEAR);
+        CGA64::cmp(reg_ch_blocks, jcp.nb_ch_blocking);
+        CGA64::b(xa::NE, ch_blocks_tail ? ch_blocks_tail_label : exit_label);
 
-        ow_loop(jcp.nb_ch_blocking); // channel main loop
+        //ow_loop(jcp.nb_ch_blocking); // channel main loop
 
         if (ch_blocks_tail) {
-            L(ch_blocks_tail_label);
+            CGA64::L_aarch64(ch_blocks_tail_label);
 
-            cmp(reg_ch_blocks, ch_blocks_tail);
-            jne(exit_label, T_NEAR);
+            CGA64::cmp(reg_ch_blocks, ch_blocks_tail);
+            CGA64::b(xa::NE, exit_label);
 
-            ow_loop(ch_blocks_tail); // channel tail loop
+            //ow_loop(ch_blocks_tail); // channel tail loop
         }
 
-        L(exit_label);
+        CGA64::L_aarch64(exit_label);
     }
-#endif
+
     this->postamble();
 #if 0
     if (jcp.with_eltwise) eltwise_injector_->prepare_table();
