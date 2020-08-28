@@ -94,7 +94,7 @@ private:
     jit_uni_dw_conv_fwd_kernel<isa, src_type> *kernel_;
 };
 
-using jit_aarch64_sve512_common_dw_convolution_fwd_t
+using jit_aarch64_sve_512_dw_convolution_fwd_t
         = jit_uni_dw_convolution_fwd_t<sve, data_type::f32>;
 #if 0
 template <cpu_isa_t isa, data_type_t diff_dst_type,

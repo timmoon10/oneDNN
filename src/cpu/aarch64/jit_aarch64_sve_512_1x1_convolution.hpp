@@ -61,6 +61,7 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
 
         status_t init(engine_t *engine) {
             using namespace utils;
+
             bool ok = true && is_fwd()
                     && set_default_alg_kind(alg_kind::convolution_direct)
                     && expect_data_types(src_type, wei_type, dst_type, dst_type,
@@ -80,8 +81,12 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
             if (status != status::success) return status;
 
             if (jcp_.with_dw_conv) {
+#if 1
+                return status::unimplemented;
+#else
                 status = depthwise_po_init(engine);
                 if (status != status::success) return status;
+#endif
             }
 
             auto scratchpad = scratchpad_registry().registrar();
