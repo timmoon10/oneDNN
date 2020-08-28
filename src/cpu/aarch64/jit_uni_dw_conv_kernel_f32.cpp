@@ -35,7 +35,6 @@ using namespace dnnl::impl::utils;
 
 using namespace Xbyak;
 
-#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
 
@@ -48,25 +47,36 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
     for (int i = 0; i < repeats; i++) {
         for (int ch = 0; ch < ur_ch_blocks; ch++) {
             for (int ow = 0; ow < ur_w; ow++) {
-                Vmm vmm_acc
+                xa::ZReg zreg_acc
                         = get_acc_reg(i * ur_ch_blocks * ur_w + ch * ur_w + ow);
+                xa::ZRegS zregs_acc
+                        = get_acc_reg_s(i * ur_ch_blocks * ur_w +ch * ur_w + ow);
 
                 int b_off = ch * ch_blk + i * 4;
-                if (this->jcp.with_bias)
-                    uni_vmovups(
-                            vmm_acc, vmmword[reg_bias + b_off * sizeof(float)]);
-                else
-                    uni_vpxor(vmm_acc, vmm_acc, vmm_acc);
+                if (this->jcp.with_bias){
+                    CGA64::add_imm(reg_tmp_addr, reg_bias,
+                                    b_off * sizeof(float), reg_tmp_imm);
+                    CGA64::ldr(zreg_acc, xa::ptr(reg_tmp_addr));
+                    //uni_vmovups(
+                    //        vmm_acc, vmmword[reg_bias + b_off * sizeof(float)]);
+                }else
+                    CGA64::fmov(zregs_acc); // zero clear
 
                 int o_off = ch * ocb_stride + ow * ow_stride + i * 4;
-                if (this->jcp.with_sum)
-                    uni_vaddps(vmm_acc, vmm_acc,
-                            vmmword[reg_output + o_off * sizeof(float)]);
+                if (this->jcp.with_sum){
+                    CGA64::add_imm(reg_tmp_addr, reg_output,
+                                    o_off * sizeof(float), reg_tmp_imm);
+                    CGA64::ldr(xa::ZReg(31), xa::ptr(reg_tmp_addr));
+                    CGA64::fadd(zregs_acc, zregs_acc, xa::ZRegS(31));
+                    //uni_vaddps(vmm_acc, vmm_acc,
+                    //        vmmword[reg_output + o_off * sizeof(float)]);
+                }
             }
         }
     }
 }
 
+#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
         int ur_ch_blocks, int ur_w, int pad_l, int pad_r) {
@@ -201,7 +211,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
         }
 
         CGA64::mov(aux_reg_kernel, reg_kernel);
-        //load_src(ur_ch_blocks, ur_w);
+        load_src(ur_ch_blocks, ur_w);
         //apply_filter_unrolled(ur_ch_blocks, ur_w, pad_l, pad_r);
         //apply_activation(ur_ch_blocks, ur_w);
         //store_dst(ur_ch_blocks, ur_w);

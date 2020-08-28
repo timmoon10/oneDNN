@@ -89,6 +89,7 @@ private:
     reg64_t reg_input_stack             = x16;
     reg64_t reg_output_stack            = x17;
     reg64_t reg_bias_stack              = x18;
+    reg64_t reg_tmp_addr                = x19;
 
     inline void load_src(int ur_ch_blocks, int ur_w);
     inline void compute_loop(int ur_w, int ur_ch_blocks, int pad_l, int pad_r);
@@ -100,7 +101,15 @@ private:
 
     inline xa::ZReg get_ker_reg(int idx) { return xa::ZReg(idx + 0); }
     inline xa::ZReg get_src_reg(int idx) { return xa::ZReg(idx + 1); }
-    inline xa::ZReg get_acc_reg(int idx) { return xa::ZReg(idx + 4); }
+    inline xa::ZReg get_acc_reg(int idx) {
+        assert((idx+4) < 31);
+        return xa::ZReg(idx + 4); 
+    }
+    inline xa::ZRegS get_acc_reg_s(int idx) {
+        assert((idx+4) < 31);
+        return xa::ZRegS(idx + 4); 
+    }
+
 
     int get_ow_start(int ki, int pad_l) {
         return nstl::max(0,
