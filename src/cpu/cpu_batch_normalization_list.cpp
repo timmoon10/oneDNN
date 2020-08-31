@@ -56,10 +56,18 @@ static const pd_create_f impl_list[] = {
         CPU_INSTANCE_X64(jit_uni_tbb_batch_normalization_bwd_t<avx2>)
         CPU_INSTANCE_X64(jit_uni_tbb_batch_normalization_fwd_t<sse41>)
         CPU_INSTANCE_X64(jit_uni_tbb_batch_normalization_bwd_t<sse41>)
-
         CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_fwd_t<avx512_common>)
         CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_bwd_t<avx512_common>)
-
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_fwd_t<avx2>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_bwd_t<avx2>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_fwd_t<sse41>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_bwd_t<sse41>)
+        CPU_INSTANCE_AARCH64(jit_uni_tbb_batch_normalization_fwd_t<avx512_common>)
+        CPU_INSTANCE_AARCH64(jit_uni_tbb_batch_normalization_bwd_t<avx512_common>)
+        CPU_INSTANCE_AARCH64(jit_uni_tbb_batch_normalization_fwd_t<avx2>)
+        CPU_INSTANCE_AARCH64(jit_uni_tbb_batch_normalization_bwd_t<avx2>)
+        CPU_INSTANCE_AARCH64(jit_uni_tbb_batch_normalization_fwd_t<sse41>)
+        CPU_INSTANCE_AARCH64(jit_uni_tbb_batch_normalization_bwd_t<sse41>)
 	CPU_INSTANCE(ncsp_batch_normalization_fwd_t<f32>)
         CPU_INSTANCE(ncsp_batch_normalization_bwd_t<f32>)
         CPU_INSTANCE(ncsp_batch_normalization_fwd_t<bf16>)
@@ -75,6 +83,12 @@ static const pd_create_f impl_list[] = {
         /* int */
         CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<avx512_core>)
         CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<avx2>)
+        CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<avx512_core>)
+        CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<avx2>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_s8_fwd_t<avx512_core>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_s8_fwd_t<avx2>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_s8_fwd_t<avx512_core>)
+        CPU_INSTANCE_AARCH64(jit_uni_batch_normalization_s8_fwd_t<avx2>)
         CPU_INSTANCE(ref_batch_normalization_fwd_t<s8>)
         /* eol */
         nullptr,
