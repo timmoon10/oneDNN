@@ -401,7 +401,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
 }
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve>;
-
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::load_ddst(
         int ur_ch_blocks, int ur_str_w) {
@@ -562,11 +562,11 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
 
     L(exit_label);
 }
-
+#endif
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     preamble();
-
+#if 0
     mov(reg_dsrc, ptr[this->param1 + GET_OFF(src)]);
     mov(reg_ddst, ptr[this->param1 + GET_OFF(dst)]);
     mov(reg_kernel, ptr[this->param1 + GET_OFF(filt)]);
@@ -595,7 +595,7 @@ void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     }
 
     L(exit_label);
-
+#endif
     this->postamble();
 }
 

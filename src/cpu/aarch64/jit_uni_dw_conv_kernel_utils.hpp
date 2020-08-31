@@ -272,7 +272,7 @@ struct jit_uni_dw_conv_bwd_data_kernel {
 
     jit_uni_dw_conv_bwd_data_kernel(jit_conv_conf_t ajcp)
         : jit_ker(nullptr), ker_(nullptr) {
-        ker_ = new jit_kernel_t(ajcp);
+        ker_ = new jit_uni_dw_conv_bwd_data_kernel_f32<isa>(ajcp);
         jit_ker = ker_->jit_ker;
     }
     ~jit_uni_dw_conv_bwd_data_kernel() { delete ker_; }
@@ -288,11 +288,7 @@ struct jit_uni_dw_conv_bwd_data_kernel {
     void (*jit_ker)(jit_conv_call_s *);
 
 private:
-    using jit_kernel_t = typename utils::conditional<isa == avx512_core
-                    && kernel_dt == data_type::bf16,
-            jit_avx512_dw_conv_bwd_data_kernel_bf16,
-            jit_uni_dw_conv_bwd_data_kernel_f32<isa>>::type;
-    jit_kernel_t *ker_;
+    jit_uni_dw_conv_bwd_data_kernel_f32<isa> *ker_;
 
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_uni_dw_conv_bwd_data_kernel);
 };
