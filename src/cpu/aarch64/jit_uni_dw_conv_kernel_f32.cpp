@@ -510,59 +510,64 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::store_dsrc(
         }
     }
 }
+#endif
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         int ur_ch_blocks) {
-    Label unrolled_w_label;
-    Label tail_w_label;
-    Label exit_label;
+    xa::LabelAArch64 unrolled_w_label;
+    xa::LabelAArch64 tail_w_label;
+    xa::LabelAArch64 exit_label;
 
-    L(unrolled_w_label);
+    CGA64::L_aarch64(unrolled_w_label);
     {
         int ur_w = jcp.ur_w;
 
-        cmp(reg_ur_str_w, ur_w);
-        jl(tail_w_label, T_NEAR);
+        CGA64::cmp(reg_ur_str_w, ur_w);
+        CGA64::b(xa::LT, tail_w_label);
 
-        mov(aux_reg_ddst, reg_ddst);
-        mov(aux_reg_kernel, reg_kernel);
+        CGA64::mov(aux_reg_ddst, reg_ddst);
+        CGA64::mov(aux_reg_kernel, reg_kernel);
 
-        load_ddst(ur_ch_blocks, ur_w);
-        apply_filter(ur_ch_blocks, ur_w);
-        store_dsrc(ur_ch_blocks, ur_w);
+        //load_ddst(ur_ch_blocks, ur_w);
+        //apply_filter(ur_ch_blocks, ur_w);
+        //store_dsrc(ur_ch_blocks, ur_w);
 
-        add(reg_dsrc, sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w);
-        add(reg_ddst, sizeof(float) * ur_w * jcp.ch_block);
+        CGA64::add_imm(reg_dsrc, reg_dsrc, 
+                        sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w, reg_tmp_imm);
+        CGA64::add_imm(reg_ddst, reg_ddst,
+                        sizeof(float) * ur_w * jcp.ch_block, reg_tmp_imm);
 
-        sub(reg_ur_str_w, ur_w);
-        jmp(unrolled_w_label);
+        CGA64::sub_imm(reg_ur_str_w, reg_ur_str_w, ur_w, reg_tmp_imm);
+        CGA64::b(unrolled_w_label);
     }
 
-    L(tail_w_label);
+    CGA64::L_aarch64(tail_w_label);
     {
         int ur_w = 1;
 
-        cmp(reg_ur_str_w, ur_w);
-        jl(exit_label, T_NEAR);
+        CGA64::cmp(reg_ur_str_w, ur_w);
+        CGA64::b(xa::LT, exit_label);
 
-        mov(aux_reg_ddst, reg_ddst);
-        mov(aux_reg_kernel, reg_kernel);
+        CGA64::mov(aux_reg_ddst, reg_ddst);
+        CGA64::mov(aux_reg_kernel, reg_kernel);
 
-        load_ddst(ur_ch_blocks, ur_w);
-        apply_filter(ur_ch_blocks, ur_w);
-        store_dsrc(ur_ch_blocks, ur_w);
+        //load_ddst(ur_ch_blocks, ur_w);
+        //apply_filter(ur_ch_blocks, ur_w);
+        //store_dsrc(ur_ch_blocks, ur_w);
 
-        add(reg_dsrc, sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w);
-        add(reg_ddst, sizeof(float) * ur_w * jcp.ch_block);
+        CGA64::add_imm(reg_dsrc, reg_dsrc, 
+                        sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w, reg_tmp_imm);
+        CGA64::add_imm(reg_ddst, reg_ddst, 
+                        sizeof(float) * ur_w * jcp.ch_block, reg_tmp_imm);
 
-        sub(reg_ur_str_w, ur_w);
-        jmp(tail_w_label);
+        CGA64::sub_imm(reg_ur_str_w, reg_ur_str_w, ur_w, reg_tmp_imm);
+        CGA64::b(tail_w_label);
     }
 
-    L(exit_label);
+    CGA64::L_aarch64(exit_label);
 }
-#endif
+
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     preamble();
@@ -584,7 +589,7 @@ void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     CGA64::cmp(reg_ch_blocks, jcp.nb_ch_blocking);
     CGA64::b(xa::NE, ch_blocks_tail ? ch_blocks_tail_label : exit_label);
 
-    //loop_body(jcp.nb_ch_blocking); // channel main loop
+    loop_body(jcp.nb_ch_blocking); // channel main loop
 
     if (ch_blocks_tail) {
         CGA64::L_aarch64(ch_blocks_tail_label);
@@ -592,7 +597,7 @@ void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
         CGA64::cmp(reg_ch_blocks, ch_blocks_tail);
         CGA64::b(xa::NE, exit_label);
 
-        //loop_body(ch_blocks_tail); // channel tail loop
+        loop_body(ch_blocks_tail); // channel tail loop
     }
 
     CGA64::L_aarch64(exit_label);
