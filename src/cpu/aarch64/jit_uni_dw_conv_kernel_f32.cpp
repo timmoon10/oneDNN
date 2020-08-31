@@ -566,36 +566,37 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     preamble();
-#if 0
-    mov(reg_dsrc, ptr[this->param1 + GET_OFF(src)]);
-    mov(reg_ddst, ptr[this->param1 + GET_OFF(dst)]);
-    mov(reg_kernel, ptr[this->param1 + GET_OFF(filt)]);
-    mov(reg_kh, ptr[this->param1 + GET_OFF(kh_padding)]);
-    mov(reg_kw, ptr[this->param1 + GET_OFF(kw_padding)]);
-    mov(reg_ch_blocks, ptr[this->param1 + GET_OFF(ch_blocks)]);
-    mov(reg_ur_str_w, ptr[this->param1 + GET_OFF(ur_str_w)]);
+    CGA64::ptrue(reg_p_all_ones.b);
 
-    Label ch_blocks_tail_label;
-    Label exit_label;
+    CGA64::ldr(reg_dsrc,      xa::ptr(abi_param1_aarch64, GET_OFF(src)));
+    CGA64::ldr(reg_ddst,      xa::ptr(abi_param1_aarch64, GET_OFF(dst)));
+    CGA64::ldr(reg_kernel,    xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
+    CGA64::ldr(reg_kh,        xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
+    CGA64::ldr(reg_kw,        xa::ptr(abi_param1_aarch64, GET_OFF(kw_padding)));
+    CGA64::ldr(reg_ch_blocks, xa::ptr(abi_param1_aarch64, GET_OFF(ch_blocks)));
+    CGA64::ldr(reg_ur_str_w,  xa::ptr(abi_param1_aarch64, GET_OFF(ur_str_w)));
+
+    xa::LabelAArch64 ch_blocks_tail_label;
+    xa::LabelAArch64 exit_label;
 
     int ch_blocks_tail = jcp.nb_ch % jcp.nb_ch_blocking;
 
-    cmp(reg_ch_blocks, jcp.nb_ch_blocking);
-    jne(ch_blocks_tail ? ch_blocks_tail_label : exit_label, T_NEAR);
+    CGA64::cmp(reg_ch_blocks, jcp.nb_ch_blocking);
+    CGA64::b(xa::NE, ch_blocks_tail ? ch_blocks_tail_label : exit_label);
 
-    loop_body(jcp.nb_ch_blocking); // channel main loop
+    //loop_body(jcp.nb_ch_blocking); // channel main loop
 
     if (ch_blocks_tail) {
-        L(ch_blocks_tail_label);
+        CGA64::L_aarch64(ch_blocks_tail_label);
 
-        cmp(reg_ch_blocks, ch_blocks_tail);
-        jne(exit_label, T_NEAR);
+        CGA64::cmp(reg_ch_blocks, ch_blocks_tail);
+        CGA64::b(xa::NE, exit_label);
 
-        loop_body(ch_blocks_tail); // channel tail loop
+        //loop_body(ch_blocks_tail); // channel tail loop
     }
 
-    L(exit_label);
-#endif
+    CGA64::L_aarch64(exit_label);
+
     this->postamble();
 }
 
