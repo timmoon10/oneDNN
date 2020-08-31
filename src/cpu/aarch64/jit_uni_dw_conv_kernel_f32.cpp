@@ -401,22 +401,18 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
 }
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve>;
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::load_ddst(
         int ur_ch_blocks, int ur_str_w) {
-    int repeats = isa == sse41 ? 2 : 1;
-    for (int i = 0; i < repeats; i++) {
-        for (int ch = 0; ch < ur_ch_blocks; ch++) {
-            for (int w = 0; w < ur_str_w; w++) {
-                Vmm vmm_acc = get_acc_reg(
-                        i * ur_ch_blocks * ur_str_w + ch * ur_str_w + w);
-                uni_vpxor(vmm_acc, vmm_acc, vmm_acc);
-            }
+    for (int ch = 0; ch < ur_ch_blocks; ch++) {
+        for (int w = 0; w < ur_str_w; w++) {
+            xa::ZRegS zregs_acc = get_acc_reg_s( ch * ur_str_w + w);
+            CGA64::fmov(zregs_acc); // zero clear
         }
     }
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
         int ur_ch_blocks, int ur_str_w) {
@@ -529,7 +525,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         CGA64::mov(aux_reg_ddst, reg_ddst);
         CGA64::mov(aux_reg_kernel, reg_kernel);
 
-        //load_ddst(ur_ch_blocks, ur_w);
+        load_ddst(ur_ch_blocks, ur_w);
         //apply_filter(ur_ch_blocks, ur_w);
         //store_dsrc(ur_ch_blocks, ur_w);
 
@@ -552,7 +548,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         CGA64::mov(aux_reg_ddst, reg_ddst);
         CGA64::mov(aux_reg_kernel, reg_kernel);
 
-        //load_ddst(ur_ch_blocks, ur_w);
+        load_ddst(ur_ch_blocks, ur_w);
         //apply_filter(ur_ch_blocks, ur_w);
         //store_dsrc(ur_ch_blocks, ur_w);
 
