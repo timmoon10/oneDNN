@@ -46,9 +46,11 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
     for (int ch = 0; ch < ur_ch_blocks; ch++) {
         for (int ow = 0; ow < ur_w; ow++) {
             xa::ZReg zreg_acc
-                    = get_acc_reg(ur_ch_blocks * ur_w + ch * ur_w + ow);
+                    = get_acc_reg(ch * ur_w + ow);
+                    //= get_acc_reg(ur_ch_blocks * ur_w + ch * ur_w + ow);
             xa::ZRegS zregs_acc
-                    = get_acc_reg_s(ur_ch_blocks * ur_w +ch * ur_w + ow);
+                    = get_acc_reg_s(ch * ur_w + ow);
+                    //= get_acc_reg_s(ur_ch_blocks * ur_w +ch * ur_w + ow);
 
             int b_off = ch * ch_blk;
             if (this->jcp.with_bias){
@@ -64,8 +66,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
             if (this->jcp.with_sum){
                 CGA64::add_imm(reg_tmp_addr, reg_output,
                                 o_off * sizeof(float), reg_tmp_imm);
-                CGA64::ldr(xa::ZReg(31), xa::ptr(reg_tmp_addr));
-                CGA64::fadd(zregs_acc, zregs_acc, xa::ZRegS(31));
+                CGA64::ldr(xa::ZReg(0), xa::ptr(reg_tmp_addr));
+                CGA64::fadd(zregs_acc, zregs_acc, xa::ZRegS(0));
                 //uni_vaddps(vmm_acc, vmm_acc,
                 //        vmmword[reg_output + o_off * sizeof(float)]);
             }
@@ -125,7 +127,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
                     CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
 
                     xa::ZRegS zregs_acc = get_acc_reg_s(
-                            ur_ch_blocks * ur_w + ch * ur_w + ow);
+                            ch * ur_w + ow);
+                            //ur_ch_blocks * ur_w + ch * ur_w + ow);
                     CGA64::fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
                 }
             }
@@ -176,7 +179,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::store_dst(
             const int o_off = ch * ocb_stride + ow * ow_stride;
 
             xa::ZReg zreg_dst
-                    = get_acc_reg(ur_ch_blocks * ur_w + ch * ur_w + ow);
+                    = get_acc_reg(ch * ur_w + ow);
+                    //= get_acc_reg(ur_ch_blocks * ur_w + ch * ur_w + ow);
 
             CGA64::add_imm(reg_tmp_addr, reg_output,
                             o_off * sizeof(float), reg_tmp_imm);

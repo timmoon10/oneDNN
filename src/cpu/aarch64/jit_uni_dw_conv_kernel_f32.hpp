@@ -100,17 +100,29 @@ private:
     inline void apply_activation(int ur_ch_blocks, int ur_w);
     inline void store_dst(int ur_ch_blocks, int ur_w);
 
-    inline xa::ZReg get_ker_reg(int idx) { return xa::ZReg(idx + 0); }
-    inline xa::ZRegS get_ker_reg_s(int idx) { return xa::ZRegS(idx + 0); }
-    inline xa::ZReg get_src_reg(int idx) { return xa::ZReg(idx + 1); }
-    inline xa::ZRegS get_src_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+    inline xa::ZReg get_ker_reg(int idx) {
+        assert(idx <= 31);
+        return xa::ZReg(idx + 0);
+    }
+    inline xa::ZRegS get_ker_reg_s(int idx) { 
+        assert(idx <= 31);
+        return xa::ZRegS(idx + 0); 
+    }
+    inline xa::ZReg get_src_reg(int idx) { 
+        assert((idx+1) <= 31);
+        return xa::ZReg(idx + 1); 
+    }
+    inline xa::ZRegS get_src_reg_s(int idx) { 
+        assert((idx+1) <= 31);
+        return xa::ZRegS(idx + 1); 
+    }
  
     inline xa::ZReg get_acc_reg(int idx) {
-        assert((idx+4) < 31);
+        assert((idx+4) <= 31);
         return xa::ZReg(idx + 4); 
     }
     inline xa::ZRegS get_acc_reg_s(int idx) {
-        assert((idx+4) < 31);
+        assert((idx+4) <= 31);
         return xa::ZRegS(idx + 4); 
     }
 
