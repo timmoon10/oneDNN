@@ -46,11 +46,11 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
     for (int ch = 0; ch < ur_ch_blocks; ch++) {
         for (int ow = 0; ow < ur_w; ow++) {
             xa::ZReg zreg_acc
-                    = get_acc_reg(i * ur_ch_blocks * ur_w + ch * ur_w + ow);
+                    = get_acc_reg(ur_ch_blocks * ur_w + ch * ur_w + ow);
             xa::ZRegS zregs_acc
-                    = get_acc_reg_s(i * ur_ch_blocks * ur_w +ch * ur_w + ow);
+                    = get_acc_reg_s(ur_ch_blocks * ur_w +ch * ur_w + ow);
 
-            int b_off = ch * ch_blk + i * 4;
+            int b_off = ch * ch_blk;
             if (this->jcp.with_bias){
                 CGA64::add_imm(reg_tmp_addr, reg_bias,
                                 b_off * sizeof(float), reg_tmp_imm);
@@ -60,7 +60,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
             }else
                 CGA64::fmov(zregs_acc); // zero clear
 
-            int o_off = ch * ocb_stride + ow * ow_stride + i * 4;
+            int o_off = ch * ocb_stride + ow * ow_stride;
             if (this->jcp.with_sum){
                 CGA64::add_imm(reg_tmp_addr, reg_output,
                                 o_off * sizeof(float), reg_tmp_imm);
