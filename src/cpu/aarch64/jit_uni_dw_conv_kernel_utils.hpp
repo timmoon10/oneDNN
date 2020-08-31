@@ -101,11 +101,13 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
     if (ndims != 4) return status::unimplemented;
 
     const auto blocked_tag
-            = one_of(isa, avx512_common, avx512_core) ? nChw16c : nChw8c;
+            = isa == sve ? nChw16c : nChw8c;
     const auto wei_tag
-            = one_of(isa, avx512_common, avx512_core) ? Goihw16g : Goihw8g;
+            = isa == sve ? Goihw16g : Goihw8g;
     const auto nxc_tag = nhwc;
     jcp.with_bias = cd.bias_desc.format_kind != format_kind::undef;
+    if( (blocked_tag != nChw16c) || (wei_tag != Goihw16g))
+        return status::unimplemented;
 
     if (src_d.format_kind() == format_kind::any) {
         CHECK(memory_desc_init_by_tag(src_md, blocked_tag));
@@ -144,7 +146,8 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
     if (!mayiuse(isa))
         return status::unimplemented;
 
-    const int simd_w = 16; //one_of(isa, avx512_common, avx512_core) ? 16 : 8;
+    const int simd_w = isa == sve ? 16 : 8;
+    if( simd_w != 16) return status::unimplemented;
 
     jcp.prop_kind = cd.prop_kind;
 
@@ -182,7 +185,7 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
 
     jcp.loop_order = loop_ngcw;
 
-    jcp.ur_w = 6; //isa == avx512_common ? 6 : isa == avx2 ? 4 : 3;
+    jcp.ur_w = isa == sve ? 6 : isa == avx2 ? 4 : 3;
     jcp.ur_w = nstl::min(jcp.ur_w, jcp.ow);
 
     if (is_data_layout_nxc) {
@@ -224,7 +227,7 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
 
     bool ok_to_pad_channels = true && jcp.oc == jcp.ngroups
             && jcp.ic == jcp.ngroups
-            && one_of(isa, avx512_common, avx512_core, avx2);
+            && isa == sve;
     if (ok_to_pad_channels) {
         jcp.oc = rnd_up(jcp.oc, simd_w);
         jcp.ic = rnd_up(jcp.oc, simd_w);
@@ -241,7 +244,7 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
     jcp.ch_block = simd_w;
     jcp.nb_ch = jcp.oc / jcp.ch_block;
     jcp.nb_ch_blocking
-            = one_of(isa, avx512_common, avx512_core) ? 4 : isa == avx2 ? 3 : 2;
+            = isa == sve ? 4 : isa == avx2 ? 3 : 2;
     if (jcp.nb_ch < jcp.nb_ch_blocking) jcp.nb_ch_blocking = jcp.nb_ch;
 
     jcp.bia_dt = jcp.with_bias ? cd.bias_desc.data_type : data_type::undef;
