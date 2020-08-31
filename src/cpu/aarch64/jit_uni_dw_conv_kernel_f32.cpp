@@ -104,36 +104,33 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
             CGA64::ldr(aux_reg_input, xa::ptr(aux_reg_input_buffer_ptr));
             CGA64::add(aux_reg_input, aux_reg_input, reg_iw_offset);
         }
-        int repeats = isa == sse41 ? 2 : 1;
-        for (int i = 0; i < repeats; i++) {
-            for (int ch = 0; ch < ur_ch_blocks; ch++) {
-                for (int kw = 0; kw < jcp.kw; kw++) {
-                    int ker_off = ch * jcp.kh * jcp.kw * ch_blk + kw * ch_blk
-                            + i * 4;
+        for (int ch = 0; ch < ur_ch_blocks; ch++) {
+            for (int kw = 0; kw < jcp.kw; kw++) {
+                int ker_off = ch * jcp.kh * jcp.kw * ch_blk + kw * ch_blk
+                        + i * 4;
 
-                    xa::ZReg zreg_ker = get_ker_reg(0);
-                    xa::ZRegS zregs_ker = get_ker_reg_s(0);
-                    CGA64::add_imm(reg_tmp_addr, aux_reg_kernel, 
-                                     ker_off * sizeof(float), reg_tmp_imm);
-                    CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));
+                xa::ZReg zreg_ker = get_ker_reg(0);
+                xa::ZRegS zregs_ker = get_ker_reg_s(0);
+                CGA64::add_imm(reg_tmp_addr, aux_reg_kernel, 
+                                 ker_off * sizeof(float), reg_tmp_imm);
+                CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));
 
-                    int ow_start = get_ow_start(kw, pad_l);
-                    int ow_end = get_ow_end(ur_w, kw, pad_r);
-                    for (int ow = ow_start; ow < ow_end; ow++) {
-                        int inp_off = ch * icb_stride
-                                + (ow * stride_w - pad_l) * iw_stride
-                                + kw * dilate_w * iw_stride + i * 4;
+                int ow_start = get_ow_start(kw, pad_l);
+                int ow_end = get_ow_end(ur_w, kw, pad_r);
+                for (int ow = ow_start; ow < ow_end; ow++) {
+                    int inp_off = ch * icb_stride
+                            + (ow * stride_w - pad_l) * iw_stride
+                            + kw * dilate_w * iw_stride + i * 4;
 
-                        xa::ZReg zreg_src = get_src_reg(0);
-                        xa::ZRegS zregs_src = get_src_reg_s(0);
-                        CGA64::add_imm(reg_tmp_addr, aux_reg_input,
-                                        inp_off * jcp.typesize_in, reg_tmp_imm);
-                        CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
+                    xa::ZReg zreg_src = get_src_reg(0);
+                    xa::ZRegS zregs_src = get_src_reg_s(0);
+                    CGA64::add_imm(reg_tmp_addr, aux_reg_input,
+                                    inp_off * jcp.typesize_in, reg_tmp_imm);
+                    CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
 
-                        xa::ZRegS zregs_acc = get_acc_reg_s(
-                                i * ur_ch_blocks * ur_w + ch * ur_w + ow);
-                        CGA64::fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
-                    }
+                    xa::ZRegS zregs_acc = get_acc_reg_s(
+                            i * ur_ch_blocks * ur_w + ch * ur_w + ow);
+                    CGA64::fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
                 }
             }
         }
@@ -157,17 +154,19 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
     CGA64::L_aarch64(iter_exit_label);
 }
 
-#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_activation(
         int ur_ch_blocks, int ur_w) {
     if (this->jcp.with_eltwise) {
-        int repeats = isa == sse41 ? 2 : 1;
+#if 1
+        assert(NULL);
+#else
         eltwise_injector_->compute_vector_range(
-                4, repeats * ur_w * ur_ch_blocks + 4);
+                4, ur_w * ur_ch_blocks + 4);
+#endif
     }
 }
-
+#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::store_dst(
         int ur_ch_blocks, int ur_w) {
@@ -220,7 +219,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
         CGA64::mov(aux_reg_kernel, reg_kernel);
         load_src(ur_ch_blocks, ur_w);
         apply_filter_unrolled(ur_ch_blocks, ur_w, pad_l, pad_r);
-        //apply_activation(ur_ch_blocks, ur_w);
+        apply_activation(ur_ch_blocks, ur_w);
         //store_dst(ur_ch_blocks, ur_w);
     };
 
