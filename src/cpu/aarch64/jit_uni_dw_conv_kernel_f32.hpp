@@ -160,35 +160,43 @@ struct jit_uni_dw_conv_bwd_data_kernel_f32 : public jit_generator {
 
     jit_uni_dw_conv_bwd_data_kernel_f32(jit_conv_conf_t ajcp) : jcp(ajcp) {
         this->generate();
-        jit_ker = (void (*)(jit_conv_call_s *))this->getCode();
+        jit_ker = (void (*)(jit_conv_call_s *))this->getCode32();
     }
     jit_conv_conf_t jcp;
     void (*jit_ker)(jit_conv_call_s *);
 
 private:
-    using Vmm = typename utils::conditional3<isa == sse41, Xbyak::Xmm,
-            isa == avx2, Xbyak::Ymm, Xbyak::Zmm>::type;
-    using reg64_t = const Xbyak::Reg64;
+    using reg64_t = const xa::XReg;
+    const xa::PReg reg_p_all_ones  = p2;
+ 
+    inline xa::ZReg get_ker_reg(int idx) { return xa::ZReg(idx + 0); }
+    inline xa::ZReg get_src_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZReg get_acc_reg(int idx) { return xa::ZReg(idx + 4); }
+    inline xa::ZRegS get_ker_reg_s(int idx) { return xa::ZRegS(idx + 0); }
+    inline xa::ZRegS get_src_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+    inline xa::ZRegS get_acc_reg_s(int idx) { return xa::ZRegS(idx + 4); }
 
-    inline Vmm get_ker_reg(int idx) { return Vmm(idx + 0); }
-    inline Vmm get_src_reg(int idx) { return Vmm(idx + 1); }
-    inline Vmm get_acc_reg(int idx) { return Vmm(idx + 4); }
 
-    reg64_t reg_ddst = rax;
-    reg64_t aux_reg_ddst = r8;
-    reg64_t aux1_reg_ddst = abi_not_param1;
-    reg64_t reg_kernel = rdx;
-    reg64_t aux_reg_kernel = r10;
-    reg64_t aux1_reg_kernel = rbp;
-    reg64_t reg_dsrc = rsi;
+    reg64_t reg_ddst                = x1; //rax;
+    reg64_t aux_reg_ddst            = x2; //r8;
+    reg64_t aux1_reg_ddst           = x3; //abi_not_param1;
+    reg64_t reg_kernel              = x4; //rdx;
+    reg64_t aux_reg_kernel          = x5; //r10;
+    reg64_t aux1_reg_kernel         = x6; //rbp;
+    reg64_t reg_dsrc                = x7; //rsi;
 
-    reg64_t reg_ur_str_w = r9;
-    reg64_t reg_ch_blocks = rbx;
+    reg64_t reg_ur_str_w            = x8; //r9;
+    reg64_t reg_ch_blocks           = x9; //rbx;
 
-    reg64_t iter_kh = r11;
-    reg64_t iter_kw = r12;
-    reg64_t reg_kh = r13;
-    reg64_t reg_kw = r14;
+    reg64_t iter_kh                 = x10;//r11;
+    reg64_t iter_kw                 = x11;//r12;
+    reg64_t reg_kh                  = x12;//r13;
+    reg64_t reg_kw                  = x13;//r14;
+
+    /* Temprary regs */
+    reg64_t reg_tmp_imm             = x14;
+    reg64_t reg_tmp_addr            = x15;
+
 
     inline void loop_body(int ur_ch_blocks);
     inline void load_ddst(int ur_ch_blocks, int ur_str_w);
