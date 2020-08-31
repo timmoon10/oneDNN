@@ -489,7 +489,6 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
     CGA64::L_aarch64(iter_exit_label);
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::store_dsrc(
         int ur_ch_blocks, int ur_str_w) {
@@ -498,20 +497,17 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::store_dsrc(
     int ih = jcp.ih;
     int stride_w = jcp.stride_w;
 
-    int repeats = isa == sse41 ? 2 : 1;
-    for (int i = 0; i < repeats; i++) {
-        for (int ch = 0; ch < ur_ch_blocks; ch++) {
-            for (int w = 0; w < ur_str_w; w++) {
-                int dsrc_off = (ch * ih * iw + w * stride_w) * ch_blk + i * 4;
-                Vmm vmm_acc = get_acc_reg(
-                        i * ur_ch_blocks * ur_str_w + ch * ur_str_w + w);
+    for (int ch = 0; ch < ur_ch_blocks; ch++) {
+        for (int w = 0; w < ur_str_w; w++) {
+            int dsrc_off = (ch * ih * iw + w * stride_w) * ch_blk;
+            xa::ZReg zreg_acc = get_acc_reg(ch * ur_str_w + w);
 
-                uni_vmovups(ptr[reg_dsrc + dsrc_off * sizeof(float)], vmm_acc);
-            }
+            CGA64::add_imm(reg_tmp_addr, reg_dsrc,
+                            dsrc_off * sizeof(float), reg_tmp_imm);
+            CGA64::str(zreg_acc, xa::ptr(reg_tmp_addr));
         }
     }
 }
-#endif
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
@@ -532,7 +528,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
 
         load_ddst(ur_ch_blocks, ur_w);
         apply_filter(ur_ch_blocks, ur_w);
-        //store_dsrc(ur_ch_blocks, ur_w);
+        store_dsrc(ur_ch_blocks, ur_w);
 
         CGA64::add_imm(reg_dsrc, reg_dsrc, 
                         sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w, reg_tmp_imm);
@@ -555,7 +551,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
 
         load_ddst(ur_ch_blocks, ur_w);
         apply_filter(ur_ch_blocks, ur_w);
-        //store_dsrc(ur_ch_blocks, ur_w);
+        store_dsrc(ur_ch_blocks, ur_w);
 
         CGA64::add_imm(reg_dsrc, reg_dsrc, 
                         sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w, reg_tmp_imm);
