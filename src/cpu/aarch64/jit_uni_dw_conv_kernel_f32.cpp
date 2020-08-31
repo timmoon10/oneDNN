@@ -412,7 +412,6 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::load_ddst(
     }
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
         int ur_ch_blocks, int ur_str_w) {
@@ -425,66 +424,72 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
     int stride_h = jcp.stride_h;
     int stride_w = jcp.stride_w;
 
-    Label iter_exit_label;
+    xa::LabelAArch64 iter_exit_label;
 
-    cmp(reg_kh, 0);
-    je(iter_exit_label, T_NEAR);
+    CGA64::cmp(reg_kh, 0);
+    CGA64::b(xa::EQ, iter_exit_label);
 
-    cmp(reg_kw, 0);
-    je(iter_exit_label, T_NEAR);
+    CGA64::cmp(reg_kw, 0);
+    CGA64::b(xa::EQ, iter_exit_label);
 
-    mov(iter_kh, reg_kh);
-    Label kh_label;
-    L(kh_label);
+    CGA64::mov(iter_kh, reg_kh);
+    xa::LabelAArch64 kh_label;
+    CGA64::L_aarch64(kh_label);
     {
-        mov(aux1_reg_ddst, aux_reg_ddst);
-        mov(aux1_reg_kernel, aux_reg_kernel);
+        CGA64::mov(aux1_reg_ddst, aux_reg_ddst);
+        CGA64::mov(aux1_reg_kernel, aux_reg_kernel);
 
-        mov(iter_kw, reg_kw);
-        Label kw_label;
-        L(kw_label);
+        CGA64::mov(iter_kw, reg_kw);
+        xa::LabelAArch64 kw_label;
+        CGA64::L_aarch64(kw_label);
         {
-            int repeats = isa == sse41 ? 2 : 1;
-            for (int i = 0; i < repeats; i++) {
-                for (int ch = 0; ch < ur_ch_blocks; ch++) {
-                    int ker_off = ch * kh * kw * ch_blk + i * 4;
-                    Vmm vmm_ker = get_ker_reg(0);
-                    uni_vmovups(vmm_ker,
-                            ptr[aux1_reg_kernel + ker_off * sizeof(float)]);
+            for (int ch = 0; ch < ur_ch_blocks; ch++) {
+                int ker_off = ch * kh * kw * ch_blk;
+                xa::ZReg zreg_ker = get_ker_reg(0);
+                xa::ZRegS zregs_ker = get_ker_reg_s(0);
 
-                    for (int w = 0; w < ur_str_w; w++) {
-                        int ddst_off = (ch * oh * ow + w) * ch_blk + i * 4;
+                CGA64::add_imm(reg_tmp_addr, aux1_reg_kernel,
+                                ker_off * sizeof(float), reg_tmp_imm);
+                CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));
 
-                        Vmm vmm_src = get_src_reg(0);
-                        uni_vmovups(vmm_src,
-                                ptr[aux1_reg_ddst + ddst_off * sizeof(float)]);
+                for (int w = 0; w < ur_str_w; w++) {
+                    int ddst_off = (ch * oh * ow + w) * ch_blk;
 
-                        Vmm vmm_acc = get_acc_reg(i * ur_ch_blocks * ur_str_w
-                                + ch * ur_str_w + w);
-                        uni_vfmadd231ps(vmm_acc, vmm_src, vmm_ker);
-                    }
+                    xa::ZReg zreg_src = get_src_reg(0);
+                    xa::ZRegS zregs_src = get_src_reg_s(0);
+                    CGA64::add_imm(reg_tmp_addr, aux_reg_ddst,
+                                    ddst_off * sizeof(float), reg_tmp_imm);
+                    CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
+
+                    xa::ZRegS zregs_acc = get_acc_reg_s(ch * ur_str_w + w);
+                    CGA64::fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
                 }
             }
 
-            add(aux1_reg_kernel, ch_blk * stride_w * sizeof(float));
-            sub(aux1_reg_ddst, ch_blk * sizeof(float));
+            CGA64::add_imm(aux1_reg_kernel, aux1_reg_kernel,
+                            ch_blk * stride_w * sizeof(float), reg_tmp_imm);
+            CGA64::sub_imm(aux1_reg_ddst, aux1_reg_ddst, 
+                            ch_blk * sizeof(float), reg_tmp_imm);
 
-            sub(iter_kw, stride_w);
-            cmp(iter_kw, 0);
-            jg(kw_label, T_NEAR);
+            CGA64::sub_imm(iter_kw, iter_kw, stride_w, reg_tmp_imm);
+            CGA64::cmp(iter_kw, 0);
+            CGA64::b(xa::GT, kw_label);
         }
 
-        add(aux_reg_kernel, kw * ch_blk * stride_h * sizeof(float));
-        sub(aux_reg_ddst, ow * ch_blk * sizeof(float));
+        CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
+                          kw * ch_blk * stride_h * sizeof(float), reg_tmp_imm);
+        CGA64::sub_imm(aux_reg_ddst, aux_reg_ddst, 
+                          ow * ch_blk * sizeof(float), reg_tmp_imm);
 
-        sub(iter_kh, stride_h);
-        cmp(iter_kh, 0);
-        jg(kh_label, T_NEAR);
+        CGA64::sub_imm(iter_kh, iter_kh, stride_h, reg_tmp_imm);
+        CGA64::cmp(iter_kh, 0);
+        CGA64::b(xa::GT, kh_label);
     }
 
-    L(iter_exit_label);
+    CGA64::L_aarch64(iter_exit_label);
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::store_dsrc(
         int ur_ch_blocks, int ur_str_w) {
@@ -526,7 +531,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         CGA64::mov(aux_reg_kernel, reg_kernel);
 
         load_ddst(ur_ch_blocks, ur_w);
-        //apply_filter(ur_ch_blocks, ur_w);
+        apply_filter(ur_ch_blocks, ur_w);
         //store_dsrc(ur_ch_blocks, ur_w);
 
         CGA64::add_imm(reg_dsrc, reg_dsrc, 
@@ -549,7 +554,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         CGA64::mov(aux_reg_kernel, reg_kernel);
 
         load_ddst(ur_ch_blocks, ur_w);
-        //apply_filter(ur_ch_blocks, ur_w);
+        apply_filter(ur_ch_blocks, ur_w);
         //store_dsrc(ur_ch_blocks, ur_w);
 
         CGA64::add_imm(reg_dsrc, reg_dsrc, 
