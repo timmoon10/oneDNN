@@ -153,7 +153,7 @@ private:
 #endif
     void generate();
 };
-#if 0
+
 template <cpu_isa_t isa>
 struct jit_uni_dw_conv_bwd_data_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_bwd_data_kernel_f32)
@@ -198,6 +198,7 @@ private:
     void generate();
 };
 
+#if 0
 template <cpu_isa_t isa>
 struct jit_uni_dw_conv_bwd_weights_kernel_f32 : public jit_generator {
 

@@ -161,8 +161,6 @@ void jit_uni_dw_convolution_fwd_t<isa, src_type, dst_type>::execute_forward(
 
 template struct jit_uni_dw_convolution_fwd_t<sve, data_type::f32>;
 
-
-#if 0
 template <cpu_isa_t isa, data_type_t diff_dst_type, data_type_t diff_src_type>
 void jit_uni_dw_convolution_bwd_data_t<isa, diff_dst_type,
         diff_src_type>::execute_backward_data(const exec_ctx_t &ctx) const {
@@ -260,14 +258,9 @@ void jit_uni_dw_convolution_bwd_data_t<isa, diff_dst_type,
     });
 }
 
-template struct jit_uni_dw_convolution_bwd_data_t<avx512_core, data_type::bf16,
-        data_type::f32>;
-template struct jit_uni_dw_convolution_bwd_data_t<avx512_core, data_type::bf16>;
-template struct jit_uni_dw_convolution_bwd_data_t<avx512_common,
-        data_type::f32>;
-template struct jit_uni_dw_convolution_bwd_data_t<avx2, data_type::f32>;
-template struct jit_uni_dw_convolution_bwd_data_t<sse41, data_type::f32>;
+template struct jit_uni_dw_convolution_bwd_data_t<sve, data_type::f32>;
 
+#if 0
 template <cpu_isa_t isa, data_type_t src_type, data_type_t diff_weights_type>
 jit_uni_dw_convolution_bwd_weights_t<isa, src_type, diff_weights_type>::
         jit_uni_dw_convolution_bwd_weights_t(const pd_t *apd)

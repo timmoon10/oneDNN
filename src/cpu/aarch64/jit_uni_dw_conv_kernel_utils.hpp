@@ -267,7 +267,6 @@ void jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_scratchpad(
 
 template struct jit_uni_dw_conv_fwd_kernel<sve, data_type::f32>;
 
-#if 0
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_bwd_data_kernel {
 
@@ -397,11 +396,9 @@ void jit_uni_dw_conv_bwd_data_kernel<isa, kernel_dt>::init_scratchpad(
     UNUSED(jcp);
 }
 
-template struct jit_uni_dw_conv_bwd_data_kernel<avx512_core, data_type::bf16>;
-template struct jit_uni_dw_conv_bwd_data_kernel<avx512_common, data_type::f32>;
-template struct jit_uni_dw_conv_bwd_data_kernel<avx2, data_type::f32>;
-template struct jit_uni_dw_conv_bwd_data_kernel<sse41, data_type::f32>;
+template struct jit_uni_dw_conv_bwd_data_kernel<sve, data_type::f32>;
 
+#if 0
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_bwd_weights_kernel {
 

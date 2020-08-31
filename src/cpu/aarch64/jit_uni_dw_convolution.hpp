@@ -96,7 +96,7 @@ private:
 
 using jit_aarch64_sve_512_dw_convolution_fwd_t
         = jit_uni_dw_convolution_fwd_t<sve, data_type::f32>;
-#if 0
+
 template <cpu_isa_t isa, data_type_t diff_dst_type,
         data_type_t diff_src_type = diff_dst_type>
 struct jit_uni_dw_convolution_bwd_data_t : public primitive_t {
@@ -136,12 +136,8 @@ struct jit_uni_dw_convolution_bwd_data_t : public primitive_t {
         bool set_default_formats() {
             using namespace format_tag;
 
-            auto dat_tag = utils::one_of(isa, avx512_common, avx512_core)
-                    ? nChw16c
-                    : nChw8c;
-            auto wei_tag = utils::one_of(isa, avx512_common, avx512_core)
-                    ? Goihw16g
-                    : Goihw8g;
+            auto dat_tag = nChw16c;
+            auto wei_tag = Goihw16g;
 
             return set_default_formats_common(dat_tag, wei_tag, dat_tag);
         }
@@ -169,13 +165,10 @@ private:
     jit_uni_dw_conv_bwd_data_kernel<isa, diff_dst_type> *kernel_;
 };
 
-using jit_avx512_common_dw_convolution_bwd_data_t
-        = jit_uni_dw_convolution_bwd_data_t<avx512_common, data_type::f32>;
-using jit_avx2_dw_convolution_bwd_data_t
-        = jit_uni_dw_convolution_bwd_data_t<avx2, data_type::f32>;
-using jit_sse41_dw_convolution_bwd_data_t
-        = jit_uni_dw_convolution_bwd_data_t<sse41, data_type::f32>;
+using jit_aarch64_sve_512_dw_convolution_bwd_data_t
+        = jit_uni_dw_convolution_bwd_data_t<sve, data_type::f32>;
 
+#if 0
 template <cpu_isa_t isa, data_type_t src_type,
         data_type_t diff_weights_type = src_type>
 struct jit_uni_dw_convolution_bwd_weights_t : public primitive_t {

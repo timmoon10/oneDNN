@@ -402,7 +402,6 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve>;
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::load_ddst(
         int ur_ch_blocks, int ur_str_w) {
@@ -600,10 +599,9 @@ void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     this->postamble();
 }
 
-template struct jit_uni_dw_conv_bwd_data_kernel_f32<avx512_common>;
-template struct jit_uni_dw_conv_bwd_data_kernel_f32<avx2>;
-template struct jit_uni_dw_conv_bwd_data_kernel_f32<sse41>;
+template struct jit_uni_dw_conv_bwd_data_kernel_f32<sve>;
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::zero_filter() {
     for (int r = 0; r < reg_repeats; ++r) {
