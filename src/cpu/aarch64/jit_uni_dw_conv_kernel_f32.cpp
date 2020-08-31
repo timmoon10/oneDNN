@@ -363,7 +363,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     CGA64::ldr(reg_output, xa::ptr(abi_param1_aarch64, GET_OFF(dst)));
     CGA64::ldr(reg_kernel, xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
     if (jcp.with_bias){
-        CGA64::ldr(reg_bias, xa::ptr(this->param1, GET_OFF(bias)));
+        CGA64::ldr(reg_bias, xa::ptr(abi_param1_aarch64, GET_OFF(bias)));
     }
     CGA64::ldr(reg_kh, xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
     CGA64::ldr(reg_ch_blocks, xa::ptr(abi_param1_aarch64, GET_OFF(ch_blocks)));
