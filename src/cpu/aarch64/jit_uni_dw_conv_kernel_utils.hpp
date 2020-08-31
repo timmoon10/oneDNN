@@ -303,13 +303,12 @@ status_t jit_uni_dw_conv_bwd_data_kernel<isa, kernel_dt>::init_conf(
     using namespace dnnl::impl::utils;
 
     jcp.dsrc_dt = cd.diff_src_desc.data_type;
-    const bool is_bf16 = diff_dst_d.data_type() == data_type::bf16;
-    jcp.isa = (is_bf16 && mayiuse(avx512_core_bf16)) ? avx512_core_bf16 : isa;
+    jcp.isa = isa;
 
-    if (!mayiuse(isa) || (is_bf16 && !mayiuse(avx512_core)))
+    if (!mayiuse(isa))
         return status::unimplemented;
 
-    const int simd_w = one_of(isa, avx512_common, avx512_core) ? 16 : 8;
+    const int simd_w = isa == sve ? 16 : 8;
 
     const bool with_groups = weights_d.ndims() == diff_src_d.ndims() + 1;
     if (!with_groups) return status::unimplemented;
@@ -345,15 +344,15 @@ status_t jit_uni_dw_conv_bwd_data_kernel<isa, kernel_dt>::init_conf(
 
     bool ok_to_pad_channels = true && jcp.oc == jcp.ngroups
             && jcp.ic == jcp.ngroups
-            && one_of(isa, avx512_common, avx512_core, avx2);
+            && isa == sve;
     if (ok_to_pad_channels) {
         jcp.oc = rnd_up(jcp.oc, simd_w);
         jcp.ic = rnd_up(jcp.oc, simd_w);
         jcp.ngroups = rnd_up(jcp.ngroups, simd_w);
     }
 
-    auto dat_tag = one_of(isa, avx512_common, avx512_core) ? nChw16c : nChw8c;
-    auto wei_tag = one_of(isa, avx512_common, avx512_core) ? Goihw16g : Goihw8g;
+    auto dat_tag = isa == sve ? nChw16c : nChw8c;
+    auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
 
     jcp.src_tag = diff_src_d.matches_one_of_tag(dat_tag);
     jcp.wei_tag = weights_d.matches_one_of_tag(wei_tag);
@@ -373,13 +372,12 @@ status_t jit_uni_dw_conv_bwd_data_kernel<isa, kernel_dt>::init_conf(
     jcp.typesize_out = types::data_type_size(diff_src_d.data_type());
     jcp.typesize_in = types::data_type_size(diff_dst_d.data_type());
 
-    jcp.ur_w = is_bf16 ? (isa_has_bf16(jcp.isa) ? 6 : 4)
-                       : isa == avx512_common ? 6 : isa == avx2 ? 4 : 3;
+    jcp.ur_w = isa == sve ? 6 : isa == avx2 ? 4 : 3;
 
     jcp.ch_block = simd_w;
     jcp.nb_ch = jcp.ic / jcp.ch_block;
     jcp.nb_ch_blocking
-            = one_of(isa, avx512_common, avx512_core) ? 4 : isa == avx2 ? 3 : 2;
+            = isa == sve ? 4 : isa == avx2 ? 3 : 2;
     if (jcp.nb_ch < jcp.nb_ch_blocking) jcp.nb_ch_blocking = jcp.nb_ch;
 
     return status::success;
