@@ -180,7 +180,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::store_dst(
 
             CGA64::add_imm(reg_tmp_addr, reg_output,
                             o_off * sizeof(float), reg_tmp_imm);
-            CGA64::ldr(zreg_dst, xa::ptr(reg_tmp_addr));
+            CGA64::str(zreg_dst, xa::ptr(reg_tmp_addr));
         }
     }
 }
