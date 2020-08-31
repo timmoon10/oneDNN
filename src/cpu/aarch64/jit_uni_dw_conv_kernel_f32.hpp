@@ -64,6 +64,7 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
 
 private:
     using reg64_t = const xa::XReg;
+    const xa::PReg reg_p_all_ones  = p2;
     const int vlen = cpu_isa_traits<isa>::vlen;
 
     // dw convolution
@@ -100,7 +101,10 @@ private:
     inline void store_dst(int ur_ch_blocks, int ur_w);
 
     inline xa::ZReg get_ker_reg(int idx) { return xa::ZReg(idx + 0); }
+    inline xa::ZRegS get_ker_reg_s(int idx) { return xa::ZRegS(idx + 0); }
     inline xa::ZReg get_src_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZRegS get_src_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+ 
     inline xa::ZReg get_acc_reg(int idx) {
         assert((idx+4) < 31);
         return xa::ZReg(idx + 4); 

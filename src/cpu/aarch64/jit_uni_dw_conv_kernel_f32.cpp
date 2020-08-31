@@ -76,7 +76,6 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::load_src(int ur_ch_blocks, int ur_w) {
     }
 }
 
-#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
         int ur_ch_blocks, int ur_w, int pad_l, int pad_r) {
@@ -92,18 +91,18 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
             ? ch_blk
             : (jcp.is_fused_conv ? 1 : jcp.ih) * jcp.iw * ch_blk;
 
-    Label iter_exit_label;
+    xa::LabelAArch64 iter_exit_label;
 
-    cmp(reg_kh, 0);
-    je(iter_exit_label, T_NEAR);
+    CGA64::cmp(reg_kh, 0);
+    CGA64::b(xa::EQ, iter_exit_label);
 
-    mov(iter_kh, reg_kh);
-    Label kh_label;
-    L(kh_label);
+    CGA64::mov(iter_kh, reg_kh);
+    xa::LabelAArch64 kh_label;
+    CGA64::L_aarch64(kh_label);
     {
         if (jcp.is_fused_conv) {
-            mov(aux_reg_input, ptr[aux_reg_input_buffer_ptr]);
-            add(aux_reg_input, reg_iw_offset);
+            CGA64::ldr(aux_reg_input, xa::ptr(aux_reg_input_buffer_ptr));
+            CGA64::add(aux_reg_input, aux_reg_input, reg_iw_offset);
         }
         int repeats = isa == sse41 ? 2 : 1;
         for (int i = 0; i < repeats; i++) {
@@ -112,9 +111,11 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
                     int ker_off = ch * jcp.kh * jcp.kw * ch_blk + kw * ch_blk
                             + i * 4;
 
-                    Vmm vmm_ker = get_ker_reg(0);
-                    uni_vmovups(vmm_ker,
-                            ptr[aux_reg_kernel + ker_off * sizeof(float)]);
+                    xa::ZReg zreg_ker = get_ker_reg(0);
+                    xa::ZRegS zregs_ker = get_ker_reg_s(0);
+                    CGA64::add_imm(reg_tmp_addr, aux_reg_kernel, 
+                                     ker_off * sizeof(float), reg_tmp_imm);
+                    CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));
 
                     int ow_start = get_ow_start(kw, pad_l);
                     int ow_end = get_ow_end(ur_w, kw, pad_r);
@@ -123,34 +124,40 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
                                 + (ow * stride_w - pad_l) * iw_stride
                                 + kw * dilate_w * iw_stride + i * 4;
 
-                        Vmm vmm_src = get_src_reg(0);
-                        uni_vmovups(vmm_src,
-                                ptr[aux_reg_input + inp_off * jcp.typesize_in]);
+                        xa::ZReg zreg_src = get_src_reg(0);
+                        xa::ZRegS zregs_src = get_src_reg_s(0);
+                        CGA64::add_imm(reg_tmp_addr, aux_reg_input,
+                                        inp_off * jcp.typesize_in, reg_tmp_imm);
+                        CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
 
-                        Vmm vmm_acc = get_acc_reg(
+                        xa::ZRegS zregs_acc = get_acc_reg_s(
                                 i * ur_ch_blocks * ur_w + ch * ur_w + ow);
-                        uni_vfmadd231ps(vmm_acc, vmm_src, vmm_ker);
+                        CGA64::fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
                     }
                 }
             }
         }
 
-        add(aux_reg_kernel, jcp.kw * ch_blk * sizeof(float));
+        CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
+                        jcp.kw * ch_blk * sizeof(float), reg_tmp_imm);
         if (jcp.is_fused_conv) {
             // Move to next row pointer in the buffer
-            add(aux_reg_input_buffer_ptr, sizeof(void *));
+            CGA64::add_imm(aux_reg_input_buffer_ptr, aux_reg_input_buffer_ptr,
+                            sizeof(void *), reg_tmp_imm);
         } else {
-            add(aux_reg_input, ih_stride * dilate_h * sizeof(float));
+            CGA64::add_imm(aux_reg_input, aux_reg_input,
+                            ih_stride * dilate_h * sizeof(float), reg_tmp_imm);
         }
 
-        dec(iter_kh);
-        cmp(iter_kh, 0);
-        jg(kh_label, T_NEAR);
+        CGA64::sub(iter_kh, iter_kh, 1); //dec(iter_kh);
+        CGA64::cmp(iter_kh, 0);
+        CGA64::b(xa::GT, kh_label);
     }
 
-    L(iter_exit_label);
+    CGA64::L_aarch64(iter_exit_label);
 }
 
+#if 0
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_activation(
         int ur_ch_blocks, int ur_w) {
@@ -212,7 +219,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
 
         CGA64::mov(aux_reg_kernel, reg_kernel);
         load_src(ur_ch_blocks, ur_w);
-        //apply_filter_unrolled(ur_ch_blocks, ur_w, pad_l, pad_r);
+        apply_filter_unrolled(ur_ch_blocks, ur_w, pad_l, pad_r);
         //apply_activation(ur_ch_blocks, ur_w);
         //store_dst(ur_ch_blocks, ur_w);
     };
@@ -234,7 +241,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
 
         CGA64::L_aarch64(ch_loop_label);
         {
-            //compute(jcp.nb_ch_blocking);
+            compute(jcp.nb_ch_blocking);
             CGA64::add_imm(reg_kernel, reg_kernel, wei_ch_stride, reg_tmp_imm);
             CGA64::add_imm(reg_input, reg_input, inp_ch_stride, reg_tmp_imm);
             CGA64::add_imm(reg_output, reg_output, out_ch_stride, reg_tmp_imm);
@@ -250,7 +257,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
             CGA64::L_aarch64(ch_tail_label);
             CGA64::cmp(aux_reg_ch_blocks, 0);
             CGA64::b(xa::LE, skip_ch_tail_label);
-            //compute(ch_tail);
+            compute(ch_tail);
             CGA64::L_aarch64(skip_ch_tail_label);
         }
 
@@ -261,7 +268,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
         CGA64::mov(reg_kernel, reg_kernel_stack);
 
     } else {
-        //compute(ur_ch_blocks);
+        compute(ur_ch_blocks);
     }
 }
 
@@ -338,7 +345,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     this->preamble();
-
+    CGA64::ptrue(reg_p_all_ones.b);
     if (jcp.is_fused_conv) {
         CGA64::ldr(reg_input_buffer_ptr, xa::ptr(abi_param1_aarch64, GET_OFF(src)));
         /* In case of fused depthwise convolution, `param.src` is not a pointer
