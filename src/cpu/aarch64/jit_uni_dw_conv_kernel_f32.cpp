@@ -955,6 +955,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
         jl(h_loop_label, T_NEAR);
     }
 }
+#endif
 
 template <cpu_isa_t isa>
 inline void
@@ -998,76 +999,82 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
         unroll_w_tail = jcp.ow;
     }
     if (jcp.with_bias) {
-        Label skip_load_bias;
-        mov(reg_bias_baddr,
-                ptr[this->param1 + offsetof(jit_dw_conv_call_s, bias)]);
+        xa::LabelAArch64 skip_load_bias;
+        CGA64::ldr(reg_bias_baddr,
+                xa::ptr(abi_param1_aarch64,
+                      static_cast<int32_t>(offsetof(jit_dw_conv_call_s, bias))));
 
-        zero_bias();
+        //zero_bias();
 
-        mov(reg_exec_flags,
-                ptr[this->param1 + offsetof(jit_dw_conv_call_s, exec_flags)]);
-        and_(reg_exec_flags, FLAG_ZERO_BIAS);
-        test(reg_exec_flags, reg_exec_flags);
-        jne(skip_load_bias);
+        CGA64::ldr(reg_exec_flags,
+                xa::ptr(abi_param1_aarch64, 
+                      static_cast<int32_t>(offsetof(jit_dw_conv_call_s, exec_flags))));
 
-        load_bias();
+        CGA64::and_(reg_exec_flags, reg_exec_flags, FLAG_ZERO_BIAS);
+        CGA64::tst(reg_exec_flags, reg_exec_flags);
+        CGA64::b(xa::NE, skip_load_bias); //jne(skip_load_bias);
 
-        L(skip_load_bias);
-        compute_bias_loop(block_size);
+        //load_bias();
 
-        store_bias();
+        CGA64::L_aarch64(skip_load_bias);
+        //compute_bias_loop(block_size);
+
+        //store_bias();
     }
 
     /* Pass filter address, then offset for h_padding. */
-    compute_zero_filter();
-    mov(reg_kh_offset,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, filter_pad_off)]);
-    add(reg_filter_baddr, reg_kh_offset);
+    //compute_zero_filter();
+    CGA64::ldr(reg_kh_offset,
+            xa::ptr(abi_param1_aarch64,
+            static_cast<int32_t>(offsetof(jit_dw_conv_call_s, filter_pad_off))));
+    CGA64::add(reg_filter_baddr, reg_filter_baddr, reg_kh_offset);
 
     /* compute left padded block */
     if (l_pad && do_unroll_w) {
-        compute_h_loop(unroll_w, l_pad, 0, 0);
-        add(reg_output_baddr, unroll_w * ch_offset * sizeof(float));
-        add(reg_input_baddr,
-                unroll_w * jcp.stride_w * ch_offset * sizeof(float));
+        //compute_h_loop(unroll_w, l_pad, 0, 0);
+        CGA64::add_imm(reg_output_baddr, reg_output_baddr,
+                        unroll_w * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::add_imm(reg_input_baddr, reg_input_baddr,
+                unroll_w * jcp.stride_w * ch_offset * sizeof(float), reg_tmp_imm);
         unroll_w_trips--;
         pad_offset = l_pad;
         l_pad = 0;
     }
 
     /* compute middle block */
-    Label ow_blk_label;
+    xa::LabelAArch64 ow_blk_label;
 
     /* Insert loop for 'ow' block when middle block needs to execute more
      * than once */
     bool do_ow_blk_loop = unroll_w_trips > 1;
     if (do_ow_blk_loop) {
-        mov(reg_iter_ow_blk, unroll_w_trips);
-        L(ow_blk_label);
+        CGA64::mov_imm(reg_iter_ow_blk, unroll_w_trips);
+        CGA64::L_aarch64(ow_blk_label);
     }
     if (unroll_w_trips > 0) {
-        compute_h_loop(unroll_w, l_pad, pad_offset, 0);
-        add(reg_output_baddr, unroll_w * ch_offset * sizeof(float));
-        add(reg_input_baddr,
-                unroll_w * jcp.stride_w * ch_offset * sizeof(float));
+        //compute_h_loop(unroll_w, l_pad, pad_offset, 0);
+        CGA64::add_imm(reg_output_baddr, reg_output_baddr,
+                  unroll_w * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::add_imm(reg_input_baddr, reg_input_baddr,
+                unroll_w * jcp.stride_w * ch_offset * sizeof(float), reg_tmp_imm);
     }
     if (do_ow_blk_loop) {
-        dec(reg_iter_ow_blk);
-        cmp(reg_iter_ow_blk, 0);
-        jg(ow_blk_label, T_NEAR);
+        CGA64::sub(reg_iter_ow_blk, reg_iter_ow_blk, 1);
+        CGA64::cmp(reg_iter_ow_blk, 0);
+        CGA64::b(xa::GT, ow_blk_label);
     }
 
     /* compute right padded block */
     if (unroll_w_tail) {
-        compute_h_loop(
-                unroll_w_tail, l_pad, pad_offset, jcp.ow - unroll_w_tail);
+        //compute_h_loop(
+        //        unroll_w_tail, l_pad, pad_offset, jcp.ow - unroll_w_tail);
     }
 }
-#endif
+
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
     preamble();
-
+    CGA64::ptrue(reg_p_all_ones.b);
     CGA64::ldr(reg_input_baddr,
                 xa::ptr(abi_param1_aarch64,
                 static_cast<int32_t>(offsetof(jit_dw_conv_call_s, input))));
@@ -1078,7 +1085,7 @@ void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
                 xa::ptr(abi_param1_aarch64,
                 static_cast<int32_t>(offsetof(jit_dw_conv_call_s, filter))));
 
-    //compute_ow_block_unroll();
+    compute_ow_block_unroll();
     
     this->postamble();
 }

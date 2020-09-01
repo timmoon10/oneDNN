@@ -244,7 +244,7 @@ private:
     reg64_t reg_kh_offset       = x5; //rax;
 
     /* parameter passed by driver into kernel */
-    //Xbyak::Reg8 reg_exec_flags  = bl;
+    reg64_t reg_exec_flags      = x14;//bl;
 
     reg64_t reg_oh_worksize     = x6; //r14;
     reg64_t reg_oh              = x5; //rax;
@@ -259,6 +259,9 @@ private:
     reg64_t reg_output_baddr    = x11;//r12;
     reg64_t reg_filter_baddr    = x12;//abi_not_param1;
     reg64_t reg_bias_baddr      = x13;//r13;
+
+    /* Temporary regs */
+    reg64_t reg_tmp_imm         = x15;
 
     /* Micro-kernel JIT'ing, fusing 'kw' and 'ow_block' loops into unrolled FMAs
      */
