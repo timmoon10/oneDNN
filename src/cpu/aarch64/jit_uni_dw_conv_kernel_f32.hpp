@@ -71,26 +71,26 @@ private:
     reg64_t reg_input                   = x1;  //r8;
     reg64_t aux_reg_input               = x2;  //r9;
     reg64_t reg_kernel                  = x3;  //r10;
-    reg64_t aux_reg_kernel              = x4;  //r11;
-    reg64_t reg_ch_blocks               = x5;  //r12;
-    reg64_t reg_output                  = x6;  //r13;
-    reg64_t reg_bias                    = x7;  //r14;
-    reg64_t reg_kh                      = x8;  //r15;
-    reg64_t iter_kh                     = x9;  //rax;
-    reg64_t reg_oi                      = x10; //rbx;
-    reg64_t aux_reg_ch_blocks           = x11; //rsi;
+    reg64_t aux_reg_kernel              = x5;  //r11;
+    reg64_t reg_ch_blocks               = x6;  //r12;
+    reg64_t reg_output                  = x7;  //r13;
+    reg64_t reg_bias                    = x8;  //r14;
+    reg64_t reg_kh                      = x9;  //r15;
+    reg64_t iter_kh                     = x10;  //rax;
+    reg64_t reg_oi                      = x11; //rbx;
+    reg64_t aux_reg_ch_blocks           = x12; //rsi;
     // fused convolution
-    reg64_t reg_input_buffer_ptr        = x12; //rdx;
-    reg64_t aux_reg_input_buffer_ptr    = x13; //rbp;
+    reg64_t reg_input_buffer_ptr        = x13; //rdx;
+    reg64_t aux_reg_input_buffer_ptr    = x14; //rbp;
     reg64_t reg_iw_offset               = reg_input; //Hack: clear reg_input early in kernel
 
     /* Temprary regs */
-    reg64_t reg_tmp_imm                 = x14;
-    reg64_t reg_kernel_stack            = x15;
-    reg64_t reg_input_stack             = x16;
-    reg64_t reg_output_stack            = x17;
-    reg64_t reg_bias_stack              = x18;
-    reg64_t reg_tmp_addr                = x19;
+    reg64_t reg_tmp_imm                 = x15;
+    reg64_t reg_kernel_stack            = x16;
+    reg64_t reg_input_stack             = x17;
+    reg64_t reg_output_stack            = x18;
+    reg64_t reg_bias_stack              = x19;
+    reg64_t reg_tmp_addr                = x21;
 
     inline void load_src(int ur_ch_blocks, int ur_w);
     inline void compute_loop(int ur_w, int ur_ch_blocks, int pad_l, int pad_r);
@@ -180,22 +180,22 @@ private:
     reg64_t reg_ddst                = x1; //rax;
     reg64_t aux_reg_ddst            = x2; //r8;
     reg64_t aux1_reg_ddst           = x3; //abi_not_param1;
-    reg64_t reg_kernel              = x4; //rdx;
-    reg64_t aux_reg_kernel          = x5; //r10;
-    reg64_t aux1_reg_kernel         = x6; //rbp;
-    reg64_t reg_dsrc                = x7; //rsi;
+    reg64_t reg_kernel              = x5; //rdx;
+    reg64_t aux_reg_kernel          = x6; //r10;
+    reg64_t aux1_reg_kernel         = x7; //rbp;
+    reg64_t reg_dsrc                = x8; //rsi;
 
-    reg64_t reg_ur_str_w            = x8; //r9;
-    reg64_t reg_ch_blocks           = x9; //rbx;
+    reg64_t reg_ur_str_w            = x9; //r9;
+    reg64_t reg_ch_blocks           = x10; //rbx;
 
-    reg64_t iter_kh                 = x10;//r11;
-    reg64_t iter_kw                 = x11;//r12;
-    reg64_t reg_kh                  = x12;//r13;
-    reg64_t reg_kw                  = x13;//r14;
+    reg64_t iter_kh                 = x11;//r11;
+    reg64_t iter_kw                 = x12;//r12;
+    reg64_t reg_kh                  = x13;//r13;
+    reg64_t reg_kw                  = x14;//r14;
 
     /* Temprary regs */
-    reg64_t reg_tmp_imm             = x14;
-    reg64_t reg_tmp_addr            = x15;
+    reg64_t reg_tmp_imm             = x15;
+    reg64_t reg_tmp_addr            = x16;
 
 
     inline void loop_body(int ur_ch_blocks);
