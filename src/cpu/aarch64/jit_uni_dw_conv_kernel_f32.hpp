@@ -213,51 +213,52 @@ struct jit_uni_dw_conv_bwd_weights_kernel_f32 : public jit_generator {
 
     jit_uni_dw_conv_bwd_weights_kernel_f32(jit_conv_conf_t ajcp) : jcp(ajcp) {
         this->generate();
-        jit_ker = (void (*)(jit_dw_conv_call_s *))this->getCode();
+        jit_ker = (void (*)(jit_dw_conv_call_s *))this->getCode32();
     }
 
     jit_conv_conf_t jcp;
     void (*jit_ker)(jit_dw_conv_call_s *);
 
 private:
-    using Vmm = typename utils::conditional3<isa == sse41, Xbyak::Xmm,
-            isa == avx2, Xbyak::Ymm, Xbyak::Zmm>::type;
-    using reg64_t = const Xbyak::Reg64;
+    using reg64_t = const xa::XReg;
+    const xa::PReg reg_p_all_ones  = p2;
+ 
     const int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
-    const int reg_repeats = (isa == sse41) ? 2 : 1;
-
-    const Xbyak::AddressFrame &vmmword
-            = (isa == sse41) ? xword : (isa == avx2) ? yword : zword;
 
     /* XXX: offset between input and accummulators is 3, therefore, assume 'kw'
      * is no larger than 3*/
-    inline Vmm get_bias_reg(int idx = 0) { return Vmm(idx); }
-    inline Vmm get_output_reg(int idx) { return Vmm(idx + 1); }
-    inline Vmm get_input_reg(int idx) { return Vmm(idx + 4 * reg_repeats + 1); }
-    inline Vmm get_acc_reg(int idx) { return Vmm(idx + 1 * reg_repeats + 1); }
-    inline Vmm get_aux_reg() { return Vmm(0); }
+    inline xa::ZReg get_bias_reg(int idx = 0) { return xa::ZReg(idx); }
+    inline xa::ZReg get_output_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZReg get_input_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZReg get_acc_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZReg get_aux_reg() { return xa::ZReg(0); }
+    inline xa::ZRegS get_bias_reg_s(int idx = 0) { return xa::ZRegS(idx); }
+    inline xa::ZRegS get_output_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+    inline xa::ZRegS get_input_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+    inline xa::ZRegS get_acc_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+    inline xa::ZRegS get_aux_reg_s() { return xa::ZRegS(0); }
 
-    reg64_t reg_tmp_input = r9;
-    reg64_t reg_tmp_output = r10;
-    reg64_t reg_tmp_filter = r13;
-    reg64_t reg_kh_offset = rax;
+    reg64_t reg_tmp_input       = x1; //r9;
+    reg64_t reg_tmp_output      = x2; //r10;
+    reg64_t reg_tmp_filter      = x3; //r13;
+    reg64_t reg_kh_offset       = x5; //rax;
 
     /* parameter passed by driver into kernel */
-    Xbyak::Reg8 reg_exec_flags = bl;
+    //Xbyak::Reg8 reg_exec_flags  = bl;
 
-    reg64_t reg_oh_worksize = r14;
-    reg64_t reg_oh = rax;
+    reg64_t reg_oh_worksize     = x6; //r14;
+    reg64_t reg_oh              = x5; //rax;
 
-    reg64_t reg_iter_ow_blk = r11;
+    reg64_t reg_iter_ow_blk     = x7; //r11;
 
-    reg64_t reg_kh = rsi;
-    reg64_t reg_kh_count = rdx;
+    reg64_t reg_kh              = x8; //rsi;
+    reg64_t reg_kh_count        = x9; //rdx;
 
     /* Base addresses for convolution parameters. */
-    reg64_t reg_input_baddr = r15;
-    reg64_t reg_output_baddr = r12;
-    reg64_t reg_filter_baddr = abi_not_param1;
-    reg64_t reg_bias_baddr = r13;
+    reg64_t reg_input_baddr     = x10;//r15;
+    reg64_t reg_output_baddr    = x11;//r12;
+    reg64_t reg_filter_baddr    = x12;//abi_not_param1;
+    reg64_t reg_bias_baddr      = x13;//r13;
 
     /* Micro-kernel JIT'ing, fusing 'kw' and 'ow_block' loops into unrolled FMAs
      */

@@ -1067,16 +1067,19 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
     preamble();
-#if 0
-    mov(reg_input_baddr,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, input)]);
-    mov(reg_output_baddr,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, output)]);
-    mov(reg_filter_baddr,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, filter)]);
 
-    compute_ow_block_unroll();
-#endif
+    CGA64::ldr(reg_input_baddr,
+                xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, input))));
+    CGA64::ldr(reg_output_baddr,
+                xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, output))));
+    CGA64::ldr(reg_filter_baddr,
+                xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, filter))));
+
+    //compute_ow_block_unroll();
+    
     this->postamble();
 }
 
