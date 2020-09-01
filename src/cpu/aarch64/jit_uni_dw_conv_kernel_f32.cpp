@@ -457,7 +457,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
 
                     xa::ZReg zreg_src = get_src_reg(0);
                     xa::ZRegS zregs_src = get_src_reg_s(0);
-                    CGA64::add_imm(reg_tmp_addr, aux_reg_ddst,
+                    CGA64::add_imm(reg_tmp_addr, aux1_reg_ddst,
                                     ddst_off * sizeof(float), reg_tmp_imm);
                     CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
 
