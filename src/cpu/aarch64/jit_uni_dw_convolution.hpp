@@ -168,7 +168,6 @@ private:
 using jit_aarch64_sve_512_dw_convolution_bwd_data_t
         = jit_uni_dw_convolution_bwd_data_t<sve, data_type::f32>;
 
-#if 0
 template <cpu_isa_t isa, data_type_t src_type,
         data_type_t diff_weights_type = src_type>
 struct jit_uni_dw_convolution_bwd_weights_t : public primitive_t {
@@ -217,10 +216,10 @@ struct jit_uni_dw_convolution_bwd_weights_t : public primitive_t {
         bool set_default_formats() {
             using namespace format_tag;
 
-            auto dat_tag = utils::one_of(isa, avx512_common, avx512_core)
+            auto dat_tag = isa == sve
                     ? nChw16c
                     : nChw8c;
-            auto wei_tag = utils::one_of(isa, avx512_common, avx512_core)
+            auto wei_tag = isa == sve
                     ? Goihw16g
                     : Goihw8g;
 
@@ -234,8 +233,8 @@ struct jit_uni_dw_convolution_bwd_weights_t : public primitive_t {
         delete kernel_;
     };
 
-    typedef typename prec_traits<data_type::f32>::type f32_data_t;
     typedef typename prec_traits<data_type::bf16>::type bf16_data_t;
+    typedef typename prec_traits<data_type::f32>::type f32_data_t;
     typedef typename prec_traits<src_type>::type src_data_t;
     typedef typename prec_traits<src_type>::type diff_dst_data_t;
     typedef typename prec_traits<diff_weights_type>::type diff_weights_data_t;
@@ -255,13 +254,9 @@ private:
     jit_uni_dw_conv_bwd_weights_kernel<isa, src_type> *kernel_;
 };
 
-using jit_avx512_common_dw_convolution_bwd_weights_t
-        = jit_uni_dw_convolution_bwd_weights_t<avx512_common, data_type::f32>;
-using jit_avx2_dw_convolution_bwd_weights_t
-        = jit_uni_dw_convolution_bwd_weights_t<avx2, data_type::f32>;
-using jit_sse41_dw_convolution_bwd_weights_t
-        = jit_uni_dw_convolution_bwd_weights_t<sse41, data_type::f32>;
-#endif
+using jit_aarch64_sve_512_dw_convolution_bwd_weights_t
+        = jit_uni_dw_convolution_bwd_weights_t<sve, data_type::f32>;
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

@@ -392,13 +392,12 @@ void jit_uni_dw_conv_bwd_data_kernel<isa, kernel_dt>::init_scratchpad(
 
 template struct jit_uni_dw_conv_bwd_data_kernel<sve, data_type::f32>;
 
-#if 0
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_bwd_weights_kernel {
 
     jit_uni_dw_conv_bwd_weights_kernel(jit_conv_conf_t ajcp)
         : jit_ker(nullptr), ker_(nullptr) {
-        ker_ = new jit_kernel_t(ajcp);
+        ker_ = new jit_uni_dw_conv_bwd_weights_kernel_f32<isa>(ajcp);
         jit_ker = ker_->jit_ker;
     }
 
@@ -417,11 +416,7 @@ struct jit_uni_dw_conv_bwd_weights_kernel {
     void (*jit_ker)(jit_dw_conv_call_s *);
 
 private:
-    using jit_kernel_t = typename utils::conditional<isa == avx512_core
-                    && kernel_dt == data_type::bf16,
-            jit_avx512_dw_conv_bwd_weights_kernel_bf16,
-            jit_uni_dw_conv_bwd_weights_kernel_f32<isa>>::type;
-    jit_kernel_t *ker_;
+    jit_uni_dw_conv_bwd_weights_kernel_f32<isa> *ker_;
 };
 
 template <cpu_isa_t isa, data_type_t kernel_dt>
@@ -434,10 +429,9 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     using namespace dnnl::impl::utils;
 
     jcp.dwei_dt = cd.diff_weights_desc.data_type;
-    const bool is_bf16 = src_d.data_type() == data_type::bf16;
-    jcp.isa = (is_bf16 && mayiuse(avx512_core_bf16)) ? avx512_core_bf16 : isa;
-
-    if (!mayiuse(isa) || (is_bf16 && !mayiuse(avx512_core)))
+    jcp.isa = sve;
+    
+    if (!mayiuse(isa))
         return status::unimplemented;
 
     jcp.ngroups = diff_weights_d.dims()[0];
@@ -447,10 +441,10 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     const bool with_groups = diff_weights_d.ndims() == src_d.ndims() + 1;
 
     jcp.is_depthwise = true && with_groups && everyone_is(1, jcp.oc, jcp.ic);
-
+    
     if (!jcp.is_depthwise) return status::unimplemented;
 
-    jcp.ch_block = one_of(isa, avx512_common, avx512_core) ? 16 : 8;
+    jcp.ch_block = isa == sve ? 16 : 8;
 
     jcp.mb = src_d.dims()[0];
 
@@ -479,8 +473,8 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
 
     jcp.with_bias = cd.diff_bias_desc.format_kind != format_kind::undef;
 
-    auto dat_tag = one_of(isa, avx512_common, avx512_core) ? nChw16c : nChw8c;
-    auto wei_tag = one_of(isa, avx512_common, avx512_core) ? Goihw16g : Goihw8g;
+    auto dat_tag = isa == sve ? nChw16c : nChw8c;
+    auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
 
     jcp.src_tag = src_d.matches_one_of_tag(dat_tag);
     jcp.wei_tag = diff_weights_d.matches_one_of_tag(wei_tag);
@@ -568,13 +562,8 @@ void jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::balance(
     jcp.nthr = jcp.nthr_g * jcp.nthr_mb;
 }
 
-template struct jit_uni_dw_conv_bwd_weights_kernel<avx512_core,
-        data_type::bf16>;
-template struct jit_uni_dw_conv_bwd_weights_kernel<avx512_common,
-        data_type::f32>;
-template struct jit_uni_dw_conv_bwd_weights_kernel<avx2, data_type::f32>;
-template struct jit_uni_dw_conv_bwd_weights_kernel<sse41, data_type::f32>;
-#endif
+template struct jit_uni_dw_conv_bwd_weights_kernel<sve, data_type::f32>;
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

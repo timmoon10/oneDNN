@@ -206,7 +206,6 @@ private:
     void generate();
 };
 
-#if 0
 template <cpu_isa_t isa>
 struct jit_uni_dw_conv_bwd_weights_kernel_f32 : public jit_generator {
 
@@ -288,7 +287,7 @@ private:
 
     void generate();
 };
-#endif
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

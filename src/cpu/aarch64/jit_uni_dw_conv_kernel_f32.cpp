@@ -1063,11 +1063,11 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
                 unroll_w_tail, l_pad, pad_offset, jcp.ow - unroll_w_tail);
     }
 }
-
+#endif
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
     preamble();
-
+#if 0
     mov(reg_input_baddr,
             ptr[this->param1 + offsetof(jit_dw_conv_call_s, input)]);
     mov(reg_output_baddr,
@@ -1076,14 +1076,12 @@ void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
             ptr[this->param1 + offsetof(jit_dw_conv_call_s, filter)]);
 
     compute_ow_block_unroll();
-
+#endif
     this->postamble();
 }
 
-template struct jit_uni_dw_conv_bwd_weights_kernel_f32<avx512_common>;
-template struct jit_uni_dw_conv_bwd_weights_kernel_f32<avx2>;
-template struct jit_uni_dw_conv_bwd_weights_kernel_f32<sse41>;
-#endif
+template struct jit_uni_dw_conv_bwd_weights_kernel_f32<sve>;
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl
