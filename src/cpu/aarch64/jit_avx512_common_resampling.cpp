@@ -192,6 +192,7 @@ private:
 
     void prepare_mask() {
         Reg64 reg_tail = reg_tmp;
+        // The kmovw instrucion here can be translated correctly by translator
         mov(reg_tail.cvt32(), tail_mask_);
         kmovw(k_tail_mask, reg_tail.cvt32());
     }
