@@ -262,6 +262,7 @@ private:
 
     /* Temporary regs */
     reg64_t reg_tmp_imm         = x15;
+    reg64_t reg_tmp_addr        = x16;
 
     /* Micro-kernel JIT'ing, fusing 'kw' and 'ow_block' loops into unrolled FMAs
      */

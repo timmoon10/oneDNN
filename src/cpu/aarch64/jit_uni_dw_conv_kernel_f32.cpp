@@ -627,24 +627,19 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_filter() {
         }
     }
 }
-
+#endif
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::zero_bias() {
-    for (int r = 0; r < reg_repeats; ++r) {
-        Vmm vmm_bias = get_bias_reg(r);
-        uni_vpxor(vmm_bias, vmm_bias, vmm_bias);
-    }
+    xa::ZRegS zregs_bias = get_bias_reg_s(0);
+    CGA64::fmov(zregs_bias); // zero clear
 }
-
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_bias() {
-    for (int r = 0; r < reg_repeats; ++r) {
-        Vmm vmm_bias = get_bias_reg(r);
-        uni_vmovups(
-                vmm_bias, vmmword[reg_bias_baddr + r * simd_w * sizeof(float)]);
-    }
+    xa::ZReg zreg_bias = get_bias_reg(0);
+    CGA64::ldr(zreg_bias, xa::ptr(reg_bias_baddr));
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
         int unroll_w, int l_pad, int pad_offset, int ow_block) {
@@ -759,16 +754,15 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_filter() {
         }
     }
 }
+#endif
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_bias() {
-    for (int r = 0; r < reg_repeats; ++r) {
-        Vmm vmm_bias = get_bias_reg(r);
-        uni_vmovups(
-                vmmword[reg_bias_baddr + r * simd_w * sizeof(float)], vmm_bias);
-    }
+    xa::ZReg zreg_bias = get_bias_reg(0);
+    CGA64::str(zreg_bias, xa::ptr(reg_bias_baddr));
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_loop(
         const int block_size) {
@@ -1004,7 +998,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
                 xa::ptr(abi_param1_aarch64,
                       static_cast<int32_t>(offsetof(jit_dw_conv_call_s, bias))));
 
-        //zero_bias();
+        zero_bias();
 
         CGA64::ldr(reg_exec_flags,
                 xa::ptr(abi_param1_aarch64, 
@@ -1014,7 +1008,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
         CGA64::tst(reg_exec_flags, reg_exec_flags);
         CGA64::b(xa::NE, skip_load_bias); //jne(skip_load_bias);
 
-        //load_bias();
+        load_bias();
 
         CGA64::L_aarch64(skip_load_bias);
         //compute_bias_loop(block_size);
