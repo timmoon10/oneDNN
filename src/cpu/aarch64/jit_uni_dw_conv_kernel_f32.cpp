@@ -871,6 +871,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_step(
 
     L(skip_loop_label);
 }
+#endif
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
@@ -884,65 +885,68 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
     const int t_overlap_off = jcp.t_pad % jcp.stride_h == 0 ? jcp.stride_h : 1;
     const int b_overlap_off = jcp.b_pad % jcp.stride_h == 0 ? jcp.stride_h : 1;
 
-    Label tpad_loop_label, h_loop_label, skip_tpad_label, skip_bpad_label;
+    xa::LabelAArch64 tpad_loop_label, h_loop_label, skip_tpad_label, skip_bpad_label;
 
-    mov(reg_oh, ptr[this->param1 + offsetof(jit_dw_conv_call_s, oh_index)]);
-    mov(reg_oh_worksize,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, oh_count)]);
-    mov(reg_kh_count,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, kh_count)]);
+    CGA64::ldr(reg_oh, xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, oh_index))));
+    CGA64::ldr(reg_oh_worksize, xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, oh_count))));
+    CGA64::ldr(reg_kh_count, xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, kh_count))));
 
-    mov(reg_tmp_output, reg_output_baddr);
-    mov(reg_tmp_input, reg_input_baddr);
-    mov(reg_tmp_filter, reg_filter_baddr);
+    CGA64::mov(reg_tmp_output, reg_output_baddr);
+    CGA64::mov(reg_tmp_input, reg_input_baddr);
+    CGA64::mov(reg_tmp_filter, reg_filter_baddr);
 
-    L(h_loop_label);
+    CGA64::L_aarch64(h_loop_label);
     {
 
-        compute_h_step(unroll_w, l_pad, pad_offset, ow_block);
+        //compute_h_step(unroll_w, l_pad, pad_offset, ow_block);
 
-        add(reg_tmp_output, jcp.ow * ch_offset * sizeof(float));
+        CGA64::add_imm(reg_tmp_output, reg_tmp_output, 
+                        jcp.ow * ch_offset * sizeof(float), reg_tmp_imm);
 
         /* If within the top_pad region */
         if (jcp.t_pad > 0) {
             /* Skip t_pad area if no longer in initial h_block */
-            cmp(reg_oh, jcp.t_pad);
-            jg(skip_tpad_label, T_NEAR);
+            CGA64::cmp(reg_oh, jcp.t_pad);
+            CGA64::b(xa::GT, skip_tpad_label);
 
-            cmp(reg_kh_count, jcp.kh);
-            jge(skip_tpad_label, T_NEAR);
+            CGA64::cmp(reg_kh_count, jcp.kh);
+            CGA64::b(xa::GE, skip_tpad_label);
 
-            add(reg_kh_count, t_overlap_off);
-            sub(reg_tmp_filter,
-                    t_overlap_off * jcp.kw * ch_offset * sizeof(float));
+            CGA64::add_imm(reg_kh_count, reg_kh_count, 
+                            t_overlap_off, reg_tmp_imm);
+            CGA64::sub_imm(reg_tmp_filter, reg_tmp_filter,
+                    t_overlap_off * jcp.kw * ch_offset * sizeof(float), reg_tmp_imm);
 
             /* kernel has moved beyond padding (adjust for stride effects) */
             if (jcp.t_pad % jcp.stride_h != 0) {
                 int inp_corr = jcp.stride_h - jcp.t_pad % jcp.stride_h;
-                add(reg_tmp_input,
-                        inp_corr * jcp.iw * ch_offset * sizeof(float));
+                CGA64::add_imm(reg_tmp_input, reg_tmp_input,
+                        inp_corr * jcp.iw * ch_offset * sizeof(float), reg_tmp_imm);
             }
-            jmp(tpad_loop_label, T_NEAR);
+            CGA64::b(tpad_loop_label);
         }
 
-        L(skip_tpad_label);
+        CGA64::L_aarch64(skip_tpad_label);
 
-        cmp(reg_oh, io_overlap);
-        jl(skip_bpad_label, T_NEAR);
-        sub(reg_kh_count, b_overlap_off);
+        CGA64::cmp(reg_oh, io_overlap);
+        CGA64::b(xa::LT, skip_bpad_label);
+        CGA64::sub_imm(reg_kh_count, reg_kh_count, b_overlap_off, reg_tmp_imm);
 
-        L(skip_bpad_label);
-        add(reg_tmp_input, jcp.stride_h * jcp.iw * ch_offset * sizeof(float));
+        CGA64::L_aarch64(skip_bpad_label);
+        CGA64::add_imm(reg_tmp_input, reg_tmp_input,
+                        jcp.stride_h * jcp.iw * ch_offset * sizeof(float), reg_tmp_imm);
 
-        L(tpad_loop_label);
+        CGA64::L_aarch64(tpad_loop_label);
 
-        inc(reg_oh);
+        CGA64::add(reg_oh, reg_oh, 1); //inc(reg_oh);
 
-        cmp(reg_oh, reg_oh_worksize);
-        jl(h_loop_label, T_NEAR);
+        CGA64::cmp(reg_oh, reg_oh_worksize);
+        CGA64::b(xa::LT, h_loop_label);
     }
 }
-#endif
 
 template <cpu_isa_t isa>
 inline void
