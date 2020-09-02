@@ -762,12 +762,11 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_bias() {
     CGA64::str(zreg_bias, xa::ptr(reg_bias_baddr));
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_loop(
         const int block_size) {
-    Label oh_label;
-    Label ow_blk_label;
+    xa::LabelAArch64 oh_label;
+    xa::LabelAArch64 ow_blk_label;
 
     const int unroll_w = nstl::min(block_size, jcp.ow);
     const int unroll_w_trips = jcp.ow / unroll_w;
@@ -775,37 +774,41 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_loop(
 
     const int ch_offset = jcp.ch_block;
 
-    mov(reg_oh, ptr[this->param1 + offsetof(jit_dw_conv_call_s, oh_index)]);
-    mov(reg_oh_worksize,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, oh_count)]);
+    CGA64::ldr(reg_oh, xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, oh_index))));
+    CGA64::ldr(reg_oh_worksize, xa::ptr(abi_param1_aarch64,
+                static_cast<int32_t>(offsetof(jit_dw_conv_call_s, oh_count))));
 
-    mov(reg_tmp_output, reg_output_baddr);
-    L(oh_label);
+    CGA64::mov(reg_tmp_output, reg_output_baddr);
+    CGA64::L_aarch64(oh_label);
     {
 
-        mov(reg_iter_ow_blk, unroll_w_trips);
-        L(ow_blk_label);
+        CGA64::mov_imm(reg_iter_ow_blk, unroll_w_trips);
+        CGA64::L_aarch64(ow_blk_label);
         {
 
-            compute_bias_step_unroll(unroll_w);
-            add(reg_tmp_output, unroll_w * ch_offset * sizeof(float));
+            //compute_bias_step_unroll(unroll_w);
+            CGA64::add_imm(reg_tmp_output, reg_tmp_output,
+                            unroll_w * ch_offset * sizeof(float), reg_tmp_imm);
 
-            dec(reg_iter_ow_blk);
-            cmp(reg_iter_ow_blk, 0);
-            jg(ow_blk_label, T_NEAR);
+            CGA64::sub(reg_iter_ow_blk, reg_iter_ow_blk, 1); //dec(reg_iter_ow_blk);
+            CGA64::cmp(reg_iter_ow_blk, 0);
+            CGA64::b(xa::GT, ow_blk_label);
         }
 
         if (tail_w > 0) {
-            compute_bias_step_unroll(tail_w);
-            add(reg_tmp_output, tail_w * ch_offset * sizeof(float));
+            //compute_bias_step_unroll(tail_w);
+            CGA64::add_imm(reg_tmp_output, reg_tmp_output,
+                            tail_w * ch_offset * sizeof(float), reg_tmp_imm);
         }
 
-        inc(reg_oh);
-        cmp(reg_oh, reg_oh_worksize);
-        jl(oh_label, T_NEAR);
+        CGA64::add(reg_oh, reg_oh, 1); //inc(reg_oh);
+        CGA64::cmp(reg_oh, reg_oh_worksize);
+        CGA64::b(xa::LT, oh_label);
     }
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_zero_filter() {
 
@@ -1011,7 +1014,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
         load_bias();
 
         CGA64::L_aarch64(skip_load_bias);
-        //compute_bias_loop(block_size);
+        compute_bias_loop(block_size);
 
         store_bias();
     }
