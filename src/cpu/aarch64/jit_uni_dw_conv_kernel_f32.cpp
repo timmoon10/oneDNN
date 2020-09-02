@@ -719,29 +719,23 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
         }
     }
 }
+#endif
 
 template <cpu_isa_t isa>
 inline void
 jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_step_unroll(
         const int unroll_w) {
-    for (int r = 0; r < reg_repeats; ++r) {
-        for (int i = 0; i < unroll_w; ++i) {
-            Vmm vmm_bias = get_bias_reg(r);
-            int off_output = (i * reg_repeats + r) * simd_w;
-            if (isa == sse41) {
-                /* Need to support unaligned address loads for SSE41 */
-                Vmm vmm_output = get_output_reg(1 + r);
-                uni_vmovups(vmm_output,
-                        ptr[reg_tmp_output + off_output * sizeof(float)]);
-                uni_vaddps(vmm_bias, vmm_bias, vmm_output);
-            } else {
-                uni_vaddps(vmm_bias, vmm_bias,
-                        vmmword[reg_tmp_output + off_output * sizeof(float)]);
-            }
-        }
+    for (int i = 0; i < unroll_w; ++i) {
+        xa::ZRegS zregs_bias = get_bias_reg_s(0);
+        int off_output = i * simd_w;
+        CGA64::add_imm(reg_tmp_addr, reg_tmp_output,
+                        off_output * sizeof(float), reg_tmp_imm);
+        CGA64::ldr(xa::ZReg(31), xa::ptr(reg_tmp_addr));
+        CGA64::fadd(zregs_bias, zregs_bias, xa::ZRegS(31));
     }
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_filter() {
     for (int r = 0; r < reg_repeats; ++r) {
@@ -787,7 +781,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_loop(
         CGA64::L_aarch64(ow_blk_label);
         {
 
-            //compute_bias_step_unroll(unroll_w);
+            compute_bias_step_unroll(unroll_w);
             CGA64::add_imm(reg_tmp_output, reg_tmp_output,
                             unroll_w * ch_offset * sizeof(float), reg_tmp_imm);
 
@@ -797,7 +791,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_loop(
         }
 
         if (tail_w > 0) {
-            //compute_bias_step_unroll(tail_w);
+            compute_bias_step_unroll(tail_w);
             CGA64::add_imm(reg_tmp_output, reg_tmp_output,
                             tail_w * ch_offset * sizeof(float), reg_tmp_imm);
         }
