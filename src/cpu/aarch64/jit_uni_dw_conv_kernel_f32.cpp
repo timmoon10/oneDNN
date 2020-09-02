@@ -634,7 +634,6 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_bias() {
     CGA64::ldr(zreg_bias, xa::ptr(reg_bias_baddr));
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
         int unroll_w, int l_pad, int pad_offset, int ow_block) {
@@ -650,71 +649,71 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
     const bool is_last_block = (unroll_w + ow_block == jcp.ow);
 
     /* LOAD initial input registers, then cascade LOADs and FMAs*/
-    for (int r = 0; r < reg_repeats; ++r) {
-        for (int i_ur = 0; i_ur < unroll_w; ++i_ur) {
-            int off_output = (i_ur * reg_repeats + r) * simd_w;
-            Vmm vmm_output = get_output_reg(r);
-            uni_vmovups(vmm_output,
-                    ptr[reg_tmp_output + off_output * sizeof(float)]);
-            if (i_ur == 0) {
-                for (int c = 0; c < input_overlap; ++c) {
-                    int off_input
-                            = ((c - pad_offset) * reg_repeats + r) * simd_w;
-                    if (off_input < 0 && unroll_w == jcp.ow) continue;
+    for (int i_ur = 0; i_ur < unroll_w; ++i_ur) {
+        int off_output = i_ur * simd_w;
+        xa::ZReg zreg_output = get_output_reg(0);
+        xa::ZRegS zregs_output = get_output_reg_s(0);
 
-                    const bool over_steps_bdry = true && is_last_block
-                            && (c - pad_offset + r_pad > right_border);
-                    if (over_steps_bdry) continue;
+        CGA64::add_imm(reg_tmp_addr, reg_tmp_output,
+                        off_output * sizeof(float), reg_tmp_imm);
+        CGA64::ldr(zreg_output, xa::ptr(reg_tmp_addr));
 
-                    Vmm vmm_input
-                            = get_input_reg((c % jcp.kw) * reg_repeats + r);
-                    uni_vmovups(vmm_input,
-                            ptr[reg_tmp_input + off_input * sizeof(float)]);
-                }
-            } else {
-                for (int c = 0; c < cascade_input; ++c) {
-                    int overlap = (i_ur - 1) * jcp.stride_w + input_overlap;
-                    int off_input
-                            = ((overlap + c - pad_offset) * reg_repeats + r)
-                            * simd_w;
-                    if (off_input < 0 || overlap + c + l_pad > right_border)
-                        continue;
+        if (i_ur == 0) {
+            for (int c = 0; c < input_overlap; ++c) {
+                int off_input
+                        = (c - pad_offset) * simd_w;
+                if (off_input < 0 && unroll_w == jcp.ow) continue;
 
-                    const bool over_steps_bdry = true && is_last_block
-                            && (overlap + c - pad_offset + r_pad
-                                    > right_border);
-                    if (over_steps_bdry) continue;
+                const bool over_steps_bdry = true && is_last_block
+                        && (c - pad_offset + r_pad > right_border);
+                if (over_steps_bdry) continue;
 
-                    Vmm vmm_input = get_input_reg(
-                            ((overlap + c) % jcp.kw) * reg_repeats + r);
-                    uni_vmovups(vmm_input,
-                            ptr[reg_tmp_input + off_input * sizeof(float)]);
-                }
+                xa::ZReg zreg_input = get_input_reg(c % jcp.kw);
+
+                CGA64::add_imm(reg_tmp_addr, reg_tmp_input,
+                                off_input * sizeof(float), reg_tmp_imm);
+                CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
             }
-
-            for (int i_kw = 0; i_kw < jcp.kw; ++i_kw) {
-                int io_overlap = i_kw + (i_ur * jcp.stride_w);
-
-                /* Don't apply FMAs that fall into the padded region */
-                if (io_overlap - l_pad < 0
-                        || io_overlap - jcp.l_pad >= right_border)
+        } else {
+            for (int c = 0; c < cascade_input; ++c) {
+                int overlap = (i_ur - 1) * jcp.stride_w + input_overlap;
+                int off_input
+                        = (overlap + c - pad_offset) * simd_w;
+                if (off_input < 0 || overlap + c + l_pad > right_border)
                     continue;
 
                 const bool over_steps_bdry = true && is_last_block
-                        && (io_overlap - jcp.l_pad + jcp.r_pad > right_border);
+                        && (overlap + c - pad_offset + r_pad
+                                > right_border);
                 if (over_steps_bdry) continue;
 
-                Vmm vmm_input = get_input_reg(
-                        ((io_overlap - l_pad) % jcp.kw) * reg_repeats + r);
-                Vmm vmm_acc = get_acc_reg(i_kw * reg_repeats + r);
-                Vmm vmm_aux = isa == sse41 ? get_aux_reg() : vmm_input;
-                if (isa == sse41) uni_vmovups(vmm_aux, vmm_input);
-                uni_vfmadd231ps(vmm_acc, vmm_aux, vmm_output);
+                xa::ZReg zreg_input = get_input_reg( (overlap + c) % jcp.kw );
+                CGA64::add_imm(reg_tmp_addr, reg_tmp_input,
+                                off_input * sizeof(float), reg_tmp_imm);
+                CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
             }
+        }
+
+        for (int i_kw = 0; i_kw < jcp.kw; ++i_kw) {
+            int io_overlap = i_kw + (i_ur * jcp.stride_w);
+
+            /* Don't apply FMAs that fall into the padded region */
+            if (io_overlap - l_pad < 0
+                    || io_overlap - jcp.l_pad >= right_border)
+                continue;
+
+            const bool over_steps_bdry = true && is_last_block
+                    && (io_overlap - jcp.l_pad + jcp.r_pad > right_border);
+            if (over_steps_bdry) continue;
+
+            xa::ZRegS zregs_input = get_input_reg_s((io_overlap - l_pad) % jcp.kw);
+            xa::ZRegS zregs_acc = get_acc_reg_s(i_kw);
+            xa::ZRegS zregs_aux = zregs_input;
+
+            CGA64::fmla(zregs_acc, reg_p_all_ones, zregs_aux, zregs_output);
         }
     }
 }
-#endif
 
 template <cpu_isa_t isa>
 inline void
@@ -843,7 +842,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_step(
     CGA64::L_aarch64(kh_loop_label);
     {
         load_filter();
-        //compute_ow_step_unroll(unroll_w, l_pad, pad_offset, ow_block);
+        compute_ow_step_unroll(unroll_w, l_pad, pad_offset, ow_block);
         store_filter();
 
         CGA64::add_imm(reg_tmp_filter, reg_tmp_filter,
