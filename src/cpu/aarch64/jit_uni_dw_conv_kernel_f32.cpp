@@ -1013,7 +1013,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
         CGA64::L_aarch64(skip_load_bias);
         //compute_bias_loop(block_size);
 
-        //store_bias();
+        store_bias();
     }
 
     /* Pass filter address, then offset for h_padding. */
