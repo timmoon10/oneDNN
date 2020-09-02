@@ -44,10 +44,6 @@ using namespace dnnl::impl::utils;
 
 using namespace Xbyak;
 
-#define CGA64 CodeGeneratorAArch64
-namespace xa = Xbyak::Xbyak_aarch64;
-
-
 void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
 
     CGA64::mov(aux1_reg_bcast_data, reg_bcast_data);
