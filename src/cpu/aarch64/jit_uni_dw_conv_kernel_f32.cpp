@@ -831,47 +831,49 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_zero_filter() {
     CGA64::L_aarch64(skip_zeroing_label);
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_step(
         int unroll_w, int l_pad, int pad_offset, int ow_block) {
 
     const int ch_offset = jcp.ch_block;
 
-    Label kh_loop_label, skip_loop_label;
+    xa::LabelAArch64 kh_loop_label, skip_loop_label;
 
-    cmp(reg_kh_count, 0);
-    je(skip_loop_label, T_NEAR);
+    CGA64::cmp(reg_kh_count, 0);
+    CGA64::b(xa::EQ, skip_loop_label);
 
-    mov(reg_kh, reg_kh_count);
-    L(kh_loop_label);
+    CGA64::mov(reg_kh, reg_kh_count);
+    CGA64::L_aarch64(kh_loop_label);
     {
-        load_filter();
-        compute_ow_step_unroll(unroll_w, l_pad, pad_offset, ow_block);
-        store_filter();
+        //load_filter();
+        //compute_ow_step_unroll(unroll_w, l_pad, pad_offset, ow_block);
+        //store_filter();
 
-        add(reg_tmp_filter, jcp.kw * ch_offset * sizeof(float));
-        add(reg_tmp_input, jcp.iw * ch_offset * sizeof(float));
-        dec(reg_kh);
-        cmp(reg_kh, 0);
-        jg(kh_loop_label);
+        CGA64::add_imm(reg_tmp_filter, reg_tmp_filter,
+                        jcp.kw * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::add_imm(reg_tmp_input, reg_tmp_input,
+                        jcp.iw * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::sub(reg_kh, reg_kh, 1); //dec(reg_kh);
+        CGA64::cmp(reg_kh, 0);
+        CGA64::b(xa::GT, kh_loop_label);
     }
 
     /* Comeback pointers */
-    Label kh_comeback_label;
-    mov(reg_kh, reg_kh_count);
-    L(kh_comeback_label);
+    xa::LabelAArch64 kh_comeback_label;
+    CGA64::mov(reg_kh, reg_kh_count);
+    CGA64::L_aarch64(kh_comeback_label);
     {
-        sub(reg_tmp_input, jcp.iw * ch_offset * sizeof(float));
-        sub(reg_tmp_filter, jcp.kw * ch_offset * sizeof(float));
-        dec(reg_kh);
-        cmp(reg_kh, 0);
-        jg(kh_comeback_label, T_NEAR);
+        CGA64::sub_imm(reg_tmp_input, reg_tmp_input, 
+                        jcp.iw * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::sub_imm(reg_tmp_filter, reg_tmp_filter,
+                        jcp.kw * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::sub(reg_kh, reg_kh, 1); //dec(reg_kh);
+        CGA64::cmp(reg_kh, 0);
+        CGA64::b(xa::GT, kh_comeback_label);
     }
 
-    L(skip_loop_label);
+    CGA64::L_aarch64(skip_loop_label);
 }
-#endif
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
@@ -901,7 +903,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
     CGA64::L_aarch64(h_loop_label);
     {
 
-        //compute_h_step(unroll_w, l_pad, pad_offset, ow_block);
+        compute_h_step(unroll_w, l_pad, pad_offset, ow_block);
 
         CGA64::add_imm(reg_tmp_output, reg_tmp_output, 
                         jcp.ow * ch_offset * sizeof(float), reg_tmp_imm);
@@ -1022,7 +1024,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 
     /* compute left padded block */
     if (l_pad && do_unroll_w) {
-        //compute_h_loop(unroll_w, l_pad, 0, 0);
+        compute_h_loop(unroll_w, l_pad, 0, 0);
         CGA64::add_imm(reg_output_baddr, reg_output_baddr,
                         unroll_w * ch_offset * sizeof(float), reg_tmp_imm);
         CGA64::add_imm(reg_input_baddr, reg_input_baddr,
@@ -1043,7 +1045,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
         CGA64::L_aarch64(ow_blk_label);
     }
     if (unroll_w_trips > 0) {
-        //compute_h_loop(unroll_w, l_pad, pad_offset, 0);
+        compute_h_loop(unroll_w, l_pad, pad_offset, 0);
         CGA64::add_imm(reg_output_baddr, reg_output_baddr,
                   unroll_w * ch_offset * sizeof(float), reg_tmp_imm);
         CGA64::add_imm(reg_input_baddr, reg_input_baddr,
@@ -1057,8 +1059,8 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 
     /* compute right padded block */
     if (unroll_w_tail) {
-        //compute_h_loop(
-        //        unroll_w_tail, l_pad, pad_offset, jcp.ow - unroll_w_tail);
+        compute_h_loop(
+                unroll_w_tail, l_pad, pad_offset, jcp.ow - unroll_w_tail);
     }
 }
 
