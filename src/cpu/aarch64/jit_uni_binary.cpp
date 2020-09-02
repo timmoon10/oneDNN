@@ -293,6 +293,7 @@ struct jit_uni_binary_subkernel_t<avx512_core_bf16, src_type>
 
         const int mask_f32 = (1 << tail_size_) - 1;
         Reg32 regw_tmp = reg_tmp.cvt32();
+        // The kmovd instrucion here can be translated correctly by translator
         mov(regw_tmp, mask_f32);
         kmovd(tail_opmask, regw_tmp);
     }
@@ -300,6 +301,7 @@ struct jit_uni_binary_subkernel_t<avx512_core_bf16, src_type>
     void prepare_bf16_bcast_mask() {
         if (is_bf16_ && op_type_ != op_t::tensor) {
             Reg32 regw_tmp = reg_tmp.cvt32();
+            // The kmovd instrucion here can be translated correctly by translator
             mov(regw_tmp, 1);
             kmovd(bf16_bcast_opmask, regw_tmp);
         }
@@ -438,6 +440,7 @@ struct jit_uni_binary_subkernel_t<avx512_core, src_type>
         const int mask_f32 = (1 << tail_size_) - 1;
 
         Reg32 regw_tmp = reg_tmp.cvt32();
+        // The kmovd instrucion here can be translated correctly by translator
         mov(regw_tmp, mask_f32);
         kmovd(tail_opmask, regw_tmp);
     }
@@ -454,6 +457,7 @@ struct jit_uni_binary_subkernel_t<avx512_core, src_type>
     void prepare_bf16_bcast_mask() {
         if (is_bf16_ && op_type_ != op_t::tensor) {
             Reg32 regw_tmp = reg_tmp.cvt32();
+            // The kmovd instrucion here can be translated correctly by translator
             mov(regw_tmp, 1);
             kmovd(bf16_bcast_opmask, regw_tmp);
         }
