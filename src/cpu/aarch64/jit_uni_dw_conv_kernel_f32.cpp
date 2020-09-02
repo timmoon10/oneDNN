@@ -604,17 +604,15 @@ void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
 
 template struct jit_uni_dw_conv_bwd_data_kernel_f32<sve>;
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::zero_filter() {
-    for (int r = 0; r < reg_repeats; ++r) {
-        for (int i = 0; i < jcp.kw; ++i) {
-            Vmm vmm_acc = get_acc_reg(r * jcp.kw + i);
-            uni_vpxor(vmm_acc, vmm_acc, vmm_acc);
-        }
+    for (int i = 0; i < jcp.kw; ++i) {
+        xa::ZRegS zregs_acc = get_acc_reg_s(i);
+        CGA64::fmov(zregs_acc); // zero clear
     }
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_filter() {
     for (int r = 0; r < reg_repeats; ++r) {
@@ -735,20 +733,16 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_step_unroll(
     }
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_filter() {
-    for (int r = 0; r < reg_repeats; ++r) {
-        const int reg_set = r * jcp.kw;
-        for (int i = 0; i < jcp.kw; ++i) {
-            int off_filter = (i + reg_set) * simd_w;
-            Vmm vmm_acc = get_acc_reg(i + reg_set);
-            uni_vmovups(vmmword[reg_tmp_filter + off_filter * sizeof(float)],
-                    vmm_acc);
-        }
+    for (int i = 0; i < jcp.kw; ++i) {
+        int off_filter = i * simd_w;
+        xa::ZReg zreg_acc = get_acc_reg(i);
+        CGA64::add_imm(reg_tmp_addr, reg_tmp_filter,
+                          off_filter * sizeof(float), reg_tmp_imm);
+        CGA64::str(zreg_acc, xa::ptr(reg_tmp_addr));
     }
 }
-#endif
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_bias() {
@@ -815,13 +809,13 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_zero_filter() {
     CGA64::tst(reg_exec_flags, reg_exec_flags);
     CGA64::b(xa::EQ, skip_zeroing_label);
 
-    //zero_filter();
+    zero_filter();
 
     CGA64::mov(reg_tmp_filter, reg_filter_baddr);
     CGA64::mov_imm(reg_kh, jcp.kh);
     CGA64::L_aarch64(kh_loop_label);
     {
-        //store_filter();
+        store_filter();
 
         CGA64::add_imm(reg_tmp_filter, reg_tmp_filter,
                         jcp.kw * ch_offset * sizeof(float), reg_tmp_imm);
