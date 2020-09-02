@@ -839,10 +839,6 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jit_1x1_conv_conf_t &jcp
     const int dw_conv_ind = p.find(primitive_kind::convolution);
     jcp.with_dw_conv = dw_conv_ind != -1;
 
-    // TODO:
-    if( jcp.with_dw_conv ) return status::unimplemented;
-
-
     /* Post operation check */
     // Using dw_conv_ind as upper-bound below, as post-ops after it will be
     // handled in depthwise convolution.

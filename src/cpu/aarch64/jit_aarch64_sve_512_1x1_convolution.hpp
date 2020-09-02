@@ -81,12 +81,8 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
             if (status != status::success) return status;
 
             if (jcp_.with_dw_conv) {
-#if 1
-                return status::unimplemented;
-#else
                 status = depthwise_po_init(engine);
                 if (status != status::success) return status;
-#endif
             }
 
             auto scratchpad = scratchpad_registry().registrar();

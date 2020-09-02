@@ -125,7 +125,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
     dst_data_t *pbuf;
     size_t row_offset;
     const int jcp_dw_kh = 3;
-    //const int nb_buffer = jcp.nb_load_blocking;
+    const int nb_buffer = jcp.nb_load_blocking;
     std::vector<dst_data_t *> addrs;
     // End
 
@@ -295,7 +295,6 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
             assert(!"unsupported loop order");
         }
     };
-#if 0
     auto ker_dw = [&](int n, int ocb_start, int load_step, int &dw_oh) {
         auto &jcp_dw = pd()->dw_conv_pd_->jcp_;
         int oh_1x1 = nstl::max(dw_oh * jcp_dw.stride_h - jcp_dw.t_pad, 0);
@@ -394,14 +393,9 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
             ocb_start += load_step;
         }
     };
-#endif
 
     if (jcp.with_dw_conv) {
-#if 1
-        assert(NULL);
-#else
         conv_dw();
-#endif
     } else {
 
         const int work_amount = jcp.mb * jcp.ngroups * jcp.nb_bcast;
