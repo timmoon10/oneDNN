@@ -802,40 +802,42 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_loop(
     }
 }
 
-#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_zero_filter() {
 
     const int ch_offset = jcp.ch_block;
 
-    Label kh_loop_label, skip_zeroing_label;
+    xa::LabelAArch64 kh_loop_label, skip_zeroing_label;
 
-    mov(reg_exec_flags,
-            ptr[this->param1 + offsetof(jit_dw_conv_call_s, exec_flags)]);
-    and_(reg_exec_flags, FLAG_ZERO_FILTER);
-    test(reg_exec_flags, reg_exec_flags);
-    je(skip_zeroing_label);
+    CGA64::ldr(reg_exec_flags, xa::ptr(abi_param1_aarch64,
+                  static_cast<int32_t>(offsetof(jit_dw_conv_call_s, exec_flags))));
+    CGA64::and_(reg_exec_flags, reg_exec_flags, FLAG_ZERO_FILTER);
+    CGA64::tst(reg_exec_flags, reg_exec_flags);
+    CGA64::b(xa::EQ, skip_zeroing_label);
 
-    zero_filter();
+    //zero_filter();
 
-    mov(reg_tmp_filter, reg_filter_baddr);
-    mov(reg_kh, jcp.kh);
-    L(kh_loop_label);
+    CGA64::mov(reg_tmp_filter, reg_filter_baddr);
+    CGA64::mov_imm(reg_kh, jcp.kh);
+    CGA64::L_aarch64(kh_loop_label);
     {
-        store_filter();
+        //store_filter();
 
-        add(reg_tmp_filter, jcp.kw * ch_offset * sizeof(float));
-        dec(reg_kh);
-        cmp(reg_kh, 0);
-        jg(kh_loop_label);
+        CGA64::add_imm(reg_tmp_filter, reg_tmp_filter,
+                        jcp.kw * ch_offset * sizeof(float), reg_tmp_imm);
+        CGA64::sub(reg_kh, reg_kh, 1); //dec(reg_kh);
+        CGA64::cmp(reg_kh, 0);
+        CGA64::b(xa::GT, kh_loop_label);
     }
 
     /* Comeback pointers */
-    sub(reg_tmp_filter, jcp.kh * jcp.kw * ch_offset * sizeof(float));
+    CGA64::sub_imm(reg_tmp_filter, reg_tmp_filter,
+                    jcp.kh * jcp.kw * ch_offset * sizeof(float), reg_tmp_imm);
 
-    L(skip_zeroing_label);
+    CGA64::L_aarch64(skip_zeroing_label);
 }
 
+#if 0
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_step(
         int unroll_w, int l_pad, int pad_offset, int ow_block) {
@@ -1014,7 +1016,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
     }
 
     /* Pass filter address, then offset for h_padding. */
-    //compute_zero_filter();
+    compute_zero_filter();
     CGA64::ldr(reg_kh_offset,
             xa::ptr(abi_param1_aarch64,
             static_cast<int32_t>(offsetof(jit_dw_conv_call_s, filter_pad_off))));
