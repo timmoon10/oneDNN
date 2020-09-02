@@ -229,13 +229,13 @@ private:
      * is no larger than 3*/
     inline xa::ZReg get_bias_reg(int idx = 0) { return xa::ZReg(idx); }
     inline xa::ZReg get_output_reg(int idx) { return xa::ZReg(idx + 1); }
-    inline xa::ZReg get_input_reg(int idx) { return xa::ZReg(idx + 1); }
-    inline xa::ZReg get_acc_reg(int idx) { return xa::ZReg(idx + 1); }
+    inline xa::ZReg get_input_reg(int idx) { return xa::ZReg(idx + 5); }
+    inline xa::ZReg get_acc_reg(int idx) { return xa::ZReg(idx + 2); }
     inline xa::ZReg get_aux_reg() { return xa::ZReg(0); }
     inline xa::ZRegS get_bias_reg_s(int idx = 0) { return xa::ZRegS(idx); }
     inline xa::ZRegS get_output_reg_s(int idx) { return xa::ZRegS(idx + 1); }
-    inline xa::ZRegS get_input_reg_s(int idx) { return xa::ZRegS(idx + 1); }
-    inline xa::ZRegS get_acc_reg_s(int idx) { return xa::ZRegS(idx + 1); }
+    inline xa::ZRegS get_input_reg_s(int idx) { return xa::ZRegS(idx + 5); }
+    inline xa::ZRegS get_acc_reg_s(int idx) { return xa::ZRegS(idx + 2); }
     inline xa::ZRegS get_aux_reg_s() { return xa::ZRegS(0); }
 
     reg64_t reg_tmp_input       = x1; //r9;
