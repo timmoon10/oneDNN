@@ -33,15 +33,18 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_JIT_SVE_COMMON_CONV_KERNEL_HPP
-#define CPU_AARCH64_JIT_SVE_COMMON_CONV_KERNEL_HPP
+#ifndef CPU_AARCH64_JIT_SVE_CONV_KERNEL_HPP
+#define CPU_AARCH64_JIT_SVE_CONV_KERNEL_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
+#if 0
+//[info]取り敢えずコメント化。
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
+#endif
 
 #if 1
 //[info]v0.21変更をそのまま追加
@@ -67,22 +70,34 @@ namespace xa = Xbyak::Xbyak_aarch64;
 #endif
 
 template <typename Vmm>
-struct _jit_aarch64_sve_512_common_conv_fwd_kernel : public jit_generator {
+struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
 
-    _jit_aarch64_sve_512_common_conv_fwd_kernel(
+    _jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t &ajcp, const primitive_attr_t &attr)
+#if 0
         : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
+#else
+        : jcp(ajcp), attr_(attr) {
+#endif
         if (jcp.with_eltwise)
+#if 0
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<sve>(
                     this, jcp.eltwise);
+#else
+            assert(NULL);
+#endif
 
         generate();
         jit_ker_ = (void (*)(jit_conv_call_s *))getCode32();
     }
 
-    ~_jit_aarch64_sve_512_common_conv_fwd_kernel() { delete eltwise_injector_; }
+#if 0
+    ~_jit_aarch64_sve_512_conv_fwd_kernel() { delete eltwise_injector_; }
+#else
+    ~_jit_aarch64_sve_512_conv_fwd_kernel() { }
+#endif
 
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_common_conv_fwd_kernel)
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_fwd_kernel)
 
     jit_conv_conf_t jcp;
     const primitive_attr_t &attr_;
@@ -126,24 +141,15 @@ private:
     reg64_t reg_relu_ns         = x13; 
     reg64_t reg_oi              = x11; 
     reg64_t reg_kh              = x12; 
-#if 0
-    reg64_t reg_ic_loop         = x10; 
-    reg64_t reg_inp_loop        = x9;  
-    reg64_t reg_init_flag       = x6;  
 
-    reg64_t aux_reg_ic          = x5;  
-    reg64_t reg_binp            = x13; 
-    reg64_t reg_bout            = x20;   
-    reg64_t aux1_reg_inp        = x11; 
-    reg64_t aux_reg_out         = x12; 
-#endif
     reg64_t reg_long_offt       = x20;   
     reg64_t reg_out_long_offt   = x7;  
 
-#if 0
-//[info]v1.6での追加コード。変更必要？
     reg64_t reg_tail = aux_reg_ker;
     reg64_t reg_load_work = reg_tail;
+
+#if 0
+//[info]v1.6での追加コード。変更必要？
     Xbyak::Opmask k_oc_tail_mask = Xbyak::Opmask(2);
 #endif
 
@@ -155,6 +161,14 @@ private:
 
     reg64_t reg_out_org         = x18;
     reg64_t reg_oi_org          = x19;
+#if 1
+//[info]レジスタの割り当ては適当
+    reg64_t aux_reg_ker_d_org   = x20;
+    reg64_t reg_inp_org         = x21;
+    reg64_t reg_ker_org         = x22;
+
+    reg64_t reg_tmp = x5;
+#endif
 
     void prefetch(const std::string prfop, int level, reg64_t in, long long int ofs) {
         bool for_load;
@@ -202,7 +216,9 @@ private:
     }
 #endif
 
+#if 0
     jit_uni_eltwise_injector_f32<sve> *eltwise_injector_;
+#endif
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
@@ -266,9 +282,9 @@ private:
     }
 };
 
-struct jit_aarch64_sve_512_common_conv_fwd_kernel {
+struct jit_aarch64_sve_512_conv_fwd_kernel {
 
-    jit_aarch64_sve_512_common_conv_fwd_kernel(
+    jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t ajcp, const primitive_attr_t &attr)
         : jit_ker(nullptr)
         , zmm_kernel_(nullptr)
@@ -277,19 +293,19 @@ struct jit_aarch64_sve_512_common_conv_fwd_kernel {
         switch (ajcp.oc_block) {
             case 16:
                 zmm_kernel_
-                        = new _jit_aarch64_sve_512_common_conv_fwd_kernel<Xbyak::Zmm>(
+                        = new _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Zmm>(
                                 ajcp, attr);
                 jit_ker = zmm_kernel_->jit_ker_;
                 return;
             case 8:
                 ymm_kernel_
-                        = new _jit_aarch64_sve_512_common_conv_fwd_kernel<Xbyak::Ymm>(
+                        = new _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Ymm>(
                                 ajcp, attr);
                 jit_ker = ymm_kernel_->jit_ker_;
                 return;
             case 4:
                 xmm_kernel_
-                        = new _jit_aarch64_sve_512_common_conv_fwd_kernel<Xbyak::Xmm>(
+                        = new _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Xmm>(
                                 ajcp, attr);
                 jit_ker = xmm_kernel_->jit_ker_;
                 return;
@@ -297,7 +313,7 @@ struct jit_aarch64_sve_512_common_conv_fwd_kernel {
         }
     }
 
-    ~jit_aarch64_sve_512_common_conv_fwd_kernel() {
+    ~jit_aarch64_sve_512_conv_fwd_kernel() {
         delete zmm_kernel_;
         delete ymm_kernel_;
         delete xmm_kernel_;
@@ -314,24 +330,24 @@ struct jit_aarch64_sve_512_common_conv_fwd_kernel {
             const jit_conv_conf_t &jcp);
 
     void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_common_conv_fwd_kernel<Xbyak::Zmm> *zmm_kernel_;
-    _jit_aarch64_sve_512_common_conv_fwd_kernel<Xbyak::Ymm> *ymm_kernel_;
-    _jit_aarch64_sve_512_common_conv_fwd_kernel<Xbyak::Xmm> *xmm_kernel_;
+    _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Zmm> *zmm_kernel_;
+    _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Ymm> *ymm_kernel_;
+    _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Xmm> *xmm_kernel_;
 
 private:
-    DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_common_conv_fwd_kernel);
+    DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_fwd_kernel);
 };
 
 template <typename Vmm>
-struct _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32 : public jit_generator {
+struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32 : public jit_generator {
 
-    _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
+    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
         : jcp(ajcp) {
         generate();
         jit_ker_ = (void (*)(jit_conv_call_s *))getCode32();
     }
 
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32)
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_bwd_data_kernel_f32)
     jit_conv_conf_t jcp;
     void (*jit_ker_)(jit_conv_call_s *);
 
@@ -353,6 +369,7 @@ private:
     reg64_t reg_dst_prf         = x23;
     reg64_t reg_ker_prf         = x5;
     reg64_t reg_src_prf         = x6;
+    reg64_t reg_iwb             = x7;
 
     reg64_t aux_reg_dst         = x7;
     reg64_t aux_reg_ker         = x8;
@@ -383,6 +400,13 @@ private:
     reg64_t reg_src_prf_org     = x19;
     reg64_t reg_src_org         = x20;
     reg64_t reg_oi_org          = x21;
+#if 1
+//[info]レジスタ割り当ては適当
+    reg64_t reg_dst_org         = x22;
+    reg64_t reg_ker_org         = x23;
+    reg64_t reg_input_org       = x22;
+    reg64_t reg_kernel_org      = x23;
+#endif
 
     const xa::PReg reg_p_all_ones  = p2;
 
@@ -433,7 +457,7 @@ private:
 
 #endif
 
-    Vmm vmm_wei = Vmm(31);
+    xa::ZReg reg_wei = xa::ZReg(31);
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
@@ -495,26 +519,26 @@ private:
     }
 };
 
-struct jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32 {
+struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
 
-    jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
+    jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
         : jit_ker(nullptr)
         , zmm_kernel_(nullptr)
         , ymm_kernel_(nullptr)
         , xmm_kernel_(nullptr) {
         switch (ajcp.ic_block) {
             case 16:
-                zmm_kernel_ = new _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32<
+                zmm_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
                         Xbyak::Zmm>(ajcp);
                 jit_ker = zmm_kernel_->jit_ker_;
                 return;
             case 8:
-                ymm_kernel_ = new _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32<
+                ymm_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
                         Xbyak::Ymm>(ajcp);
                 jit_ker = ymm_kernel_->jit_ker_;
                 return;
             case 4:
-                xmm_kernel_ = new _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32<
+                xmm_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
                         Xbyak::Xmm>(ajcp);
                 jit_ker = xmm_kernel_->jit_ker_;
                 return;
@@ -522,7 +546,7 @@ struct jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32 {
         }
     }
 
-    ~jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32() {
+    ~jit_aarch64_sve_512_conv_bwd_data_kernel_f32() {
         delete zmm_kernel_;
         delete ymm_kernel_;
         delete xmm_kernel_;
@@ -537,29 +561,34 @@ struct jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32 {
             const jit_conv_conf_t &jcp);
 
     void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32<Xbyak::Zmm> *zmm_kernel_;
-    _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32<Xbyak::Ymm> *ymm_kernel_;
-    _jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32<Xbyak::Xmm> *xmm_kernel_;
+    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xbyak::Zmm> *zmm_kernel_;
+    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xbyak::Ymm> *ymm_kernel_;
+    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xbyak::Xmm> *xmm_kernel_;
 
 private:
-    DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_common_conv_bwd_data_kernel_f32);
+    DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_bwd_data_kernel_f32);
 };
 
-struct jit_aarch64_sve_512_common_conv_bwd_weights_kernel_f32 : public jit_generator {
+struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
 
-    jit_aarch64_sve_512_common_conv_bwd_weights_kernel_f32(const jit_conv_conf_t &ajcp)
+    jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(const jit_conv_conf_t &ajcp)
         : jit_generator(nullptr, 1024*1024), jcp(ajcp) {
         if (jcp.harness != harness_nxc) {
             generate();
             jit_ker = (void (*)(jit_conv_call_s *))getCode32();
         } else {
+#if 0
             generate_microkernel();
             jit_microker = (void (*)(float *, const float *, const float *,
                     int64_t, int64_t))getCode32();
+#else
+//[info]取り敢えずマスク
+            assert(!"none microkernel");
+#endif
         }
     }
 
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_common_conv_bwd_weights_kernel_f32)
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_conv_bwd_weights_kernel_f32)
 
     static status_t init_conf(jit_conv_conf_t &jcp,
             const convolution_desc_t &cd, memory_desc_t &src_md,
@@ -574,7 +603,7 @@ struct jit_aarch64_sve_512_common_conv_bwd_weights_kernel_f32 : public jit_gener
             float *, const float *, const float *, int64_t, int64_t);
 
 private:
-    using reg64_t = const Xbyak::Reg64;
+    using reg64_t = const xa::XReg;
     enum { typesize = sizeof(float) };
     static const int max_ur_w;
     static const int min_oh_reduce;
@@ -616,6 +645,10 @@ private:
     reg64_t reg_input_d_org  = x17;
     reg64_t reg_output_d_org = x18;
     reg64_t reg_d_index_org  = x19;
+
+    reg64_t reg_input_org    = x21;
+    reg64_t reg_kernel_org   = x22;
+    reg64_t reg_output_org   = x23;
 
     xa::ZRegS zreg_idata   = xa::ZRegS(31);
 
@@ -667,7 +700,7 @@ private:
     }
 #endif
 
-    Xbyak::Opmask k_oc_mask = Xbyak::Opmask(2);
+//    Xbyak::Opmask k_oc_mask = Xbyak::Opmask(2);
 
     inline void bias_kernel_2d();
     inline void bias_kernel_3d();
@@ -684,11 +717,9 @@ private:
     inline void compute_ic_block_step_fma(int ur_w, int pad_l, int pad_r,
             int ic_block_step, int input_offset, int kernel_offset,
             int output_offset, bool input_wraparound);
-#endif
     inline void compute_ic_block_step_fma_expl(int ur_w, int pad_l, int pad_r,
             int ic_block_step, int input_offset, int kernel_offset,
             int output_offset, bool input_wraparound);
-#if 0
     inline void compute_ic_block_step_4fma(int ur_w, int pad_l, int pad_r,
             int ic_block_step, int input_offset, int kernel_offset,
             int output_offset, bool input_wraparound);
@@ -717,6 +748,7 @@ private:
         const bool is_nxc_layout = is_src_layout_nxc();
         const size_t w_shift_st
                 = (jcp.is_hw_transp ? jcp.iw : 1) * jcp.ic_block;
+#if 0
         ptrdiff_t w_shift = is_nxc_layout
                 ? jcp.ngroups * jcp.ic
                 : (jcp.ver == ver_4fma || jcp.is_1stconv ? 1 : w_shift_st);
@@ -725,6 +757,14 @@ private:
                 : (jcp.is_1stconv && !is_nxc_layout
                                 ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
                                 : 1);
+#else
+        ptrdiff_t w_shift = is_nxc_layout
+                ? jcp.ngroups * jcp.ic
+                : (jcp.is_1stconv ? 1 : w_shift_st);
+        ptrdiff_t ic_shift = (jcp.is_1stconv && !is_nxc_layout
+                                ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
+                                : 1);
+#endif
 
         ptrdiff_t local_input_offset = i_iw * w_shift + i_ic * ic_shift;
         return input_offset + typesize * local_input_offset;
@@ -735,7 +775,10 @@ private:
     }
 
     void generate();
+#if 0
+//[info]取り敢えずマスク
     void generate_microkernel();
+#endif
 
     static void balance(const jit_conv_conf_t &j, int &nthr, int &nthr_mb,
             int &nthr_g, int &nthr_oc_b, int &nthr_ic_b, int nthreads);

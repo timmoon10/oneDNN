@@ -92,7 +92,7 @@ inline void jit_conv_ker_pipeline_iw_thr(jit_conv_ker_t ker, jit_conv_call_s &p,
             reduce_work, load_work);
 }
 
-inline void jit_conv_3d_ker_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
+inline void jit_aarch64_sve_512_conv_3d_ker_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
         const void *src, const void *dst, const void *filt, const void *bias,
         int channel, int kh_padding, int kd_padding, int reduce_work,
         int load_work) {
@@ -112,14 +112,14 @@ inline void jit_conv_3d_ker_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
 }
 // The special case for the driver with ow-parallelization (FWD)
 // TODO: implement it for BWD_D and BWD_W too
-inline void jit_conv_3d_ker_pipeline_ow_thr(jit_conv_ker_t ker,
+inline void jit_aarch64_sve_512_conv_3d_ker_pipeline_ow_thr(jit_conv_ker_t ker,
         jit_conv_call_s &p, const void *src, const void *dst, const void *filt,
         const void *bias, int channel, int kh_padding, int kd_padding, int owb,
         int reduce_work, int load_work, int flags) {
     PIPELINE(owb);
     PIPELINE(flags);
 
-    jit_conv_3d_ker_pipeline(ker, p, src, dst, filt, bias, channel, kh_padding,
+    jit_aarch64_sve_512_conv_3d_ker_pipeline(ker, p, src, dst, filt, bias, channel, kh_padding,
             kd_padding, reduce_work, load_work);
 }
 
@@ -130,7 +130,7 @@ inline void jit_conv_ker_pipeline_bwd_w(jit_conv_ker_t ker, jit_conv_call_s &p,
             reduce_work, load_work);
 }
 
-void jit_sve_conv_2d_ker_bwd_w_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
+void jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
         const void *src, const void *dst, const void *filt, const void *bias,
         int channel, int os_index_begin, int os_index_end,
         int kh_padding /* kh_work_size */, size_t kh_offset, size_t reduce_work,
@@ -152,7 +152,7 @@ void jit_sve_conv_2d_ker_bwd_w_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
     if (p.src) ker(&p);
 }
 
-void jit_sve_conv_3d_ker_bwd_w_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
+void jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(jit_conv_ker_t ker, jit_conv_call_s &p,
         const void *src, const void *dst, const void *filt, const void *bias,
         int channel, int os_index_begin, int os_index_end,
         int kd_padding /* kd_work_size */, size_t kd_offset, size_t reduce_work,
@@ -597,7 +597,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
                                 dilate_h);
                         int kh_padding = nstl::max(
                                 0, jcp.kh - i_t_overflow - i_b_overflow);
-                        jit_conv_3d_ker_pipeline_ow_thr(kernel_->jit_ker,
+                        jit_aarch64_sve_512_conv_3d_ker_pipeline_ow_thr(kernel_->jit_ker,
                                 par_conv,
                                 src_c + i_t_overflow * dilate_h * src_h_stride,
                                 dst_c, wht_w + i_t_overflow * wht_h_stride,
@@ -632,7 +632,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_conv_3d_ker_pipeline_ow_thr(kernel_->jit_ker, par_conv, src, dst,
+        jit_aarch64_sve_512_conv_3d_ker_pipeline_ow_thr(kernel_->jit_ker, par_conv, src, dst,
                 weights, bias, 0, 0, 0, 0, 0, 0, 0);
     });
 }
@@ -1100,7 +1100,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
                         }
                         assert(k_len >= 0);
 
-                        jit_conv_3d_ker_pipeline(kernel_->jit_ker, par_conv,
+                        jit_aarch64_sve_512_conv_3d_ker_pipeline(kernel_->jit_ker, par_conv,
                                 diff_src_w + ij * diff_src_h_stride,
                                 diff_dst_w + oj * diff_dst_h_stride,
                                 wht_w + k_lo * wht_h_stride, 0, ocb, k_len,
@@ -1129,7 +1129,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_conv_3d_ker_pipeline(kernel_->jit_ker, par_conv, diff_src, diff_dst,
+        jit_aarch64_sve_512_conv_3d_ker_pipeline(kernel_->jit_ker, par_conv, diff_src, diff_dst,
                 weights, 0, 0, 1, 1, 0, 0);
     });
 }
@@ -1156,7 +1156,7 @@ jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
 
     kernel_ = new jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(j);
 
-    if (j.ver == ver_4fma) trans_kernel_ = create_trans_src(&j);
+//    if (j.ver == ver_4fma) trans_kernel_ = create_trans_src(&j);
 
     if (nthr_mb_ > 1) acc_ker_ = new cpu_accumulator_1d_t<diff_weights_type>();
 
@@ -1494,6 +1494,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
 #endif
     };
 
+#if 0
     if (jcp.is_1stconv && jcp.ver == ver_4fma) {
         assert(!is_src_layout_nxc);
         /* prepare contexts */
@@ -1625,6 +1626,67 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
                     0, 0, 0, 0, 0);
         }
     }
+#else
+        int ic_b_step = jcp.nb_ic_blocking_max;
+        int icb_work = ti->ic_b_end - ti->ic_b_start;
+        if (ic_b_step > 1 && icb_work > ic_b_step && icb_work < 2 * ic_b_step)
+            ic_b_step = utils::div_up(icb_work, 2);
+
+        for (int img = ti->img_start; img < ti->img_end; ++img) {
+            auto p = jit_conv_call_s();
+
+            const int max_oc = nstl::min(ti->oc_b_end * jcp.oc_block, jcp.oc);
+            const int max_ic = nstl::min(ti->ic_b_end * jcp.ic_block, jcp.ic);
+            const bool is_ddst_layout_nxc = utils::one_of(jcp.dst_tag,
+                    format_tag::nwc, format_tag::nhwc, format_tag::ndhwc);
+            for_(int g = ti->g_start; g < ti->g_end; ++g)
+            for_(int oc_b = ti->oc_b_start; oc_b < ti->oc_b_end; ++oc_b)
+            for (int ic_b = ti->ic_b_start; ic_b < ti->ic_b_end;
+                    ic_b += ic_b_step) {
+                const int _oc = g * jcp.nb_oc + oc_b;
+                const int _ic = g * jcp.nb_ic + ic_b;
+                const int ic_to_compute = this_block_size(
+                        ic_b * jcp.ic_block, max_ic, ic_b_step * jcp.ic_block);
+                const int oc_to_compute = this_block_size(
+                        oc_b * jcp.oc_block, max_oc, jcp.oc_block);
+
+                const int ic_off_idx = is_src_layout_nxc
+                        ? g * jcp.ic + ic_b * jcp.ic_block
+                        : _ic;
+                const int oc_off_idx = is_ddst_layout_nxc
+                        ? g * jcp.oc + oc_b * jcp.oc_block
+                        : _oc;
+
+                jit_conv_ker_pipeline_bwd_w(kernel_->jit_ker, p,
+                        &ti->src[src_d.blk_off(img, ic_off_idx)],
+                        &ti->diff_dst[diff_dst_d.blk_off(img, oc_off_idx)],
+                        diff_wei + wht_blk_off(diff_weights_d, g, oc_b, ic_b),
+                        0, (img == ti->img_start), 0, ic_to_compute,
+                        oc_to_compute);
+            }
+
+            const int _oc = ti->g_start * jcp.nb_oc + ti->oc_b_start;
+            const int _ic = ti->g_start * jcp.nb_ic + ti->ic_b_start;
+            const int ic_off_idx = is_src_layout_nxc
+                    ? ti->g_start * jcp.ic + ti->ic_b_start * jcp.ic_block
+                    : _ic;
+            const int oc_off_idx = is_ddst_layout_nxc
+                    ? ti->g_start * jcp.oc + ti->oc_b_start * jcp.oc_block
+                    : _oc;
+            // This call is required only to finalize pipeline with paramaters
+            // set on the last iteration of loop above. Only valid pointers make
+            // sense here as call parameters to avoid execution of prefetch
+            // instructions with nullptr, other parameters are not used in real
+            // jit call here
+            jit_conv_ker_pipeline_bwd_w(kernel_->jit_ker, p,
+                    &ti->src[src_d.blk_off(img + 1, ic_off_idx)],
+                    &ti->diff_dst[diff_dst_d.blk_off(img + 1, oc_off_idx)],
+                    diff_wei
+                            + wht_blk_off(diff_weights_d, ti->g_start,
+                                    ti->oc_b_start, ti->ic_b_start),
+                    0, 0, 0, 0, 0);
+        }
+#endif
 }
 
 template <data_type_t src_type, data_type_t diff_dst_type,
@@ -1695,7 +1757,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
             auto src = src_h + src_d.blk_off(0, ic_off_idx);
             auto diff_dst = diff_dst_h + diff_dst_d.blk_off(0, oc_off_idx);
 
-            jit_sve_conv_2d_ker_bwd_w_pipeline(kernel_->jit_ker, p, src, diff_dst,
+            jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(kernel_->jit_ker, p, src, diff_dst,
                     diff_wei + wht_blk_off(diff_weights_d, g, oc_b, ic_b),
                     diff_bia + _oc * jcp.oc_block, (img == img_first), oh_s,
                     oh_e, kh_padding, kh_padding_offset, ic_to_compute,
@@ -1716,7 +1778,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_sve_conv_2d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
+        jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
                 ti->src + src_d.blk_off(img + 1, ic_off_idx),
                 ti->diff_dst + diff_dst_d.blk_off(img + 1, oc_off_idx),
                 diff_wei
@@ -1806,7 +1868,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
             auto dst = &ti->diff_dst[diff_dst_d.blk_off(img, oc_off_idx)
                     + od_s * output_step];
 
-            jit_sve_conv_3d_ker_bwd_w_pipeline(kernel_->jit_ker, p, src, dst,
+            jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(kernel_->jit_ker, p, src, dst,
                     diff_wei + wht_blk_off(diff_weights_d, g, oc_b, ic_b),
                     diff_bia + _oc * 16, (img == img_first), od_s, od_e,
                     jcp.kd - kd_front_pad - kd_back_pad, kd_pad_off,
@@ -1827,7 +1889,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_sve_conv_3d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
+        jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
                 &ti->src[src_d.blk_off(img + 1, ic_off_idx)],
                 &ti->diff_dst[diff_dst_d.blk_off(img + 1, oc_off_idx)],
                 diff_wei
@@ -1891,12 +1953,14 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
                     ti->oc_b_work, sub_ic_b_kh_start, ic_b_kh_work);
         }
 
+#if 0
         if (jcp.with_bias && jcp.is_1stconv && jcp.ver == ver_4fma) {
             if (ti->ithr == 0)
                 acc_ker_->accumulate((diff_weights_data_t *)ti->diff_bias,
                         diff_bias_ws, bia_size);
             diff_bias_ws += bia_size;
         }
+#endif
     }
 }
 
@@ -1964,7 +2028,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
 
     const auto &jcp = kernel_->jcp;
 
-    if (jcp.with_bias && jcp.is_1stconv && jcp.ver == ver_4fma) return;
+//    if (jcp.with_bias && jcp.is_1stconv && jcp.ver == ver_4fma) return;
 
     const int b_job_start = rb->balancer().ithr_job_off(ti->ithr);
     const int b_njobs = rb->balancer().ithr_njobs(ti->ithr);
@@ -2047,6 +2111,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     const auto &j = pd()->jcp_;
     auto scratchpad = ctx.get_scratchpad_grantor();
 
+#if 0
     if (j.ver == ver_4fma) {
         if (!j.is_1stconv) {
             // XXX: See the comment about tr_iw and guarding elements in
@@ -2073,6 +2138,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
                 simple_barrier::ctx_init(&tr_src_bctx[i]);
         }
     }
+#endif
 
     if (dnnl_thr_syncable() && nthr_mb_ > 1) {
         simple_barrier::ctx_init(scratchpad.template get<simple_barrier::ctx_t>(
