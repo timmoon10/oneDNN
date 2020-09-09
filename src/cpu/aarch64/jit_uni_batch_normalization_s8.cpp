@@ -207,6 +207,7 @@ struct jit_bnorm_t<avx512_core> : public jit_bnorm_base_t<avx512_core> {
         const int mask_f32 = (1 << c_tail_) - 1;
 
         Reg32 regw_tmp = reg_tmp.cvt32();
+        // The kmovw instrucion here can be translated correctly by translator
         mov(regw_tmp, mask_f32);
         kmovw(tail_opmask, regw_tmp);
     }

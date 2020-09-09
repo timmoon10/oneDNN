@@ -267,6 +267,7 @@ struct jit_bnorm_t : public jit_generator {
         const int mask = (1 << tail) - 1;
 
         Reg32 regw_tmp = reg_tmp.cvt32();
+        // The kmovw instrucion here can be translated correctly by translator
         mov(regw_tmp, mask);
         kmovw(ktail_mask, regw_tmp);
     }
@@ -676,7 +677,8 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
-            test(reg_dst, vlen - 1);
+            CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), vlen - 1);
+            CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), 0);
             jnz(normal_store, T_NEAR);
             compute(true);
             jmp(end_store, T_NEAR);
@@ -990,7 +992,8 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
-                test(reg_dst, vlen - 1);
+                CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), vlen - 1);
+                CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), 0);
                 jnz(normal_store, T_NEAR);
                 compute(true);
                 jmp(end_store, T_NEAR);
@@ -1348,7 +1351,8 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
-                test(reg_diff_src, vlen - 1);
+                CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), vlen - 1);
+                CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), 0);
                 jnz(normal_store, T_NEAR);
                 compute(true);
                 jmp(end_store, T_NEAR);
@@ -1453,7 +1457,8 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
-            test(reg_diff_src, vlen - 1);
+            CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), vlen - 1);
+            CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), 0);
             jnz(normal_store, T_NEAR);
             compute(true);
             jmp(end_store, T_NEAR);

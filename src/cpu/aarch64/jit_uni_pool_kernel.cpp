@@ -234,6 +234,7 @@ inline void jit_uni_pool_kernel<isa>::prepare_tail_mask() {
     if (isa >= avx512_common) {
         size_t c_tail_mask = (1ULL << jpp.c_tail) - 1ULL;
         mov(tmp_gpr.cvt32(), c_tail_mask);
+        // The kmovw instrucion here can be translated correctly by translator
         kmovw(k_c_tail_mask, tmp_gpr.cvt32());
     } else if (isa == avx) {
         static const uint32_t mask[16] = {0xffffffff, 0xffffffff, 0xffffffff,
