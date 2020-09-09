@@ -38,6 +38,18 @@
 #include "cpu/x64/rnn/jit_uni_rnn_cell_postgemm_bwd.hpp"
 #include "cpu/x64/rnn/jit_uni_rnn_cell_postgemm_fwd.hpp"
 #include "cpu/x64/rnn/jit_uni_rnn_common_postgemm.hpp"
+#elif DNNL_AARCH64
+#include "cpu/aarch64/rnn/jit_uni_gru_cell_postgemm_1_bwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_gru_cell_postgemm_1_fwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_gru_cell_postgemm_2_bwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_gru_cell_postgemm_2_fwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_gru_lbr_cell_postgemm_bwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_gru_lbr_cell_postgemm_fwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_lstm_cell_postgemm_bwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_lstm_cell_postgemm_fwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_rnn_cell_postgemm_bwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_rnn_cell_postgemm_fwd.hpp"
+#include "cpu/aarch64/rnn/jit_uni_rnn_common_postgemm.hpp"
 #endif
 
 namespace dnnl {

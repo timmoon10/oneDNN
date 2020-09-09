@@ -260,6 +260,12 @@ public:
 #endif
         return x0 + saved_regs_size + first_params_and_return_addr_size;
     }
+#else
+    inline const Xbyak::RegExp get_stack_params_address()
+    {
+        //TODO just for compiling
+        return Xbyak::RegExp(0);
+    }
 #endif
 
     void mic_prefetcht0(Xbyak::Address a) {
