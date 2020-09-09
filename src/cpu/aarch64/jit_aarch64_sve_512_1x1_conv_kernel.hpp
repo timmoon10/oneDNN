@@ -39,8 +39,6 @@ namespace impl {
 namespace cpu {
 namespace aarch64 {
 
-#define CGA64 CodeGeneratorAArch64
-namespace xa = Xbyak::Xbyak_aarch64;
 /* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
 #define VL_OFS(ofs) ((ofs)>>6)
 

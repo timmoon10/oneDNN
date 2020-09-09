@@ -29,6 +29,9 @@ namespace aarch64 {
 
 namespace simple_barrier {
 
+#define CGA64 CodeGeneratorAArch64
+namespace xa = Xbyak::Xbyak_aarch64;
+
 #ifdef _WIN32
 #define CTX_ALIGNMENT 64
 #else
@@ -62,6 +65,14 @@ STRUCT_ALIGN(
 
 void barrier(ctx_t *ctx, int nthr);
 
+/** injects actual barrier implementation into another jitted code
+ * @params:
+ *   code      -- jit_generator object where the barrier is to be injected
+ *   reg_ctx   -- read-only register with pointer to the barrier context
+ *   reg_nnthr -- read-only register with the # of synchronizing threads
+ */
+void generate(jit_generator &code, Xbyak::Reg64 reg_ctx, Xbyak::Reg64 reg_nthr);
+
 /** jit barrier generator */
 struct jit_t : public jit_generator {
 private:
@@ -76,20 +87,20 @@ private:
      *   reg_ctx   -- read-only register with pointer to the barrier context
      *   reg_nnthr -- read-only register with the # of synchronizing threads
      */
-    void generate(Xbyak::Xbyak_aarch64::XReg reg_ctx, Xbyak::Xbyak_aarch64::XReg reg_nthr);
+    //void generate(Xbyak::Xbyak_aarch64::XReg reg_ctx, Xbyak::Xbyak_aarch64::XReg reg_nthr);
 
 public:
     void (*barrier)(ctx_t *ctx, size_t nthr);
 
     jit_t() {
-        this->generate( abi_param1_aarch64, abi_param2_aarch64);
-        ret();
+        this->preamble();
+        generate( *this, abi_param1, abi_param2);
+        this->postamble();
         barrier = reinterpret_cast<decltype(barrier)>(
                 const_cast<uint32_t *>(this->getCode32()));
     }
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_t)
-
 
 };
 
@@ -98,15 +109,6 @@ template <typename ctx_t>
 inline void ctx_init(ctx_t *ctx) {
     *ctx = utils::zero<ctx_t>();
 }
-void barrier(ctx_t *ctx, int nthr);
-
-/** injects actual barrier implementation into another jitted code
- * @params:
- *   code      -- jit_generator object where the barrier is to be injected
- *   reg_ctx   -- read-only register with pointer to the barrier context
- *   reg_nnthr -- read-only register with the # of synchronizing threads
- */
-void generate(jit_generator &code, Xbyak::Reg64 reg_ctx, Xbyak::Reg64 reg_nthr);
 
 } // namespace simple_barrier
 
