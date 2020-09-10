@@ -246,6 +246,10 @@ struct jit_uni_kernel : public jit_uni_eltwise_kernel, public jit_generator {
 
         eltwise_injector_->prepare_table();
 
+#ifdef DNNL_INDIRECT_JIT_AARCH64
+	binCommit();
+#endif
+
         ker_ = (decltype(ker_))this->getCode();
     }
 
