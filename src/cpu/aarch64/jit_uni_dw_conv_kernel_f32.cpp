@@ -396,7 +396,13 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
 
     this->postamble();
 #if 0
-    if (jcp.with_eltwise) eltwise_injector_->prepare_table();
+    if (jcp.with_eltwise) {
+      eltwise_injector_->prepare_table();
+
+#ifdef DNNL_INDIRECT_JIT_AARCH64
+      binCommit();
+#endif
+    }
 #endif
 }
 

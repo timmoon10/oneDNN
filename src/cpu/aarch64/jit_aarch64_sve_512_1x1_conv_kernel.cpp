@@ -749,7 +749,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
     
     postamble();
 #if 0
-    if (jcp.with_eltwise) eltwise_injector_->prepare_table();
+    if (jcp.with_eltwise) {
+      eltwise_injector_->prepare_table();
+      h->binCommit();
+    }
 #endif
 }
 
