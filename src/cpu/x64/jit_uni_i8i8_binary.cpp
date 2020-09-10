@@ -48,15 +48,12 @@ struct i8i8_binary_kernel_t {
     i8i8_binary_kernel_t(int vlen) : vlen_(vlen) {}
     virtual ~i8i8_binary_kernel_t() = default;
 
-    void operator()(const call_params_t *p) {
-        assert(ker_);
-        ker_(p);
-    }
+    virtual void operator()(call_params_t *p) = 0;
+    virtual status_t create_kernel() = 0;
     int vlen() const { return vlen_; }
 
 protected:
     int vlen_ = 0;
-    void (*ker_)(const call_params_t *) = nullptr;
 };
 
 template <cpu_isa_t isa>
@@ -230,7 +227,7 @@ struct jit_uni_i8i8_binary_kernel_t : public i8i8_binary_kernel_t,
             uni_vpextrb(dst_ptr(i), xmm, i);
     }
 
-    virtual void compute_dst(int unroll, bool tail = false) = 0;
+    virtual void compute_dst(int unroll, bool tail) = 0;
 
     void forward() {
         auto dst_type = pd_->dst_md(0)->data_type;
@@ -265,7 +262,7 @@ struct jit_uni_i8i8_binary_kernel_t : public i8i8_binary_kernel_t,
             cmp(reg_reverse_spat_offt, offt);
             jl(unroll_loop_tail, T_NEAR);
 
-            compute_dst(unroll_regs_);
+            compute_dst(unroll_regs_, false);
             sub(reg_reverse_spat_offt, offt);
             add(reg_offt_src0, offt);
             if (!broadcast_src1_value_) add(reg_offt_src1, offt);
@@ -277,7 +274,7 @@ struct jit_uni_i8i8_binary_kernel_t : public i8i8_binary_kernel_t,
             cmp(reg_reverse_spat_offt, simd_w_);
             jl(nelems_tail, T_NEAR);
 
-            compute_dst(1);
+            compute_dst(1, false);
             sub(reg_reverse_spat_offt, simd_w_);
             add(reg_offt_src0, simd_w_);
             if (!broadcast_src1_value_) add(reg_offt_src1, simd_w_);
@@ -295,22 +292,26 @@ struct jit_uni_i8i8_binary_kernel_t : public i8i8_binary_kernel_t,
         L(end);
     }
 
-    void generate() {
+    void generate() override {
         preamble();
         load_kernel_params();
         forward();
         postamble();
 
         if (eltwise_injector_) eltwise_injector_->prepare_table();
+    }
 
-        ker_ = getCode<decltype(ker_)>();
+    status_t create_kernel() override { return jit_generator::create_kernel(); }
+
+    void operator()(i8i8_binary_kernel_t::call_params_t *p) override {
+        return jit_generator::operator()(p);
     }
 
     jit_uni_i8i8_binary_kernel_t(const binary_pd_t *pd)
         : i8i8_binary_kernel_t(cpu_isa_traits<isa>::vlen), pd_(pd) {
         init();
     }
-    virtual ~jit_uni_i8i8_binary_kernel_t() = default;
+    ~jit_uni_i8i8_binary_kernel_t() override = default;
 };
 
 template <cpu_isa_t isa, data_type_t src0_type, data_type_t src1_type>
@@ -346,7 +347,7 @@ struct jit_i8i8_binary_subkernel_t<avx512_common, src0_type, src1_type>
         }
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vreg_bcast_src1;
@@ -375,9 +376,7 @@ struct jit_i8i8_binary_subkernel_t<avx512_common, src0_type, src1_type>
     }
 
     jit_i8i8_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_i8i8_binary_kernel_t(pd) {
-        generate();
-    }
+        : jit_uni_i8i8_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src0_type, data_type_t src1_type>
@@ -414,7 +413,7 @@ struct jit_i8i8_binary_subkernel_t<avx2, src0_type, src1_type>
         }
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vreg_bcast_src1;
@@ -443,9 +442,7 @@ struct jit_i8i8_binary_subkernel_t<avx2, src0_type, src1_type>
     }
 
     jit_i8i8_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_i8i8_binary_kernel_t(pd) {
-        generate();
-    }
+        : jit_uni_i8i8_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src0_type, data_type_t src1_type>
@@ -480,7 +477,7 @@ struct jit_i8i8_binary_subkernel_t<sse41, src0_type, src1_type>
         }
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vreg_bcast_src1;
@@ -510,9 +507,7 @@ struct jit_i8i8_binary_subkernel_t<sse41, src0_type, src1_type>
     }
 
     jit_i8i8_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_i8i8_binary_kernel_t(pd) {
-        generate();
-    }
+        : jit_uni_i8i8_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src0_type, data_type_t src1_type>
@@ -536,8 +531,12 @@ std::unique_ptr<i8i8_binary_kernel_t> create_i8i8_binary_kernel(
 template <data_type_t src0_type, data_type_t src1_type>
 jit_uni_i8i8_binary_t<src0_type, src1_type>::jit_uni_i8i8_binary_t(
         const pd_t *apd)
-    : primitive_t(apd) {
+    : primitive_t(apd) {}
+
+template <data_type_t src0_type, data_type_t src1_type>
+status_t jit_uni_i8i8_binary_t<src0_type, src1_type>::init(engine_t *engine) {
     kernel_ = create_i8i8_binary_kernel<src0_type, src1_type>(pd());
+    return kernel_->create_kernel();
 }
 
 template <data_type_t src0_type, data_type_t src1_type>

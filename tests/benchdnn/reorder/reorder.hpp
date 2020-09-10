@@ -83,6 +83,8 @@ struct settings_t {
     std::vector<attr_t::scale_t> oscale {attr_t::scale_t()};
     std::vector<attr_t::zero_points_t> zero_points {attr_t::zero_points_t()};
     std::vector<attr_t::post_ops_t> post_ops {attr_t::post_ops_t()};
+    std::vector<dnnl_scratchpad_mode_t> scratchpad_mode {
+            dnnl_scratchpad_mode_library};
     attr_t attr = {};
 
     const char *perf_template_csv
@@ -99,7 +101,7 @@ struct prb_t {
     prb_t(const reorder_conf_t &r, const dt_conf_t &conf_in,
             const dt_conf_t &conf_out, const attr_t &attr, alg_t alg,
             flag_t oflag, cross_engine_t cross_engine,
-            unsigned runtime_dim_mask, float scale = 0.f)
+            unsigned runtime_dim_mask, float scale)
         : reorder(r)
         , conf_in(conf_in)
         , conf_out(conf_out)
@@ -110,8 +112,16 @@ struct prb_t {
         , runtime_dim_mask(runtime_dim_mask)
         , ops(0)
         , ndims((int)reorder.dims.size()) {
-        if (scale != 0.f) this->attr.oscale.scale = scale;
+        this->attr.oscale.scale = scale;
         count_ops();
+        scales = generate_oscales();
+        src_zp = generate_zero_points(DNNL_ARG_SRC);
+        dst_zp = generate_zero_points(DNNL_ARG_DST);
+    }
+    ~prb_t() {
+        if (scales) zfree(scales);
+        if (src_zp) zfree(src_zp);
+        if (dst_zp) zfree(dst_zp);
     }
 
     const reorder_conf_t reorder;
@@ -124,6 +134,8 @@ struct prb_t {
     unsigned runtime_dim_mask;
     double ops;
     int ndims;
+    float *scales;
+    int32_t *src_zp, *dst_zp;
 
     bool is_reorder_with_compensation() const {
         return alg == ALG_BOOT && oflag != FLAG_NONE;
@@ -135,6 +147,8 @@ struct prb_t {
         for (int d = 0; d < ndims; ++d)
             ops *= reorder.dims[d];
     };
+    float *generate_oscales();
+    int32_t *generate_zero_points(int arg);
 };
 std::ostream &operator<<(std::ostream &s, const prb_t &p);
 
@@ -145,8 +159,8 @@ struct perf_report_t : public base_perf_report_t {
         p_ = p;
         sdt_ = {cfg2dt(p_->conf_in)};
         ddt_ = cfg2dt(p_->conf_out);
-        stag_ = {fmt_tag2str(convert_tag(p_->reorder.tag_in, p_->ndims))};
-        dtag_ = fmt_tag2str(convert_tag(p_->reorder.tag_out, p_->ndims));
+        stag_ = {normalize_tag(p_->reorder.tag_in, p_->ndims)};
+        dtag_ = normalize_tag(p_->reorder.tag_out, p_->ndims);
         base_report(r, prb_str);
     }
 

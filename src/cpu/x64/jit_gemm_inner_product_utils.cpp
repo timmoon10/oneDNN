@@ -36,25 +36,28 @@ using namespace dnnl::impl::cpu::inner_product_utils;
 using namespace Xbyak;
 
 template <data_type_t acc_type, data_type_t dst_type>
-struct jit_pp_kernel_t : public pp_kernel_t<acc_type, dst_type>, jit_generator {
+struct jit_pp_kernel_t : public pp_kernel_t<acc_type, dst_type>,
+                         public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(inner_product_utils::jit_pp_kernel_t);
 
     jit_pp_kernel_t(size_t OC, size_t MB, const primitive_attr_t *attr,
             data_type_t bias_dt, bool skip_sum);
 
-    typedef typename prec_traits<acc_type>::type acc_data_t;
-    typedef typename prec_traits<dst_type>::type dst_data_t;
+    using acc_data_t = typename prec_traits<acc_type>::type;
+    using dst_data_t = typename prec_traits<dst_type>::type;
 
     void operator()(dst_data_t *dst, const acc_data_t *acc, const char *bias,
             const float *scales, size_t start, size_t end, size_t runtime_oc,
             const float *dst_zero_points) const override;
 
+    status_t create_kernel() override { return jit_generator::create_kernel(); }
+
 private:
-    void generate();
+    void generate() override;
     void compute_oc_channel_blk();
     void compute_mb_blk(); // vectorize across minibatch
 
-    struct ker_args {
+    struct ker_args_t {
         dst_data_t *dst;
         const acc_data_t *acc;
         const char *bias;
@@ -67,8 +70,6 @@ private:
     };
 
     enum { default_OC_loop_unroll_ = 4 };
-
-    void (*ker_)(const ker_args *args) = nullptr;
 
     std::unique_ptr<jit_uni_eltwise_injector_f32<avx512_core>>
             eltwise_injector_;
@@ -175,8 +176,6 @@ jit_pp_kernel_t<acc_type, dst_type>::jit_pp_kernel_t(size_t OC, size_t MB,
         eltwise_injector_.reset(new jit_uni_eltwise_injector_f32<avx512_core>(
                 this, this->eltwise_, true, eltwise_reserved_1_,
                 eltwise_reserved_2_));
-
-    generate();
 }
 
 template <data_type_t acc_type, data_type_t dst_type>
@@ -598,7 +597,7 @@ template <data_type_t acc_type, data_type_t dst_type>
 void jit_pp_kernel_t<acc_type, dst_type>::generate() {
     preamble();
 
-#define PARAM_OFF(x) offsetof(ker_args, x)
+#define PARAM_OFF(x) offsetof(ker_args_t, x)
     mov(reg_dst, ptr[reg_param + PARAM_OFF(dst)]);
     mov(reg_acc, ptr[reg_param + PARAM_OFF(acc)]);
     mov(reg_bias, ptr[reg_param + PARAM_OFF(bias)]);
@@ -644,8 +643,6 @@ void jit_pp_kernel_t<acc_type, dst_type>::generate() {
     postamble();
 
     if (this->do_eltwise_) eltwise_injector_->prepare_table();
-
-    ker_ = getCode<decltype(ker_)>();
 }
 
 template <data_type_t acc_type, data_type_t dst_type>
@@ -653,13 +650,12 @@ void jit_pp_kernel_t<acc_type, dst_type>::operator()(dst_data_t *dst,
         const acc_data_t *acc, const char *bias, const float *scales,
         size_t start, size_t end, size_t runtime_oc,
         const float *dst_zero_points) const {
-    assert(ker_);
 
     if (end <= start) return;
 
     const size_t OC = this->runtime_oc() ? runtime_oc : this->OC_;
 
-    ker_args args;
+    ker_args_t args;
     size_t oc_offset = start % OC;
     args.dst = dst + start;
     args.acc = acc + start;
@@ -669,7 +665,7 @@ void jit_pp_kernel_t<acc_type, dst_type>::operator()(dst_data_t *dst,
     args.oc = OC;
     args.len = end - start;
     args.oc_offset = oc_offset;
-    ker_(&args);
+    jit_generator::operator()(&args);
 }
 
 template <data_type_t acc_type, data_type_t dst_type>

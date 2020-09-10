@@ -17,9 +17,9 @@
 #include <memory>
 
 #include "common/math_utils.hpp"
-#include "cpu/simple_q10n.hpp"
 
-#include "cpu/ref_eltwise.hpp"
+#include "cpu/primitive_attr_postops.hpp"
+#include "cpu/simple_q10n.hpp"
 
 #if DNNL_X64
 #include "cpu/x64/jit_gemm_inner_product_utils.hpp"
@@ -43,8 +43,8 @@ struct ref_pp_kernel_t : public pp_kernel_t<acc_type, dst_type> {
                     this->eltwise_.scale));
     }
 
-    typedef typename prec_traits<acc_type>::type acc_data_t;
-    typedef typename prec_traits<dst_type>::type dst_data_t;
+    using acc_data_t = typename prec_traits<acc_type>::type;
+    using dst_data_t = typename prec_traits<dst_type>::type;
 
     void operator()(dst_data_t *dst, const acc_data_t *acc, const char *bias,
             const float *scales, size_t start, size_t end, size_t runtime_oc,

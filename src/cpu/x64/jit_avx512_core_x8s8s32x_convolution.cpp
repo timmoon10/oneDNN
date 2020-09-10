@@ -32,8 +32,6 @@ using namespace dnnl::impl::utils;
 
 using namespace nstl;
 
-using jit_conv_ker_t = void (*)(jit_conv_call_s *);
-
 #define wht_blk_off(d, g, ...) \
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
@@ -76,8 +74,9 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
 
     size_t offset = weights_d.size() - weights_d.additional_buffer_size();
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation
-            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
+    int32_t *compensation = (jcp.signed_input)
+            ? reinterpret_cast<int32_t *>(&w[offset])
+            : nullptr;
     int oc_chunks = jcp.nb_oc / jcp.nb_oc_blocking;
     int nb_groups = jcp.nb_ch / jcp.nb_ch_blocking;
     int group_block = jcp.ch_block;
@@ -118,8 +117,9 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
             int ow_s = owb * jcp.ow_block;
             int iw_s = ow_s * jcp.stride_w;
 
-            p.bias = bias ? bias + (bias_d.blk_off(g_oc) * bia_dt_size) : 0;
-            p.compensation = (jcp.signed_input) ? compensation + g_oc : 0;
+            p.bias = bias ? bias + (bias_d.blk_off(g_oc) * bia_dt_size)
+                          : nullptr;
+            p.compensation = (jcp.signed_input) ? compensation + g_oc : nullptr;
             p.dst = dst + dst_d.blk_off(n, g_oc, ow_s);
             p.src = src + src_d.blk_off(n, g_ic, iw_s);
             p.filt = weights + wht_blk_off(weights_d, gb, ocb, 0);
@@ -130,7 +130,7 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
             p.b_overflow = 0;
             p.owb = owb;
 
-            kernel_->jit_ker(&p);
+            (*kernel_)(&p);
 
             ++start;
             switch (jcp.loop_order) {
@@ -196,8 +196,9 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
 
     size_t offset = weights_d.size() - weights_d.additional_buffer_size();
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation
-            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
+    int32_t *compensation = (jcp.signed_input)
+            ? reinterpret_cast<int32_t *>(&w[offset])
+            : nullptr;
     int oc_chunks = jcp.nb_oc / jcp.nb_oc_blocking_thr_chunk;
     int nb_groups = jcp.nb_ch;
     int work_amount = jcp.mb * nb_groups * oc_chunks * jcp.oh * jcp.nb_ow;
@@ -245,9 +246,9 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
                 int iw_s = ow_s * jcp.stride_w;
 
                 auto bias_w = bias ? bias + (bias_d.blk_off(g_oc) * bia_dt_size)
-                                   : 0;
+                                   : nullptr;
                 int32_t *compensation_w
-                        = (jcp.signed_input) ? compensation + g_oc : 0;
+                        = (jcp.signed_input) ? compensation + g_oc : nullptr;
 
                 auto dst_w = dst + dst_d.blk_off(n, g_oc, oh_s, ow_s);
                 auto src_w = src + src_d.blk_off(n, g_ic, ih_s, iw_s);
@@ -283,7 +284,7 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
                     p.b_overflow = i_b_overflow;
                     p.owb = owb;
 
-                    kernel_->jit_ker(&p);
+                    (*kernel_)(&p);
                     src_w += src_h_stride * jcp.stride_h;
                     dst_w += dst_h_stride;
                 }
@@ -350,8 +351,9 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
 
     size_t offset = weights_d.size() - weights_d.additional_buffer_size();
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation
-            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
+    int32_t *compensation = (jcp.signed_input)
+            ? reinterpret_cast<int32_t *>(&w[offset])
+            : nullptr;
     int nb_groups = jcp.nb_ch / jcp.nb_ch_blocking;
     int group_block = jcp.ch_block;
 
@@ -369,10 +371,10 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
                 int ow_s = owb * jcp.ow_block;
                 int iw_s = ow_s * jcp.stride_w;
 
-                auto bias_w
-                        = bias ? bias + (bias_d.blk_off(g) * bia_dt_size) : 0;
+                auto bias_w = bias ? bias + (bias_d.blk_off(g) * bia_dt_size)
+                                   : nullptr;
                 int32_t *compensation_w
-                        = jcp.signed_input ? compensation + g : 0;
+                        = jcp.signed_input ? compensation + g : nullptr;
 
                 auto dst_w = dst + dst_d.blk_off(n, g, oh_s, ow_s);
                 auto src_w = src + src_d.blk_off(n, g, ih_s, iw_s);
@@ -405,7 +407,7 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
                 p.b_overflow = i_b_overflow;
                 p.owb = owb;
 
-                kernel_->jit_ker(&p);
+                (*kernel_)(&p);
             });
 }
 
@@ -449,8 +451,9 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
 
     size_t offset = weights_d.size() - weights_d.additional_buffer_size();
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation
-            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
+    int32_t *compensation = (jcp.signed_input)
+            ? reinterpret_cast<int32_t *>(&w[offset])
+            : nullptr;
     int oc_chunks = jcp.nb_oc / jcp.nb_oc_blocking_thr_chunk;
     int nb_groups = jcp.nb_ch;
     int work_amount
@@ -501,18 +504,21 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
                 int iw_s = ow_s * jcp.stride_w;
                 int id_s = -jcp.f_pad + od_s * jcp.stride_d;
                 int dilate_d = jcp.dilate_d + 1;
-                int d_f_overflow = div_up(max(0, -id_s), dilate_d);
-                int d_back_overflow = div_up(
-                        max(0, id_s - jcp.id + (jcp.kd - 1) * dilate_d + 1),
-                        dilate_d);
+                int d_f_overflow
+                        = nstl::min(jcp.kd, div_up(max(0, -id_s), dilate_d));
+                int d_back_overflow = nstl::min(jcp.kd,
+                        div_up(max(0,
+                                       id_s - jcp.id + (jcp.kd - 1) * dilate_d
+                                               + 1),
+                                dilate_d));
 
                 int kd_padding
                         = nstl::max(0, jcp.kd - d_f_overflow - d_back_overflow);
 
                 auto bias_w = bias ? bias + (bias_d.blk_off(g_oc) * bia_dt_size)
-                                   : 0;
+                                   : nullptr;
                 int32_t *compensation_w
-                        = (jcp.signed_input) ? compensation + g_oc : 0;
+                        = (jcp.signed_input) ? compensation + g_oc : nullptr;
 
                 auto dst_w = dst + dst_d.blk_off(n, g_oc, od_s, oh_s, ow_s);
                 auto src_w = src + src_d.blk_off(n, g_ic, id_s, ih_s, iw_s)
@@ -551,7 +557,7 @@ void jit_avx512_core_x8s8s32x_convolution_fwd_t<src_type,
                     p.back_overflow = d_back_overflow;
                     p.owb = owb;
 
-                    kernel_->jit_ker(&p);
+                    (*kernel_)(&p);
                     src_w += src_h_stride * jcp.stride_h;
                     dst_w += dst_h_stride;
                 }

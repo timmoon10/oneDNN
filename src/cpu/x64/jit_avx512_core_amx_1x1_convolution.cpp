@@ -32,8 +32,6 @@ using namespace dnnl::impl::utils;
 
 using namespace nstl;
 
-using jit_conv_ker_t = void (*)(jit_conv_call_s *);
-
 #define wht_blk_off(d, g, ...) \
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
@@ -116,7 +114,7 @@ void jit_avx512_core_amx_1x1_convolution_fwd_t<src_type, wei_type,
         p.tile_cfg = tcfg;
         p.tile_cfg_tail = tcfg + 64;
 
-        kernel_->jit_tilecfg(tcfg);
+        amx_tile_configure(tcfg);
 
         int mb {0}, g {0}, _osb {0}, _ocb {0};
         nd_iterator_init(start, mb, jcp.mb, g, jcp.ngroups, _osb, os_chunks,
@@ -127,7 +125,7 @@ void jit_avx512_core_amx_1x1_convolution_fwd_t<src_type, wei_type,
             int ocb = _ocb * jcp.nb_oc_blocking;
             auto bias_w = bias
                     ? bias + (bias_d.blk_off(ocb * jcp.oc_block) * bia_dt_size)
-                    : 0;
+                    : nullptr;
 
             int oc = g * jcp.oc_without_padding + ocb * jcp.oc_block;
             int ic = g * jcp.ic_without_padding;
@@ -148,39 +146,39 @@ void jit_avx512_core_amx_1x1_convolution_fwd_t<src_type, wei_type,
                     int osb_i = osi + osb;
                     int oh = (osb_i * jcp.tile_width) / jcp.ow;
                     int ow = (osb_i * jcp.tile_width) % jcp.ow;
-                    size_t dst_offset = (is_1d) ? dst_d.blk_off(mb, oc, ow)
-                                                : dst_d.blk_off(mb, oc, oh, ow);
+                    size_t dst_offset = is_1d ? dst_d.blk_off(mb, oc, ow)
+                                              : dst_d.blk_off(mb, oc, oh, ow);
                     p.dst = dst + dst_dt_size * dst_offset;
 
                     int ih = oh * jcp.stride_h;
                     int iw = ow * jcp.stride_w;
-                    size_t inp_offset = (is_1d) ? src_d.blk_off(mb, ic, iw)
-                                                : src_d.blk_off(mb, ic, ih, iw);
+                    size_t inp_offset = is_1d ? src_d.blk_off(mb, ic, iw)
+                                              : src_d.blk_off(mb, ic, ih, iw);
                     p.src = src + src_dt_size * inp_offset;
 
                     bool l_overflow = osb_i + jcp.nb_os_blocking >= nb_os;
                     p.last_h = (check_last_sp || (nb_os % 2 && l_overflow)) ? 1
                                                                             : 0;
                     p.is_osb = 0;
-                    kernel_->jit_ker(&p);
+                    (*kernel_)(&p);
                 }
             } else {
                 int oh = (osb * jcp.tile_width) / jcp.ow;
                 int ow = (osb * jcp.tile_width) % jcp.ow;
-                size_t dst_offset = (is_1d) ? dst_d.blk_off(mb, oc, ow)
-                                            : dst_d.blk_off(mb, oc, oh, ow);
+                size_t dst_offset = is_1d ? dst_d.blk_off(mb, oc, ow)
+                                          : dst_d.blk_off(mb, oc, oh, ow);
                 p.dst = dst + dst_dt_size * dst_offset;
 
                 int ih = oh * jcp.stride_h;
                 int iw = ow * jcp.stride_w;
-                size_t inp_offset = (is_1d) ? src_d.blk_off(mb, ic, iw)
-                                            : src_d.blk_off(mb, ic, ih, iw);
+                size_t inp_offset = is_1d ? src_d.blk_off(mb, ic, iw)
+                                          : src_d.blk_off(mb, ic, ih, iw);
                 p.src = src + src_dt_size * inp_offset;
 
                 p.last_h = 0;
                 p.is_osb = 1;
 
-                kernel_->jit_ker(&p);
+                (*kernel_)(&p);
             }
             ++start;
             nd_iterator_step(mb, jcp.mb, g, jcp.ngroups, _osb, os_chunks, _ocb,

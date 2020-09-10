@@ -71,6 +71,8 @@ struct settings_t {
     std::vector<int64_t> mb {0};
     std::vector<bool> inplace {false};
     std::vector<attr_t::post_ops_t> post_ops {attr_t::post_ops_t()};
+    std::vector<dnnl_scratchpad_mode_t> scratchpad_mode {
+            dnnl_scratchpad_mode_library};
     attr_t attr = {};
     check_alg_t check_alg = ALG_AUTO;
     bool debug_check_ws = false;
@@ -124,7 +126,7 @@ struct perf_report_t : public base_perf_report_t {
 
     void report(const prb_t *p, const res_t *r, const char *prb_str) {
         p_ = p;
-        tag_ = fmt_tag2str(convert_tag(p_->tag, p_->ndims));
+        tag_ = normalize_tag(p_->tag, p_->ndims);
         base_report(r, prb_str);
     }
 

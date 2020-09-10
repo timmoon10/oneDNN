@@ -20,7 +20,6 @@
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
 
-#include "cpu/x64/jit_avx512_core_amx_tilecfg.hpp"
 #include "cpu/x64/jit_generator.hpp"
 #include "cpu/x64/jit_primitive_conf.hpp"
 #include "cpu/x64/jit_uni_eltwise_injector.hpp"
@@ -34,22 +33,13 @@ struct jit_avx512_core_amx_1x1_fwd_kernel_t : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_core_amx_1x1_fwd_kernel_t)
 
     jit_avx512_core_amx_1x1_fwd_kernel_t(
-            jit_conv_conf_t ajcp, const primitive_attr_t &attr)
+            const jit_conv_conf_t &ajcp, const primitive_attr_t &attr)
         : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
         if (jcp.with_eltwise)
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
-        tilecfg_ = new jit_avx512_core_amx_tilecfg_t(jcp);
-
-        generate();
-
-        jit_ker = (void (*)(jit_conv_call_s *))getCode();
-        jit_tilecfg = (void (*)(void *))tilecfg_->getCode();
     }
-    ~jit_avx512_core_amx_1x1_fwd_kernel_t() {
-        delete eltwise_injector_;
-        delete tilecfg_;
-    }
+    ~jit_avx512_core_amx_1x1_fwd_kernel_t() { delete eltwise_injector_; }
 
     static bool post_ops_ok(jit_conv_conf_t &jcp, const primitive_attr_t &attr);
 
@@ -67,12 +57,9 @@ struct jit_avx512_core_amx_1x1_fwd_kernel_t : public jit_generator {
 
     jit_conv_conf_t jcp;
     const primitive_attr_t &attr_;
-    void (*jit_ker)(jit_conv_call_s *);
-    void (*jit_tilecfg)(void *);
 
 private:
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
-    jit_avx512_core_amx_tilecfg_t *tilecfg_;
 
     int row_count_;
     int buf_count_;
@@ -130,9 +117,9 @@ private:
     bool maybe_eltwise(int position);
     void cvt2ps(data_type_t type_in, Xbyak::Zmm ymm_in,
             const Xbyak::Operand &op, bool mask_flag);
-    const Xbyak::Zmm zmm_mask(
+    Xbyak::Zmm zmm_mask(
             const Xbyak::Zmm zmm_in, bool mask_flag, bool store = false);
-    const Xbyak::Ymm ymm_mask(
+    Xbyak::Ymm ymm_mask(
             const Xbyak::Ymm ymm_in, bool mask_flag, bool store = false);
 
     void update_buffer_pointers();
@@ -146,7 +133,7 @@ private:
     void icb_loop(bool do_store);
     void osb_loop(int nb_os = 1);
 
-    void generate();
+    void generate() override;
 };
 
 } // namespace x64

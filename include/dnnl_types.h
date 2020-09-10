@@ -647,6 +647,7 @@ typedef enum {
     // weights w/ groups, 3D
     dnnl_Goiw16g = dnnl_Abcd16a,
     dnnl_Goiw8g = dnnl_Abcd8a,
+    dnnl_Goiw4g = dnnl_Abcd4a,
     dnnl_gIOw16o16i = dnnl_aCBd16b16c,
     dnnl_gIOw16i16o = dnnl_aCBd16c16b,
     dnnl_gOIw16i16o = dnnl_aBCd16c16b,
@@ -697,6 +698,7 @@ typedef enum {
     dnnl_gOIhw4o4i = dnnl_aBCde4b4c,
     dnnl_gOihw4o = dnnl_aBcde4b,
     dnnl_Goihw8g = dnnl_Abcde8a,
+    dnnl_Goihw4g = dnnl_Abcde4a,
     dnnl_gOIhw8i16o2i = dnnl_aBCde8c16b2c,
     dnnl_gOIhw8i8o = dnnl_aBCde8c8b,
     dnnl_gOIhw8o16i2o = dnnl_aBCde8b16c2b,
@@ -830,6 +832,8 @@ typedef enum {
     dnnl_matmul,
     /// A resampling primitive.
     dnnl_resampling,
+    /// A pooling version 2 primitive (pooling with dilation support).
+    dnnl_pooling_v2,
 
     /// Parameter to allow internal only primitives without undefined behavior.
     /// This parameter is chosen to be valid for so long as sizeof(int) >= 2.
@@ -1200,7 +1204,12 @@ typedef struct dnnl_memory *dnnl_memory_t;
 /// A constant memory handle.
 typedef const struct dnnl_memory *const_dnnl_memory_t;
 
+/// Special pointer value that indicates that a memory object should not have
+/// an underlying buffer.
 #define DNNL_MEMORY_NONE (NULL)
+
+/// Special pointer value that indicates that the library needs to allocate an
+/// underlying buffer for a memory object.
 #define DNNL_MEMORY_ALLOCATE ((void *)(size_t)-1)
 
 /// @} dnnl_api_memory
@@ -1416,6 +1425,46 @@ typedef struct {
 } dnnl_pooling_desc_t;
 
 /// @} dnnl_api_pooling
+
+/// @addtogroup dnnl_api_pooling_v2
+/// @{
+
+/// A descriptor of a pooling operation.
+typedef struct {
+    /// The kind of primitive. Used for self-identifying the primitive
+    /// descriptor. Must be #dnnl_pooling_v2.
+    dnnl_primitive_kind_t primitive_kind;
+    /// The kind of propagation. Possible values: #dnnl_forward_training,
+    /// #dnnl_forward_inference, #dnnl_backward, and #dnnl_backward_data.
+    dnnl_prop_kind_t prop_kind;
+    /// The kind of pooling algorithm.
+    /// Possible values: #dnnl_pooling_max,
+    /// #dnnl_pooling_avg_include_padding, and
+    /// #dnnl_pooling_avg_exclude_padding.
+    dnnl_alg_kind_t alg_kind;
+    /// Source memory descriptor.
+    dnnl_memory_desc_t src_desc;
+    /// Source gradient memory descriptor.
+    dnnl_memory_desc_t diff_src_desc;
+    /// Destination memory descriptor.
+    dnnl_memory_desc_t dst_desc;
+    /// Destination gradient memory descriptor.
+    dnnl_memory_desc_t diff_dst_desc;
+    /// Pooling kernel strides for spatial dimensions.
+    dnnl_dims_t strides;
+    /// Pooling kernel spatial dimensions.
+    dnnl_dims_t kernel;
+    /// Padding in each spatial dimension. padding[0] is a padding in the
+    /// beginning (@p padding_l), padding[1] is a padding in the end (@p
+    /// padding_r).
+    dnnl_dims_t padding[2];
+    /// The accumulator data type. Initialized automatically.
+    dnnl_data_type_t accum_data_type;
+    /// Pooling dilations for spatial dimensions.
+    dnnl_dims_t dilation;
+} dnnl_pooling_v2_desc_t;
+
+/// @} dnnl_api_pooling_v2
 
 /// @addtogroup dnnl_api_lrn
 /// @{
@@ -2053,6 +2102,17 @@ typedef const struct dnnl_primitive *const_dnnl_primitive_t;
 /// See @ref dev_guide_attributes_post_ops_depthwise_fusion
 #define DNNL_ARG_ATTR_POST_OP_DW 8192
 
+/// Starting point for a binary post operation.
+#define DNNL_ARG_ATTR_MULTIPLE_POST_OP_BASE 16384
+
+/// Arguments for a binary post operation. Up to 32 arguments are supported.
+/// See @ref dev_guide_attributes_post_ops_binary_fusion
+#define DNNL_ARG_ATTR_MULTIPLE_POST_OP(idx) \
+    (DNNL_ARG_ATTR_MULTIPLE_POST_OP_BASE * ((idx) + 1))
+
+// XXX: next define should have a (1 << 20) = 1048576 value to preserve 5 bits
+// for DNNL_ARG_ATTR_MULTIPLE_POST_OP argument.
+
 /// A structure that contains an index and a memory object, and is used to pass
 /// arguments to dnnl_primitive_execute().
 typedef struct {
@@ -2138,6 +2198,7 @@ typedef enum {
     dnnl_query_logsoftmax_d, ///< logsoftmax descriptor
     dnnl_query_matmul_d, ///< matrix multiplication (matmul) descriptor
     dnnl_query_resampling_d, ///< resampling descriptor
+    dnnl_query_pooling_v2_d, ///< pooling version 2 descriptor
 
     // memory descriptor section
     dnnl_query_some_md = 128, ///< stub

@@ -96,7 +96,7 @@ using impl_list_map_t = std::map<reorder_impl_key_t, std::vector<rpd_create_f>>;
 
 // clang-format off
 
-static const impl_list_map_t regular_impl_list_map {
+const impl_list_map_t regular_impl_list_map {
     // f32 -> bf16
     {{f32, bf16, 0}, {
         rnn_weights_reorder_t<f32, bf16>::pd_t::create,
@@ -432,7 +432,7 @@ static const impl_list_map_t regular_impl_list_map {
 };
 
 /* conv reorders w/ compensation */
-static const impl_list_map_t comp_s8s8_impl_list_map {
+const impl_list_map_t comp_s8s8_impl_list_map {
     // f32 -> s8
     {{f32, s8, 3}, {
         REG_SR(f32, any, s8, wio, fmt_order::keep, spec::conv_s8s8),
@@ -464,6 +464,8 @@ static const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(f32, wigo, s8, Goiw16g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(f32, goiw, s8, Goiw8g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(f32, wigo, s8, Goiw8g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(f32, goiw, s8, Goiw4g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(f32, wigo, s8, Goiw4g, fmt_order::keep, spec::conv_s8s8),
 
         nullptr,
     }},
@@ -486,6 +488,8 @@ static const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(f32, hwigo, s8, Goihw16g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(f32, goihw, s8, Goihw8g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(f32, hwigo, s8, Goihw8g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(f32, goihw, s8, Goihw4g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(f32, hwigo, s8, Goihw4g, fmt_order::keep, spec::conv_s8s8),
 
         nullptr,
     }},
@@ -528,6 +532,8 @@ static const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(s8, wigo, s8, Goiw16g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(s8, goiw, s8, Goiw8g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(s8, wigo, s8, Goiw8g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(s8, goiw, s8, Goiw4g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(s8, wigo, s8, Goiw4g, fmt_order::keep, spec::conv_s8s8),
 
         nullptr,
     }},
@@ -550,6 +556,8 @@ static const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(s8, hwigo, s8, Goihw16g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(s8, goihw, s8, Goihw8g, fmt_order::keep, spec::conv_s8s8),
         REG_SR(s8, hwigo, s8, Goihw8g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(s8, goihw, s8, Goihw4g, fmt_order::keep, spec::conv_s8s8),
+	REG_SR(s8, hwigo, s8, Goihw4g, fmt_order::keep, spec::conv_s8s8),
 
         nullptr,
     }},

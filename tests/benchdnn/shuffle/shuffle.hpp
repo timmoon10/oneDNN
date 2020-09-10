@@ -47,6 +47,8 @@ struct settings_t {
     std::vector<std::string> tag {tag::abx};
     std::vector<int64_t> group {1};
     std::vector<int> axis {1};
+    std::vector<dnnl_scratchpad_mode_t> scratchpad_mode {
+            dnnl_scratchpad_mode_library};
 
     const char *perf_template_csv
             = "perf,%engine%,%impl%,%dir%,%dt%,%tag%,%group%,%axis%,%DESC%,%-"
@@ -60,13 +62,14 @@ struct settings_t {
 
 struct prb_t {
     prb_t(const dims_t &dims, dir_t dir, dnnl_data_type_t dt,
-            const std::string &tag, int axis, int64_t group)
+            const std::string &tag, int axis, int64_t group, const attr_t &attr)
         : dims(dims)
         , dir(dir)
         , dt(dt)
         , tag(tag)
         , axis(axis)
         , group(group)
+        , attr(attr)
         , ndims((int)dims.size()) {}
     ~prb_t() {}
 
@@ -76,6 +79,7 @@ struct prb_t {
     std::string tag;
     int axis;
     int64_t group;
+    attr_t attr;
     int ndims;
 };
 std::ostream &operator<<(std::ostream &s, const prb_t &p);
@@ -85,7 +89,7 @@ struct perf_report_t : public base_perf_report_t {
 
     void report(const prb_t *p, const res_t *r, const char *prb_str) {
         p_ = p;
-        tag_ = fmt_tag2str(convert_tag(p_->tag, p_->ndims));
+        tag_ = normalize_tag(p_->tag, p_->ndims);
         base_report(r, prb_str);
     }
 

@@ -37,11 +37,16 @@ float round_to_nearest_representable(dnnl_data_type_t dt, float value) {
 // Engine kind used to run oneDNN primitives for testing
 dnnl_engine_kind_t engine_tgt_kind = dnnl_cpu;
 
-// Scratchpad mode for oneDNN
-dnnl_scratchpad_mode_t scratchpad_mode = dnnl_scratchpad_mode_library;
-
 args_t &args_t::set(int arg, const dnn_mem_t &mem) {
-    args_.push_back(std::make_pair(arg, &mem));
+    args_.emplace_back(arg, &mem);
+    return *this;
+}
+
+args_t &args_t::set(
+        const std::vector<int> &args, const std::vector<dnn_mem_t> &mems) {
+    assert(args.size() == mems.size());
+    for (size_t i = 0; i < mems.size(); ++i)
+        args_.emplace_back(args[i], &mems[i]);
     return *this;
 }
 
@@ -184,15 +189,9 @@ void maybe_prepare_runtime_scales(dnn_mem_t &scales_m, const attr_t &attr,
     const int64_t count
             = attr.oscale.policy == policy_t::COMMON ? 1 : scale_cnt;
 
-    scales_m = dnn_mem_t(1, &count, dnnl_f32, dnnl_a, get_test_engine());
+    scales_m = dnn_mem_t(1, &count, dnnl_f32, tag::x, get_test_engine());
     for (int64_t c = 0; c < count; ++c)
         ((float *)scales_m)[c] = scales[c];
-}
-
-void maybe_prepare_runtime_scales(
-        dnn_mem_t &scales_m, const attr_bundle_t &attr_bundle) {
-    maybe_prepare_runtime_scales(scales_m, attr_bundle.attr,
-            (int64_t)attr_bundle.oscale.size(), attr_bundle.oscale.data());
 }
 
 void maybe_prepare_runtime_zero_points(dnn_mem_t &zero_points_m,
@@ -203,7 +202,7 @@ void maybe_prepare_runtime_zero_points(dnn_mem_t &zero_points_m,
     const auto e = attr.zero_points.get(arg);
     const int64_t cnt = e.policy == policy_t::COMMON ? 1 : count;
 
-    zero_points_m = dnn_mem_t(1, &cnt, dnnl_s32, dnnl_a, get_test_engine());
+    zero_points_m = dnn_mem_t(1, &cnt, dnnl_s32, tag::x, get_test_engine());
     for (int64_t c = 0; c < cnt; ++c)
         ((int32_t *)zero_points_m)[c] = zero_points[c];
 }
@@ -217,9 +216,7 @@ void maybe_prepare_runtime_zero_points(
 bool check_md_consistency_with_tag(
         const dnnl_memory_desc_t &md, const std::string &tag) {
     dnnl_memory_desc_t md_new_tag;
-    DNN_SAFE(dnnl_memory_desc_init_by_tag(&md_new_tag, md.ndims, md.dims,
-                     md.data_type, convert_tag(tag, md.ndims)),
-            WARN);
+    SAFE(init_md(&md_new_tag, md.ndims, md.dims, md.data_type, tag), CRIT);
     return dnnl_memory_desc_equal(&md_new_tag, &md);
 }
 

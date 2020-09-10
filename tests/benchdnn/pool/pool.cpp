@@ -27,6 +27,7 @@
 #include "dnnl_memory.hpp"
 #include "norm.hpp"
 
+#include "binary/binary.hpp"
 #include "pool/pool.hpp"
 
 namespace pool {
@@ -46,7 +47,9 @@ inline int compare_dat(const prb_t *p, data_kind_t kind, dnn_mem_t &mem_dt,
         const float diff = fabsf(fp - dt);
         const float rel_diff = diff / (fabsf(fp) > FLT_MIN ? fabsf(fp) : 1);
         bool ok = false;
-        if (fp < p->cfg[kind].min)
+        if (std::isinf(fp))
+            ok = std::isinf(dt) && std::signbit(fp) == std::signbit(dt);
+        else if (fp < p->cfg[kind].min)
             ok = dt == p->cfg[kind].min;
         else
             ok = (fabs(fp) > 1e-5 ? rel_diff : diff) <= p->cfg[kind].eps;
@@ -155,20 +158,16 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
             ? dst_3d_dims
             : p->ndims == 4 ? dst_2d_dims : dst_1d_dims;
 
-    const auto src_tag = (dir & FLAG_FWD) ? convert_tag(p->tag, p->ndims)
-                                          : dnnl_format_tag_any;
-    const auto dst_tag = dnnl_format_tag_any;
+    const auto src_tag = (dir & FLAG_FWD) ? p->tag : tag::any;
+    const auto dst_tag = tag::any;
 
-    DNN_SAFE(dnnl_memory_desc_init_by_tag(
-                     &src_d, p->ndims, src_dims, p->cfg[SRC].dt, src_tag),
-            WARN);
+    SAFE(init_md(&src_d, p->ndims, src_dims, p->cfg[SRC].dt, src_tag), CRIT);
 
-    DNN_SAFE(dnnl_memory_desc_init_by_tag(
-                     &dst_d, p->ndims, dst_dims, p->cfg[DST].dt, dst_tag),
-            WARN);
+    SAFE(init_md(&dst_d, p->ndims, dst_dims, p->cfg[DST].dt, dst_tag), CRIT);
 
     dnnl_dim_t strides_nd[] = {p->sd, p->sh, p->sw};
     dnnl_dim_t kernel_nd[] = {p->kd, p->kh, p->kw};
+    dnnl_dim_t dilation_nd[] = {p->dd, p->dh, p->dw};
     dnnl_dim_t padding_l_nd[] = {p->pd, p->ph, p->pw};
     dnnl_dim_t padding_r_nd[] = {p->pd_r, p->ph_r, p->pw_r};
 
@@ -176,25 +175,31 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
     dnnl_dim_t *kernel = kernel_nd + (5 - p->ndims);
     dnnl_dim_t *padding_l = padding_l_nd + (5 - p->ndims);
     dnnl_dim_t *padding_r = padding_r_nd + (5 - p->ndims);
+    dnnl_dim_t *dilation = dilation_nd + (5 - p->ndims);
 
     dnnl_alg_kind_t alg = alg2alg_kind(p->alg);
-    dnnl_pooling_desc_t pd;
+    dnnl_pooling_v2_desc_t pd;
 
     if (dir & FLAG_FWD) {
         auto prop_kind = p->dir & FLAG_INF ? dnnl_forward_inference
                                            : dnnl_forward_training;
-        DNN_SAFE(dnnl_pooling_forward_desc_init(&pd, prop_kind, alg, &src_d,
-                         &dst_d, strides, kernel, padding_l, padding_r),
+        DNN_SAFE(dnnl_pooling_v2_forward_desc_init(&pd, prop_kind, alg, &src_d,
+                         &dst_d, strides, kernel, dilation, padding_l,
+                         padding_r),
                 WARN);
     } else {
-        DNN_SAFE(dnnl_pooling_backward_desc_init(&pd, alg, &src_d, &dst_d,
-                         strides, kernel, padding_l, padding_r),
+        DNN_SAFE(dnnl_pooling_v2_backward_desc_init(&pd, alg, &src_d, &dst_d,
+                         strides, kernel, dilation, padding_l, padding_r),
                 WARN);
     }
 
-    auto dnnl_attr = create_dnnl_attr(attr_t());
+    attr_args_t attr_args;
+    attr_args.prepare_binary_post_op_mds(p->attr, p->ndims, dst_dims);
+    auto dnnl_attr = create_dnnl_attr(p->attr, attr_args);
 
-    dnnl_status_t init_status
+    dnnl_status_t init_status;
+
+    init_status
             = dnnl_primitive_desc_create(&ppd, &pd, dnnl_attr, engine, hint);
 
     dnnl_primitive_attr_destroy(dnnl_attr);
@@ -236,6 +241,17 @@ void check_known_skipped_case(const prb_t *p, res_t *r) {
             return;
         }
     }
+
+    // TODO: temporary disable binary post-op on GPU
+    if (engine_tgt_kind == dnnl_gpu && p->attr.post_ops.binary_index() != -1) {
+        r->state = SKIPPED, r->reason = CASE_NOT_SUPPORTED;
+        return;
+    }
+
+    if (engine_tgt_kind == dnnl_cpu && p->cfg[SRC].dt != p->cfg[DST].dt) {
+        r->state = SKIPPED, r->reason = CASE_NOT_SUPPORTED;
+        return;
+    }
 }
 
 int doit(const prb_t *p, res_t *r) {
@@ -269,7 +285,7 @@ int doit(const prb_t *p, res_t *r) {
     SAFE(!check_md_consistency_with_tag(dst_md, p->tag), WARN);
 
     const auto fp = dnnl_f32;
-    const auto tag = get_abx_tag(p->ndims);
+    const auto tag = tag::abx;
 
     const auto &test_engine = get_test_engine();
 
@@ -283,6 +299,11 @@ int doit(const prb_t *p, res_t *r) {
     dnn_mem_t ws_fp(ws_md, test_engine);
     dnn_mem_t ws_dt(ws_md, test_engine);
     dnn_mem_t scratchpad_dt(scratchpad_md, test_engine);
+    std::vector<dnn_mem_t> binary_po_fp, binary_po_dt;
+    std::vector<int> binary_po_args;
+    SAFE(binary::setup_binary_po(
+                 const_fpd, binary_po_args, binary_po_dt, binary_po_fp),
+            WARN);
 
     dnn_mem_t d_src_dt, d_dst_dt;
 
@@ -293,12 +314,13 @@ int doit(const prb_t *p, res_t *r) {
     args.set(DNNL_ARG_DST, dst_dt);
     args.set(DNNL_ARG_WORKSPACE, ws_dt);
     args.set(DNNL_ARG_SCRATCHPAD, scratchpad_dt);
+    args.set(binary_po_args, binary_po_dt);
 
     SAFE(execute_and_wait(pp, args), WARN);
 
     // want this pass on backward to get ws_fp filled properly
     if (bench_mode & CORR) {
-        compute_ref_fwd(p, src_fp, dst_fp, ws_fp);
+        compute_ref_fwd(p, src_fp, binary_po_fp, dst_fp, ws_fp);
         if (p->dir & FLAG_FWD) {
             dnn_mem_t dst(dst_dt, fp, tag, test_engine);
             SAFE(compare_dst(p, dst, dst_fp, r), WARN);

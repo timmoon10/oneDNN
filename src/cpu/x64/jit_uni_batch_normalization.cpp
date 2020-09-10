@@ -44,7 +44,7 @@ using namespace memory_tracking::names;
 using namespace Xbyak;
 namespace barrier = simple_barrier;
 
-typedef float acc_data_t;
+using acc_data_t = float;
 
 template <cpu_isa_t isa>
 struct jit_bnorm_t : public jit_generator {
@@ -81,9 +81,6 @@ struct jit_bnorm_t : public jit_generator {
     bool is_spatial_thr_;
     bool is_nspc_;
     bool is_bf16_;
-
-    void (*ker)(const call_params_t *);
-    void operator()(const call_params_t *p) { (*ker)(p); }
 
     Reg64 reg_param = abi_param1;
 
@@ -1681,7 +1678,9 @@ struct jit_bnorm_t : public jit_generator {
 
         unroll_blocks = isa == avx512_common && !is_spatial_thr_ ? 4 : 1;
         unroll_regs = isa == avx512_common && !is_spatial_thr_ ? 4 : 1;
+    }
 
+    void generate() override {
         preamble();
 
         if (is_bf16_) {
@@ -1712,12 +1711,13 @@ struct jit_bnorm_t : public jit_generator {
         }
         add(rsp, stack_size_required);
         postamble();
-
-        ker = reinterpret_cast<decltype(ker)>(
-                const_cast<uint8_t *>(this->getCode()));
     }
 
-    ~jit_bnorm_t() { delete bf16_emu_; }
+    void operator()(const call_params_t *p) {
+        return jit_generator::operator()(p);
+    }
+
+    ~jit_bnorm_t() override { delete bf16_emu_; }
 };
 } // namespace
 
@@ -1743,7 +1743,7 @@ struct driver_t : public c_compatible {
                                 : (data_size >= l3_size_ / 2 && l3_size_ > 0);
     }
 
-    ~driver_t() {}
+    ~driver_t() = default;
 
     static void init_scratchpad(memory_tracking::registrar_t &scratchpad,
             const batch_normalization_pd_t *bdesc) {
@@ -1896,6 +1896,8 @@ struct driver_t : public c_compatible {
         }
     }
 
+    status_t create_kernel() { return ker_.create_kernel(); }
+
 private:
     enum {
         simd_w = isa == sse41 ? 8
@@ -1978,8 +1980,12 @@ status_t jit_uni_batch_normalization_fwd_t<isa>::pd_t::init(engine_t *engine) {
 template <cpu_isa_t isa>
 jit_uni_batch_normalization_fwd_t<isa>::jit_uni_batch_normalization_fwd_t(
         const pd_t *apd)
-    : primitive_t(apd) {
-    bnorm_driver_ = new bnorm_impl::driver_t<isa>(pd());
+    : primitive_t(apd) {}
+
+template <cpu_isa_t isa>
+status_t jit_uni_batch_normalization_fwd_t<isa>::init(engine_t *engine) {
+    CHECK(safe_ptr_assign(bnorm_driver_, new bnorm_impl::driver_t<isa>(pd())));
+    return bnorm_driver_->create_kernel();
 }
 
 template <cpu_isa_t isa>
@@ -2075,8 +2081,12 @@ status_t jit_uni_batch_normalization_bwd_t<isa>::pd_t::init(engine_t *engine) {
 template <cpu_isa_t isa>
 jit_uni_batch_normalization_bwd_t<isa>::jit_uni_batch_normalization_bwd_t(
         const pd_t *apd)
-    : primitive_t(apd) {
-    bnorm_driver_ = new bnorm_impl::driver_t<isa>(pd());
+    : primitive_t(apd) {}
+
+template <cpu_isa_t isa>
+status_t jit_uni_batch_normalization_bwd_t<isa>::init(engine_t *engine) {
+    CHECK(safe_ptr_assign(bnorm_driver_, new bnorm_impl::driver_t<isa>(pd())));
+    return bnorm_driver_->create_kernel();
 }
 
 template <cpu_isa_t isa>

@@ -29,6 +29,7 @@
 /* in order to make selinux happy memory that would be marked with X-bit should
  * be obtained with mmap */
 #define XBYAK_USE_MMAP_ALLOCATOR
+#define XBYAK_NO_EXCEPTION
 #if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
 /* turn off `size_t to other-type implicit casting` warning
  * currently we have a lot of jit-generated instructions that
@@ -91,7 +92,7 @@ struct cpu_isa_traits {}; /* ::vlen -> 32 (for avx2) */
 
 // pack struct so it can fit into a single 64-byte cache line
 #pragma pack(push, 1)
-struct tileconfig_t {
+struct palette_config_t {
     uint8_t palette_id;
     uint8_t startRow;
     uint8_t reserved[14];
@@ -182,7 +183,11 @@ struct cpu_isa_traits<avx512_core_amx> {
 
 namespace {
 
-static Xbyak::util::Cpu cpu;
+const Xbyak::util::Cpu &cpu() {
+    const static Xbyak::util::Cpu cpu_;
+    return cpu_;
+}
+
 static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
     using namespace Xbyak::util;
 
@@ -190,31 +195,31 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
     if ((cpu_isa_mask & cpu_isa) != cpu_isa) return false;
 
     switch (cpu_isa) {
-        case sse41: return cpu.has(Cpu::tSSE41);
-        case avx: return cpu.has(Cpu::tAVX);
-        case avx2: return cpu.has(Cpu::tAVX2);
-        case avx512_common: return cpu.has(Cpu::tAVX512F);
+        case sse41: return cpu().has(Cpu::tSSE41);
+        case avx: return cpu().has(Cpu::tAVX);
+        case avx2: return cpu().has(Cpu::tAVX2);
+        case avx512_common: return cpu().has(Cpu::tAVX512F);
         case avx512_core:
-            return cpu.has(Cpu::tAVX512F) && cpu.has(Cpu::tAVX512BW)
-                    && cpu.has(Cpu::tAVX512VL) && cpu.has(Cpu::tAVX512DQ);
+            return cpu().has(Cpu::tAVX512F) && cpu().has(Cpu::tAVX512BW)
+                    && cpu().has(Cpu::tAVX512VL) && cpu().has(Cpu::tAVX512DQ);
         case avx512_core_vnni:
-            return cpu.has(Cpu::tAVX512F) && cpu.has(Cpu::tAVX512BW)
-                    && cpu.has(Cpu::tAVX512VL) && cpu.has(Cpu::tAVX512DQ)
-                    && cpu.has(Cpu::tAVX512_VNNI);
+            return cpu().has(Cpu::tAVX512F) && cpu().has(Cpu::tAVX512BW)
+                    && cpu().has(Cpu::tAVX512VL) && cpu().has(Cpu::tAVX512DQ)
+                    && cpu().has(Cpu::tAVX512_VNNI);
         case avx512_mic:
-            return cpu.has(Cpu::tAVX512F) && cpu.has(Cpu::tAVX512CD)
-                    && cpu.has(Cpu::tAVX512ER) && cpu.has(Cpu::tAVX512PF);
+            return cpu().has(Cpu::tAVX512F) && cpu().has(Cpu::tAVX512CD)
+                    && cpu().has(Cpu::tAVX512ER) && cpu().has(Cpu::tAVX512PF);
         case avx512_mic_4ops:
-            return mayiuse(avx512_mic, soft) && cpu.has(Cpu::tAVX512_4FMAPS)
-                    && cpu.has(Cpu::tAVX512_4VNNIW);
+            return mayiuse(avx512_mic, soft) && cpu().has(Cpu::tAVX512_4FMAPS)
+                    && cpu().has(Cpu::tAVX512_4VNNIW);
         case avx512_core_bf16:
             return mayiuse(avx512_core_vnni, soft)
-                    && cpu.has(Cpu::tAVX512_BF16);
-        case amx_tile: return cpu.has(Cpu::tAMX_TILE);
+                    && cpu().has(Cpu::tAVX512_BF16);
+        case amx_tile: return cpu().has(Cpu::tAMX_TILE);
         case amx_int8:
-            return mayiuse(amx_tile, soft) && cpu.has(Cpu::tAMX_INT8);
+            return mayiuse(amx_tile, soft) && cpu().has(Cpu::tAMX_INT8);
         case amx_bf16:
-            return mayiuse(amx_tile, soft) && cpu.has(Cpu::tAMX_BF16);
+            return mayiuse(amx_tile, soft) && cpu().has(Cpu::tAMX_BF16);
         case avx512_core_bf16_amx_int8:
             return mayiuse(avx512_core_bf16, soft) && mayiuse(amx_int8, soft);
         case avx512_core_bf16_amx_bf16:
@@ -243,13 +248,13 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
     ((isa) == avx ? prefix STRINGIFY(avx) : \
     ((isa) == avx2 ? prefix STRINGIFY(avx2) : \
     ((isa) == avx512_common ? prefix STRINGIFY(avx512_common) : \
-    ((isa) == avx512_core ? prefix STRINGIFY(avx512_core) : \
-    ((isa) == avx512_core_vnni ? prefix STRINGIFY(avx512_core_vnni) : \
     ((isa) == avx512_mic ? prefix STRINGIFY(avx512_mic) : \
     ((isa) == avx512_mic_4ops ? prefix STRINGIFY(avx512_mic_4ops) : \
+    ((isa) == avx512_core ? prefix STRINGIFY(avx512_core) : \
+    ((isa) == avx512_core_vnni ? prefix STRINGIFY(avx512_core_vnni) : \
     ((isa) == avx512_core_bf16 ? prefix STRINGIFY(avx512_core_bf16) : \
-    ((isa) == avx512_core_bf16_amx_int8 ? prefix STRINGIFY(avx512_core_bf16_amx_int8) : \
-    ((isa) == avx512_core_bf16_amx_bf16 ? prefix STRINGIFY(avx512_core_bf16_amx_bf16) : \
+    ((isa) == avx512_core_bf16_amx_int8 ? prefix STRINGIFY(avx512_core_amx_int8) : \
+    ((isa) == avx512_core_bf16_amx_bf16 ? prefix STRINGIFY(avx512_core_amx_bf16) : \
     prefix suffix_if_any))))))))))))
 /* clang-format on */
 

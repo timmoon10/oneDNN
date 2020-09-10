@@ -58,10 +58,6 @@ struct rnn_tparams_t : public c_compatible {
     rnn_tparams_t()
         : test_mode_(false), scales_(nullptr), ngates_(0), cscale_(0.0f) {}
 
-    rnn_tparams_t(const rnn_tparams_t &rhs) : rnn_tparams_t() {
-        set(rhs.test_mode_, rhs.ngates_, rhs.scales_, rhs.cscale_);
-    }
-
     ~rnn_tparams_t() {
         test_mode_ = false;
         if (scales_ != nullptr) impl::free(scales_);
@@ -118,6 +114,9 @@ struct rnn_tparams_t : public c_compatible {
     float *scales_;
     dim_t ngates_; /* ngates is equel to the number of scales */
     float cscale_; /* =0.0f if no c state */
+
+private:
+    DNNL_DISALLOW_COPY_AND_ASSIGN(rnn_tparams_t);
 };
 
 struct scales_t : public c_compatible {
@@ -125,10 +124,6 @@ struct scales_t : public c_compatible {
     scales_t(dim_t count, int mask, const float *scales)
         : scales_(scales_buf_) {
         set(count, mask, scales);
-    }
-
-    scales_t(const scales_t &rhs) : scales_t() {
-        set(rhs.count_, rhs.mask_, rhs.scales_);
     }
 
     ~scales_t() { cleanup(); }
@@ -174,7 +169,7 @@ private:
         scales_ = scales_buf_;
     }
 
-    scales_t &operator=(const scales_t &other) = delete;
+    DNNL_DISALLOW_COPY_AND_ASSIGN(scales_t);
 };
 
 struct arg_scales_t : public c_compatible {
@@ -350,6 +345,11 @@ struct dnnl_post_ops : public dnnl::impl::c_compatible {
             float *scales;
         };
 
+        struct binary_t {
+            dnnl::impl::alg_kind_t alg;
+            dnnl::impl::memory_desc_t src1_desc;
+        };
+
         dnnl::impl::primitive_kind_t kind
                 = dnnl::impl::primitive_kind::undefined;
         union {
@@ -359,6 +359,7 @@ struct dnnl_post_ops : public dnnl::impl::c_compatible {
             } sum;
             eltwise_t eltwise;
             depthwise_conv_t depthwise_conv;
+            binary_t binary;
         };
 
         bool is_eltwise(bool require_scale_one = false) const {
@@ -384,6 +385,10 @@ struct dnnl_post_ops : public dnnl::impl::c_compatible {
         bool is_convolution() const {
             using namespace dnnl::impl;
             return kind == primitive_kind::convolution;
+        }
+
+        bool is_binary() const {
+            return kind == dnnl::impl::primitive_kind::binary;
         }
 
         dnnl::impl::status_t set_depthwise_scales(const float *scales);
@@ -420,6 +425,10 @@ struct dnnl_post_ops : public dnnl::impl::c_compatible {
                                         == rhs.depthwise_conv.scales[i];
                         if (!ret) break;
                     }
+                    break;
+                case primitive_kind::binary:
+                    ret = binary.alg == rhs.binary.alg
+                            && binary.src1_desc == rhs.binary.src1_desc;
                     break;
                 default: assert(!"unsupported post_op");
             }
@@ -465,6 +474,8 @@ struct dnnl_post_ops : public dnnl::impl::c_compatible {
     dnnl::impl::status_t append_dw_k3s2p1(dnnl::impl::data_type_t wei_dt,
             dnnl::impl::data_type_t bias_dt, dnnl::impl::data_type_t dst_dt,
             dnnl::impl::dim_t count, int mask, const float *scales);
+    dnnl::impl::status_t append_binary(dnnl::impl::alg_kind_t alg,
+            const dnnl::impl::memory_desc_t *src1_desc);
 
     int find(dnnl::impl::primitive_kind_t kind, int start = 0,
             int stop = -1) const {
@@ -513,6 +524,11 @@ struct dnnl_post_ops : public dnnl::impl::c_compatible {
     }
 
     std::vector<entry_t> entry_;
+
+private:
+    // Since binary post op accepts no more than 32 memory arguments by
+    // design, we limit the amount of post-ops to 32.
+    static constexpr int post_ops_limit = 32;
 };
 
 struct dnnl_primitive_attr : public dnnl::impl::c_compatible {

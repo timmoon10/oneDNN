@@ -64,21 +64,18 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_conf() {
 
     set_default_conf(conf, cd, *src, *wei, *dst, *bia, *attr());
 
-    conf.is_nhwc
-            = src_mdw.matches_one_of_tag(nwc, nhwc, ndhwc) != format_tag::undef
-            || dst_mdw.matches_one_of_tag(nwc, nhwc, ndhwc)
-                    != format_tag::undef;
-    const bool is_1stconv = conf.ic_without_padding <= 4;
+    const bool is_src_nhwc
+            = src_mdw.matches_one_of_tag(nwc, nhwc, ndhwc) != format_tag::undef;
+    const bool is_dst_nhwc
+            = dst_mdw.matches_one_of_tag(nwc, nhwc, ndhwc) != format_tag::undef;
+    const bool is_nhwc = is_src_nhwc || is_dst_nhwc;
+    const bool is_1stconv = conf.ic_without_padding <= 4 && !conf.is_depthwise;
 
-    // TODO: Add DW suppport in NHWC kernel
-    if (conf.is_nhwc && conf.is_depthwise) return status::unimplemented;
+    conf.is_nhwc = is_nhwc;
+    conf.is_dst_nhwc = is_dst_nhwc;
     // TODO: Add group convolution support in NHWC kernel.
-    if (conf.is_nhwc && conf.ngroups > 1
+    if (!conf.is_depthwise && conf.with_groups && conf.ngroups > 1
             && (conf.oc % 32 != 0 || conf.ic % 32 != 0))
-        return status::unimplemented;
-
-    if (!conf.is_nhwc && !conf.is_depthwise && conf.with_groups
-            && conf.ngroups > 1 && (conf.oc % 32 != 0 || conf.ic % 32 != 0))
         return status::unimplemented;
 
     conf.dst_data_type = dst_mdw.data_type();
@@ -88,52 +85,89 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_conf() {
 
     if (conf.is_nhwc) {
         conf.ver = ver_nhwc;
-        conf.sub_group_size = 8;
-        int ow_group = 1;
-        int ow_nchunk;
-
-        conf.mb_block = 1;
-        conf.nchunk = utils::div_up(conf.oc * conf.ngroups, conf.oc_block);
-
-        int max_oc = 4;
-        int oc_group
-                = utils::max_div(utils::div_up(conf.oc, conf.oc_block), max_oc);
-        int max_subgroups = 32;
-        int max_ow_group = max_subgroups / oc_group;
-
-        if (!is_1stconv) {
+        if (conf.is_depthwise) {
+            conf.sub_group_size = 16;
             conf.ic_block = 32;
+            if (!(conf.kw <= 4 && conf.stride_w <= 2 && conf.dilate_w == 0
+                        && conf.l_pad < 4)) {
+                conf.mb_block = 32;
+                conf.ow_block = 1;
+            } else {
+                conf.mb_block = 1;
+                conf.ow_block = 1;
 
-            conf.ow_block = (conf.mb * conf.oc * conf.oh * conf.ow < 49 * 1024)
-                    ? 4
-                    : 8;
-            ow_nchunk = utils::div_up(conf.ow, conf.ow_block);
-            ow_group = utils::max_div(ow_nchunk, max_ow_group);
-            if (ow_group == 1) utils::max_div(ow_nchunk + 1, max_ow_group);
-        } else { // 1st
-            conf.ic_block = 4;
-            conf.ow_block
-                    = (conf.kw * conf.kh <= 49 && conf.ow % 16 < 8) ? 16 : 12;
-            ow_nchunk = utils::div_up(conf.ow, conf.ow_block);
-            ow_group = utils::max_div(ow_nchunk, max_ow_group);
-            if (ow_group == 1) utils::max_div(ow_nchunk + 1, max_ow_group);
+                int off = conf.kw == 4 ? 1 : 0;
+                if (conf.ow < 15 - off) {
+                    conf.ow_block = conf.ow;
+                } else {
+                    for (int i = 0; i < 7; ++i) {
+                        conf.ow_block = utils::max_div(conf.ow + i, 14 - off);
+                        if (conf.ow_block > 4) break;
+                    }
+                }
+            }
+            conf.lws_d[0] = 16;
+            conf.lws_d[1] = 1;
+            conf.lws_d[2] = 1;
+
+            conf.gws_d[0] = utils::div_up(conf.ngroups, 32) * conf.lws_d[0];
+            conf.gws_d[1]
+                    = conf.od * conf.oh * utils::div_up(conf.ow, conf.ow_block);
+            conf.gws_d[2]
+                    = utils::div_up(conf.mb, utils::div_up(conf.mb_block, 4));
+
+        } else {
+            conf.sub_group_size = 8;
+            int ow_group = 1;
+            int ow_nchunk;
+
+            conf.mb_block = 1;
+            conf.nchunk = utils::div_up(conf.oc * conf.ngroups, conf.oc_block);
+
+            int max_oc = 4;
+            int oc_group = utils::max_div(
+                    utils::div_up(conf.oc, conf.oc_block), max_oc);
+            int max_subgroups = 32;
+            int max_ow_group = max_subgroups / oc_group;
+
+            if (!is_1stconv) {
+                conf.ic_block = 32;
+
+                conf.ow_block
+                        = (conf.mb * conf.oc * conf.oh * conf.ow < 49 * 1024)
+                        ? 4
+                        : 8;
+                ow_nchunk = utils::div_up(conf.ow, conf.ow_block);
+                ow_group = utils::max_div(ow_nchunk, max_ow_group);
+                if (ow_group == 1) utils::max_div(ow_nchunk + 1, max_ow_group);
+            } else { // 1st
+                conf.ic_block = 4;
+                conf.ow_block = (conf.kw * conf.kh <= 49 && conf.ow % 16 < 8)
+                        ? 16
+                        : 12;
+                ow_nchunk = utils::div_up(conf.ow, conf.ow_block);
+                ow_group = utils::max_div(ow_nchunk, max_ow_group);
+                if (ow_group == 1) utils::max_div(ow_nchunk + 1, max_ow_group);
+                if (conf.mb == 8 || conf.mb % 16 == 0) { conf.mb_block = 32; }
+            }
+
+            conf.lws_d[0] = 8 * oc_group;
+            conf.lws_d[1] = ow_group;
+            conf.lws_d[2] = 1;
+
+            conf.src_slm_size = conf.ic_block / 4
+                    * (conf.lws_d[1] * conf.stride_w * conf.ow_block
+                            + (conf.kw - 1) * (1 + conf.dilate_w));
+
+            conf.gws_d[0] = utils::rnd_up(conf.nchunk * 8, conf.lws_d[0]);
+            conf.gws_d[1] = conf.od * conf.oh
+                    * utils::rnd_up(utils::div_up(conf.ow, conf.ow_block),
+                            conf.lws_d[1]);
+            conf.gws_d[2] = is_1stconv
+                    ? conf.mb
+                    : utils::div_up(conf.mb, utils::div_up(conf.mb_block, 2));
         }
 
-        conf.lws_d[0] = 8 * oc_group;
-        conf.lws_d[1] = ow_group;
-        conf.lws_d[2] = 1;
-
-        conf.src_slm_size = conf.ic_block / 4
-                * (conf.lws_d[1] * conf.stride_w * conf.ow_block
-                        + (conf.kw - 1) * (1 + conf.dilate_w));
-
-        conf.gws_d[0] = utils::rnd_up(conf.nchunk * 8, conf.lws_d[0]);
-        conf.gws_d[1] = conf.od * conf.oh
-                * utils::rnd_up(
-                        utils::div_up(conf.ow, conf.ow_block), conf.lws_d[1]);
-        conf.gws_d[2] = is_1stconv
-                ? conf.mb
-                : utils::div_up(conf.mb, utils::div_up(conf.mb_block, 2));
     } else if (conf.is_depthwise) {
         conf.sub_group_size = 16;
         conf.ic_block = 32;
@@ -241,6 +275,13 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_conf() {
         }
     }
 
+    // TODO: add support for nhwc and dw ow_block
+    const bool has_compensation = conf.attr_info.with_src_zpoints
+            || conf.attr_info.with_dst_zpoints;
+    if (has_compensation)
+        if (conf.is_nhwc || (conf.is_depthwise && conf.mb_block != 32))
+            return status::unimplemented;
+
     conf.with_bias = cd.bias_desc.format_kind != format_kind::undef;
 
     format_tag_t src_tag, dst_tag, wei_tag;
@@ -253,6 +294,16 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_conf() {
             wei_tag = conf.with_groups
                     ? utils::pick(ndims - 3, gOIw8o4i, gOIhw8o4i, gOIdhw8o4i)
                     : utils::pick(ndims - 3, OIw8o4i, OIhw8o4i, OIdhw8o4i);
+            if (!conf.is_dst_nhwc) {
+                if (conf.mb_block == 32) {
+                    dst_tag = utils::pick(
+                            ndims - 3, NCw32n32c, NChw32n32c, NCdhw32n32c);
+                } else {
+                    dst_tag = utils::pick(ndims - 3, nCw32c, nChw32c, nCdhw32c);
+                }
+            }
+        } else if (conf.is_depthwise) {
+            wei_tag = utils::pick(ndims - 3, Goiw32g, Goihw32g, Goidhw32g);
         } else {
             wei_tag = conf.with_groups ? utils::pick(ndims - 3, gOIw4o8i8o4i,
                               gOIhw4o8i8o4i, gOIdhw4o8i8o4i)
@@ -314,6 +365,7 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_conf() {
 status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_kernel_ctx(
         compute::kernel_ctx_t &kernel_ctx) const {
     kernel_ctx.define_int("NCHW", conf.is_nchw);
+    kernel_ctx.define_int("DST_NHWC", conf.is_dst_nhwc);
     kernel_ctx.define_int("G", conf.ngroups);
     kernel_ctx.define_int("MB", conf.mb);
     kernel_ctx.define_int("IC", conf.ic);
@@ -391,6 +443,11 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_kernel_ctx(
     kernel_ctx.define_int("LWS_1", conf.lws_d[1]);
     kernel_ctx.define_int("LWS_2", conf.lws_d[2]);
 
+    if (conf.is_depthwise)
+        kernel_ctx.define_int("WEI_32G", 1);
+    else
+        kernel_ctx.define_int("WEI_4O8I8O4I", 1);
+
     kernel_ctx.set_data_type(conf.dst_data_type);
     def_data_type(kernel_ctx, conf.src_data_type, "SRC");
     def_data_type(kernel_ctx, conf.dst_data_type, "DST");
@@ -406,6 +463,18 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_kernel_ctx(
     return status::success;
 }
 
+void gen12lp_x8s8s32x_convolution_fwd_t::pd_t::init_scratchpad() {
+    if (conf.attr_info.with_src_zpoints) {
+        size_t size = conf.is_depthwise
+                ? utils::rnd_up(conf.ngroups, 32)
+                : conf.ngroups * utils::rnd_up(conf.oc, 32);
+
+        auto scratchpad = scratchpad_registry().registrar();
+        scratchpad.book(memory_tracking::names::key_conv_wei_reduction, size,
+                types::data_type_size(data_type::s32), OCL_BUFFER_ALIGNMENT);
+    }
+}
+
 status_t gen12lp_x8s8s32x_convolution_fwd_t::execute_forward(
         const exec_ctx_t &ctx) const {
     auto &src = CTX_IN_STORAGE(DNNL_ARG_SRC);
@@ -413,8 +482,36 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::execute_forward(
     auto &bias = CTX_IN_STORAGE(DNNL_ARG_BIAS);
     auto &oscales = CTX_IN_STORAGE(DNNL_ARG_ATTR_OUTPUT_SCALES);
     auto &dst = CTX_OUT_STORAGE(DNNL_ARG_DST);
+    auto &src_zpoints
+            = CTX_IN_STORAGE(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_SRC);
+    auto &dst_zpoints
+            = CTX_IN_STORAGE(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_DST);
 
     const auto &conf = pd()->conf;
+
+    // XXX: first convolution calculates compensation in-place
+    const bool precompute_compensation = conf.is_depthwise || conf.ic > 4;
+
+    std::unique_ptr<memory_storage_t> temp_src_compensation;
+    if (conf.attr_info.with_src_zpoints && precompute_compensation) {
+        temp_src_compensation = ctx.get_scratchpad_grantor().get_memory_storage(
+                memory_tracking::names::key_conv_wei_reduction);
+
+        compute::kernel_arg_list_t arg_list;
+        arg_list.set(0, src_zpoints);
+        arg_list.set(1, weights);
+        arg_list.set(2, *temp_src_compensation);
+
+        auto nd_range = conf.is_depthwise
+                ? compute::nd_range_t(
+                        {16, utils::div_up(conf.ngroups, 32), 1}, {16, 1, 1})
+                : compute::nd_range_t(
+                        {8, utils::div_up(conf.oc, 32), conf.ngroups},
+                        {8, 1, 1});
+        status_t status = parallel_for(
+                ctx, nd_range, src_compensation_kernel_, arg_list);
+        if (status != status::success) return status::runtime_error;
+    }
 
     compute::kernel_arg_list_t arg_list;
     arg_list.set(0, src);
@@ -440,6 +537,22 @@ status_t gen12lp_x8s8s32x_convolution_fwd_t::execute_forward(
     } else {
         arg_list.set(arg_idx++, memory_storage_t::empty_storage());
     }
+
+    if (conf.attr_info.with_src_zpoints) {
+        if (precompute_compensation)
+            arg_list.set(arg_idx++, *temp_src_compensation);
+        else
+            arg_list.set(arg_idx++, memory_storage_t::empty_storage());
+        arg_list.set(arg_idx++, src_zpoints);
+    } else {
+        arg_list.set(arg_idx++, memory_storage_t::empty_storage());
+        arg_list.set(arg_idx++, memory_storage_t::empty_storage());
+    }
+
+    if (conf.attr_info.with_dst_zpoints)
+        arg_list.set(arg_idx++, dst_zpoints);
+    else
+        arg_list.set(arg_idx++, memory_storage_t::empty_storage());
 
     auto nd_range = compute::nd_range_t(conf.gws_d, conf.lws_d);
     status_t status = parallel_for(ctx, nd_range, kernel_, arg_list);

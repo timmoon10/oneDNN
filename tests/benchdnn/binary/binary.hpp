@@ -48,6 +48,8 @@ struct settings_t {
     std::vector<bool> inplace {false};
     std::vector<attr_t::arg_scales_t> scales {attr_t::arg_scales_t()};
     std::vector<attr_t::post_ops_t> post_ops {attr_t::post_ops_t()};
+    std::vector<dnnl_scratchpad_mode_t> scratchpad_mode {
+            dnnl_scratchpad_mode_library};
     attr_t attr = {};
 
     const char *perf_template_csv
@@ -107,8 +109,7 @@ struct perf_report_t : public base_perf_report_t {
     void report(const prb_t *p, const res_t *r, const char *prb_str) {
         p_ = p;
         for (size_t d = 0; d < p_->stag.size(); d++)
-            stag_.push_back(
-                    fmt_tag2str(convert_tag(p_->stag[d], p_->ndims[d])));
+            stag_.push_back(normalize_tag(p_->stag[d], p_->ndims[d]));
         base_report(r, prb_str);
     }
 
@@ -130,8 +131,11 @@ private:
     std::vector<std::string> stag_;
 };
 
+int setup_binary_po(const_dnnl_primitive_desc_t pd, std::vector<int> &args,
+        std::vector<dnn_mem_t> &mem_dt, std::vector<dnn_mem_t> &mem_fp);
+
 void compute_ref(const prb_t *p, const dnn_mem_t &src0, const dnn_mem_t &src1,
-        dnn_mem_t &dst);
+        const std::vector<dnn_mem_t> &binary_po, dnn_mem_t &dst);
 
 int doit(const prb_t *p, res_t *res);
 int bench(int argc, char **argv);

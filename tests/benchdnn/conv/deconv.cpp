@@ -28,6 +28,7 @@
 
 #include "norm.hpp"
 
+#include "binary/binary.hpp"
 #include "conv/deconv.hpp"
 using namespace conv;
 
@@ -63,38 +64,40 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
         const_dnnl_primitive_desc_t hint) {
     dnnl_deconvolution_desc_t cd;
     dnnl_memory_desc_t src_d, wei_d, bia_d, dst_d;
+
     dnnl_dims_t src_1d_dims = {p->mb, p->ic, p->iw};
     dnnl_dims_t src_2d_dims = {p->mb, p->ic, p->ih, p->iw};
     dnnl_dims_t src_3d_dims = {p->mb, p->ic, p->id, p->ih, p->iw};
+    dnnl_dim_t *src_dims = p->ndims == 5
+            ? src_3d_dims
+            : p->ndims == 4 ? src_2d_dims : src_1d_dims;
+
     dnnl_dims_t wei_1d_dims = {p->g, p->oc / p->g, p->ic / p->g, p->kw};
     dnnl_dims_t wei_2d_dims = {p->g, p->oc / p->g, p->ic / p->g, p->kh, p->kw};
     dnnl_dims_t wei_3d_dims
             = {p->g, p->oc / p->g, p->ic / p->g, p->kd, p->kh, p->kw};
+    dnnl_dim_t *wei_dims = p->ndims == 5
+            ? &wei_3d_dims[!p->has_groups]
+            : p->ndims == 4 ? &wei_2d_dims[!p->has_groups]
+                            : &wei_1d_dims[!p->has_groups];
+
     dnnl_dims_t bia_dims = {p->oc};
+
     dnnl_dims_t dst_1d_dims = {p->mb, p->oc, p->ow};
     dnnl_dims_t dst_2d_dims = {p->mb, p->oc, p->oh, p->ow};
     dnnl_dims_t dst_3d_dims = {p->mb, p->oc, p->od, p->oh, p->ow};
+    dnnl_dim_t *dst_dims = p->ndims == 5
+            ? dst_3d_dims
+            : p->ndims == 4 ? dst_2d_dims : dst_1d_dims;
 
-    DNN_SAFE(dnnl_memory_desc_init_by_tag(&src_d, p->ndims,
-                     p->ndims == 5 ? src_3d_dims
-                                   : p->ndims == 3 ? src_1d_dims : src_2d_dims,
-                     p->cfg[SRC].dt, convert_tag(p->stag, p->ndims)),
-            WARN);
-    DNN_SAFE(dnnl_memory_desc_init_by_tag(&wei_d, p->ndims + p->has_groups,
-                     p->ndims == 5
-                             ? &wei_3d_dims[!p->has_groups]
-                             : p->ndims == 3 ? &wei_1d_dims[!p->has_groups]
-                                             : &wei_2d_dims[!p->has_groups],
-                     p->cfg[WEI].dt, convert_tag(p->wtag, p->ndims)),
-            WARN);
+    SAFE(init_md(&src_d, p->ndims, src_dims, p->cfg[SRC].dt, p->stag), CRIT);
+    SAFE(init_md(&wei_d, p->ndims + p->has_groups, wei_dims, p->cfg[WEI].dt,
+                 p->wtag),
+            CRIT);
     DNN_SAFE(dnnl_memory_desc_init_by_tag(
                      &bia_d, 1, bia_dims, p->cfg[BIA].dt, dnnl_format_tag_any),
             WARN);
-    DNN_SAFE(dnnl_memory_desc_init_by_tag(&dst_d, p->ndims,
-                     p->ndims == 5 ? dst_3d_dims
-                                   : p->ndims == 3 ? dst_1d_dims : dst_2d_dims,
-                     p->cfg[DST].dt, convert_tag(p->dtag, p->ndims)),
-            WARN);
+    SAFE(init_md(&dst_d, p->ndims, dst_dims, p->cfg[DST].dt, p->dtag), CRIT);
 
     dnnl_dim_t strides_nd[] = {p->sd, p->sh, p->sw};
     dnnl_dim_t dilates_nd[] = {p->dd, p->dh, p->dw};
@@ -117,8 +120,8 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
                              p->dir == FWD_I ? dnnl_forward_inference
                                              : dnnl_forward_training,
                              alg, &src_d, &wei_d,
-                             p->dir == FWD_B ? &bia_d : NULL, &dst_d, strides,
-                             dilates, padding, padding_r),
+                             p->dir == FWD_B ? &bia_d : nullptr, &dst_d,
+                             strides, dilates, padding, padding_r),
                     WARN);
             break;
         case BWD_D:
@@ -131,8 +134,8 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
         case BWD_WB:
             DNN_SAFE(dnnl_dilated_deconvolution_backward_weights_desc_init(&cd,
                              alg, &src_d, &wei_d,
-                             p->dir == BWD_W ? NULL : &bia_d, &dst_d, strides,
-                             dilates, padding, padding_r),
+                             p->dir == BWD_W ? nullptr : &bia_d, &dst_d,
+                             strides, dilates, padding, padding_r),
                     WARN);
             break;
         default: DNN_SAFE(dnnl_invalid_arguments, CRIT);
@@ -142,10 +145,13 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
                                                   : dnnl_unimplemented,
             CRIT);
 
-    auto dnnl_attr = create_dnnl_attr(p->attr, p->oc, p->scales);
+    attr_args_t attr_args;
+    attr_args.prepare_output_scales(p->attr, p->scales, p->oc);
+    attr_args.prepare_binary_post_op_mds(p->attr, p->ndims, dst_dims);
+    auto dnnl_attr = create_dnnl_attr(p->attr, attr_args);
 
     dnnl_status_t init_status
-            = dnnl_primitive_desc_create(&dpd, &cd, dnnl_attr, engine, NULL);
+            = dnnl_primitive_desc_create(&dpd, &cd, dnnl_attr, engine, nullptr);
 
     dnnl_primitive_attr_destroy(dnnl_attr);
 
@@ -172,18 +178,8 @@ void check_known_skipped_case(const prb_t *p, res_t *r) {
             {p->cfg[SRC].dt, p->cfg[WEI].dt, p->cfg[DST].dt}, p->dir, r);
     if (r->state == SKIPPED) return;
 
-    // TODO: shapes with dilation and non-unit stride go to reference which
-    // does not support attributes yet. Remove the whole condition once
-    // attributes support is added to reference.
-    // TODO: uncomment deconv shape mb96ic64ih6oc32oh14kh5ph2dh2n"4d/5x5"
-    static auto isa = dnnl_get_effective_cpu_isa();
-    static bool has_avx512_bw = isa >= dnnl_cpu_isa_avx512_core;
-    bool is_int8 = p->cfg[WEI].dt == dnnl_s8;
-    bool has_attr_support = IMPLICATION(is_int8, has_avx512_bw)
-            && IMPLICATION(p->dd != 0, p->sd == 1)
-            && IMPLICATION(p->dh != 0, p->sh == 1)
-            && IMPLICATION(p->dw != 0, p->sw == 1);
-    if (!p->attr.is_def() && !has_attr_support) {
+    // GPU does not support any attributes
+    if (engine_tgt_kind == dnnl_gpu && !p->attr.is_def()) {
         r->state = SKIPPED, r->reason = CASE_NOT_SUPPORTED;
         return;
     }
@@ -230,12 +226,12 @@ int doit(const prb_t *p, res_t *r) {
     const auto &scratchpad_md = q(DNNL_ARG_SCRATCHPAD);
     auto wei_tr_md = wei_md;
 
-    const bool with_groups = 1;
+    const bool with_groups = true;
     swap(wei_tr_md.dims[with_groups + 0], wei_tr_md.dims[with_groups + 1]);
 
     const auto fp = dnnl_f32;
-    const auto src_tag = get_abx_tag(src_md.ndims);
-    const auto wei_tag = get_abx_tag(wei_md.ndims);
+    const auto src_tag = tag::abx;
+    const auto wei_tag = tag::abx;
 
     const auto &test_engine = get_test_engine();
 
@@ -244,12 +240,17 @@ int doit(const prb_t *p, res_t *r) {
     dnn_mem_t dst_dt(dst_md, test_engine);
     dnn_mem_t bia_dt(bia_md, test_engine);
     dnn_mem_t scratchpad_dt(scratchpad_md, test_engine);
+    std::vector<dnn_mem_t> binary_po_fp, binary_po_dt;
+    std::vector<int> binary_po_args;
+    SAFE(binary::setup_binary_po(
+                 const_pd, binary_po_args, binary_po_dt, binary_po_fp),
+            WARN);
 
     dnn_mem_t src_fp(src_md, fp, src_tag, test_engine);
     dnn_mem_t wei_fp(wei_md, fp, wei_tag, test_engine);
     dnn_mem_t dst_fp(dst_md, fp, src_tag, test_engine);
     dnn_mem_t wei_tr_fp(wei_tr_md, fp, wei_tag, test_engine);
-    dnn_mem_t bia_fp(bia_md, fp, dnnl_x, test_engine);
+    dnn_mem_t bia_fp(bia_md, fp, tag::x, test_engine);
 
     /* fill memory + reorders <-> */
     SAFE(fill_dst(p, dst_dt, dst_fp, r), WARN);
@@ -266,12 +267,13 @@ int doit(const prb_t *p, res_t *r) {
         args.set(DNNL_ARG_BIAS, bia_dt);
         args.set(DNNL_ARG_DST, dst_dt);
         args.set(DNNL_ARG_SCRATCHPAD, scratchpad_dt);
+        args.set(binary_po_args, binary_po_dt);
 
         SAFE(execute_and_wait(d, args), WARN);
 
         if (bench_mode & CORR) {
-            compute_ref_bwd_d(
-                    &p_tr, nullptr, dst_fp, wei_tr_fp, bia_fp, src_fp);
+            compute_ref_bwd_d(&p_tr, nullptr, dst_fp, wei_tr_fp, bia_fp,
+                    binary_po_fp, src_fp);
             dnn_mem_t dst(dst_dt, fp, src_tag, test_engine);
             SAFE(compare_dst(p, dst, dst_fp, r, true), WARN);
         }
@@ -285,7 +287,8 @@ int doit(const prb_t *p, res_t *r) {
 
         if (bench_mode & CORR) {
             dnn_mem_t zero_fp;
-            compute_ref_fwd(&p_tr, nullptr, dst_fp, wei_tr_fp, zero_fp, src_fp);
+            compute_ref_fwd(&p_tr, nullptr, dst_fp, wei_tr_fp, zero_fp,
+                    std::vector<dnn_mem_t>(), src_fp);
             dnn_mem_t src(src_dt, fp, src_tag, test_engine);
             SAFE(compare_src(p, src, src_fp, r, true), WARN);
         }
@@ -305,7 +308,7 @@ int doit(const prb_t *p, res_t *r) {
             SAFE(compare_wei(&p_tr, wei, wei_fp, r, true), WARN);
             if (p->dir & FLAG_BIA) {
                 compute_ref_bwd_bias(p, bia_fp, dst_fp);
-                dnn_mem_t bia(bia_dt, fp, dnnl_x, test_engine);
+                dnn_mem_t bia(bia_dt, fp, tag::x, test_engine);
                 SAFE(compare_bia(p, bia, bia_fp, r, true), WARN);
             }
         }

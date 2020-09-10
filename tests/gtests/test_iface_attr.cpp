@@ -21,12 +21,14 @@
 
 namespace dnnl {
 
-class attr_test : public ::testing::Test {
+using data_type = memory::data_type;
+
+class attr_test_t : public ::testing::Test {
 protected:
-    virtual void SetUp() {}
+    void SetUp() override {}
 };
 
-TEST_F(attr_test, TestScratchpadMode) {
+TEST_F(attr_test_t, TestScratchpadMode) {
     dnnl::primitive_attr attr;
     for (auto m : {scratchpad_mode::library, scratchpad_mode::user}) {
         attr.set_scratchpad_mode(m);
@@ -34,7 +36,7 @@ TEST_F(attr_test, TestScratchpadMode) {
     }
 }
 
-TEST_F(attr_test, TestScratchpadModeEx) {
+TEST_F(attr_test_t, TestScratchpadModeEx) {
     engine eng = get_test_engine();
 
     const memory::dim N = 2, C = 2, W = 2;
@@ -63,7 +65,7 @@ TEST_F(attr_test, TestScratchpadModeEx) {
     }
 }
 
-HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestIntOutputScales) {
+HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test_t, TestIntOutputScales) {
     dnnl::primitive_attr attr;
 
     int mask;
@@ -92,7 +94,7 @@ HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestIntOutputScales) {
     ASSERT_EQ(scales[2], 3.);
 }
 
-TEST_F(attr_test, TestZeroPoints) {
+TEST_F(attr_test_t, TestZeroPoints) {
     dnnl::primitive_attr attr;
 
     const std::vector<int> supported_args
@@ -134,7 +136,7 @@ TEST_F(attr_test, TestZeroPoints) {
     // multiple zero_points not implemented yet ...
 }
 
-TEST_F(attr_test, TestZeroPointsExpectFailure) {
+TEST_F(attr_test_t, TestZeroPointsExpectFailure) {
     dnnl::primitive_attr attr;
 
     const int supported_arg = DNNL_ARG_SRC;
@@ -148,7 +150,7 @@ TEST_F(attr_test, TestZeroPointsExpectFailure) {
     EXPECT_ANY_THROW(attr.set_zero_points(unsupported_arg, 1 << 1, {1, 2, 3}));
 }
 
-HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestScales) {
+HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test_t, TestScales) {
     dnnl::primitive_attr attr;
 
     const std::vector<int> supported_args = {DNNL_ARG_SRC_0, DNNL_ARG_SRC_1};
@@ -182,7 +184,7 @@ HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestScales) {
     ASSERT_EQ(scales[2], 3.);
 }
 
-TEST_F(attr_test, TestScalesExpectFailure) {
+TEST_F(attr_test_t, TestScalesExpectFailure) {
     dnnl::primitive_attr attr;
     const int unsupported_arg = DNNL_ARG_MEAN;
 
@@ -191,7 +193,7 @@ TEST_F(attr_test, TestScalesExpectFailure) {
     EXPECT_ANY_THROW(attr.set_scales(unsupported_arg, 1 << 1, {1, 2, 3}));
 }
 
-HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestPostOps) {
+HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test_t, TestPostOps) {
     dnnl::primitive_attr attr;
     dnnl::post_ops ops;
 
@@ -220,9 +222,39 @@ HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestPostOps) {
     ASSERT_EQ(alg, algorithm::eltwise_bounded_relu);
     ASSERT_FLOAT_EQ(alpha, 3.3f);
     ASSERT_FLOAT_EQ(beta, 4.4f);
+
+    memory::desc src1_md({1}, data_type::f32, {1});
+    ops.append_binary(algorithm::binary_add, src1_md);
+    attr.set_post_ops(ops);
+
+    ASSERT_EQ(attr.get_post_ops().len(), 3);
+    ASSERT_EQ(attr.get_post_ops().kind(0), primitive::kind::sum);
+    ASSERT_EQ(attr.get_post_ops().kind(1), primitive::kind::eltwise);
+    ASSERT_EQ(attr.get_post_ops().kind(2), primitive::kind::binary);
+    memory::desc src1_md_out;
+    attr.get_post_ops().get_params_binary(2, alg, src1_md_out);
+    ASSERT_EQ(alg, algorithm::binary_add);
+    ASSERT_EQ(src1_md, src1_md_out);
 }
 
-HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, DepthwiseFusionPostop) {
+TEST_F(attr_test_t, TestPostOpsCheckLimit) {
+    dnnl::post_ops ops_sum, ops_eltwise, ops_binary;
+
+    for (int i = 0; i < 32; i++) {
+        EXPECT_NO_THROW(ops_sum.append_sum(i + 1.f));
+        EXPECT_NO_THROW(ops_eltwise.append_eltwise(
+                i, algorithm::eltwise_relu, 2 * i, 0.f));
+        EXPECT_NO_THROW(ops_binary.append_binary(algorithm::binary_add,
+                memory::desc({i}, data_type::s8, memory::format_tag::a)));
+    }
+    EXPECT_ANY_THROW(ops_sum.append_sum(1.f));
+    EXPECT_ANY_THROW(
+            ops_eltwise.append_eltwise(1.f, algorithm::eltwise_relu, 1.f, 0.f));
+    EXPECT_ANY_THROW(ops_binary.append_binary(algorithm::binary_add,
+            memory::desc({1}, data_type::s8, memory::format_tag::a)));
+}
+
+HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test_t, DepthwiseFusionPostop) {
     dnnl::primitive_attr attr;
     dnnl::post_ops ops;
 
@@ -265,7 +297,7 @@ HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, DepthwiseFusionPostop) {
     ASSERT_EQ(scales_in, scales_out);
 }
 
-HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, DepthwiseFusion) {
+HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test_t, DepthwiseFusion) {
 
     auto engine_kind = get_test_engine_kind();
     SKIP_IF(engine_kind != engine::kind::cpu,
@@ -320,7 +352,7 @@ HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, DepthwiseFusion) {
     }
 }
 
-HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test, TestGetAttr) {
+HANDLE_EXCEPTIONS_FOR_TEST_F(attr_test_t, TestGetAttr) {
     auto engine_kind = get_test_engine_kind();
     SKIP_IF(engine_kind != engine::kind::cpu,
             "Depthwise fusion is only supported on CPU engine");

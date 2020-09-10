@@ -54,16 +54,13 @@ struct binary_kernel_t {
     binary_kernel_t(int vlen) : vlen_(vlen) {}
     virtual ~binary_kernel_t() = default;
 
-    void operator()(const call_params_t *p) {
-        assert(ker_);
-        ker_(p);
-    }
+    virtual void operator()(call_params_t *p) = 0;
+    virtual status_t create_kernel() = 0;
     int vlen() const { return vlen_; }
     op_t op_type() const { return op_type_; }
 
 protected:
     int vlen_ = 0;
-    void (*ker_)(const call_params_t *) = nullptr;
 
     op_t op_type_ = op_t::none;
 };
@@ -211,8 +208,8 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
     }
 
     virtual void prepare_isa_subkernel() = 0;
-    virtual void compute_bcast(bool tail = false) = 0;
-    virtual void compute_dst(int unroll, bool tail = false) = 0;
+    virtual void compute_bcast(bool tail) = 0;
+    virtual void compute_dst(int unroll, bool tail) = 0;
 
     void forward() {
         Label unroll_loop, unroll_loop_tail, nelems_tail, end;
@@ -223,14 +220,14 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
         xor_(reg_offt_src1, reg_offt_src1); // offt_src1 to get addr of src1
         size_t vec_size = simd_w_ * data_type_size_;
 
-        compute_bcast(); // bcast/load vreg just one time per a kernel call
+        compute_bcast(false); // bcast/load vreg just one time per a kernel call
         L(unroll_loop);
         {
             size_t offt = unroll_regs_ * vec_size;
             cmp(reg_reverse_spat_offt, offt);
             jl(unroll_loop_tail, T_NEAR);
 
-            compute_dst(unroll_regs_);
+            compute_dst(unroll_regs_, false);
             sub(reg_reverse_spat_offt, offt);
             add(reg_offt_src0, offt);
             if (use_stride_src1_) add(reg_offt_src1, offt);
@@ -242,7 +239,7 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
             cmp(reg_reverse_spat_offt, vec_size);
             jl(nelems_tail, T_NEAR);
 
-            compute_dst(1);
+            compute_dst(1, false);
             sub(reg_reverse_spat_offt, vec_size);
             add(reg_offt_src0, vec_size);
             if (use_stride_src1_) add(reg_offt_src1, vec_size);
@@ -260,7 +257,7 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
         L(end);
     }
 
-    void get_code() {
+    void generate() override {
         preamble();
         load_kernel_params();
         prepare_isa_subkernel();
@@ -268,15 +265,19 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
         postamble();
 
         if (eltwise_injector_) eltwise_injector_->prepare_table();
+    }
 
-        ker_ = getCode<decltype(ker_)>();
+    status_t create_kernel() override { return jit_generator::create_kernel(); }
+
+    void operator()(binary_kernel_t::call_params_t *p) override {
+        jit_generator::operator()(p);
     }
 
     jit_uni_binary_kernel_t(const binary_pd_t *pd)
         : binary_kernel_t(cpu_isa_traits<isa>::vlen), pd_(pd) {
         init();
     }
-    virtual ~jit_uni_binary_kernel_t() = default;
+    ~jit_uni_binary_kernel_t() override = default;
 };
 
 template <cpu_isa_t isa, data_type_t src_type>
@@ -384,14 +385,14 @@ struct jit_uni_binary_subkernel_t<avx512_core_bf16, src_type>
         }
     }
 
-    void compute_bcast(bool tail = false) override {
+    void compute_bcast(bool tail) override {
         if (broadcast_src1_value_)
             bcast(vbcast_src1, src1_ptr(), src_type);
         else if (offt_src1_ == 0)
             load(vbcast_src1, src1_ptr(), src_type, tail);
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vbcast_src1;
@@ -413,9 +414,7 @@ struct jit_uni_binary_subkernel_t<avx512_core_bf16, src_type>
     }
 
     jit_uni_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_binary_kernel_t(pd) {
-        get_code();
-    }
+        : jit_uni_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src_type>
@@ -539,14 +538,14 @@ struct jit_uni_binary_subkernel_t<avx512_core, src_type>
         }
     }
 
-    void compute_bcast(bool tail = false) override {
+    void compute_bcast(bool tail) override {
         if (broadcast_src1_value_)
             bcast(vbcast_src1, src1_ptr(), src_type);
         else if (offt_src1_ == 0)
             load(vbcast_src1, src1_ptr(), src_type, tail);
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vbcast_src1;
@@ -568,9 +567,7 @@ struct jit_uni_binary_subkernel_t<avx512_core, src_type>
     }
 
     jit_uni_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_binary_kernel_t(pd) {
-        get_code();
-    }
+        : jit_uni_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src_type>
@@ -605,14 +602,14 @@ struct jit_uni_binary_subkernel_t<avx2, src_type>
             uni_vmovups_tail(dst, tail_vmask, src);
     }
 
-    void compute_bcast(bool tail = false) override {
+    void compute_bcast(bool tail) override {
         if (broadcast_src1_value_)
             uni_vbroadcastss(vbcast_src1, src1_ptr());
         else if (offt_src1_ == 0)
             load(vbcast_src1, src1_ptr(), tail);
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vbcast_src1;
@@ -634,9 +631,7 @@ struct jit_uni_binary_subkernel_t<avx2, src_type>
     }
 
     jit_uni_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_binary_kernel_t(pd) {
-        get_code();
-    }
+        : jit_uni_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src_type>
@@ -672,14 +667,14 @@ struct jit_uni_binary_subkernel_t<sse41, src_type>
                         src, i);
     }
 
-    void compute_bcast(bool tail = false) override {
+    void compute_bcast(bool tail) override {
         if (broadcast_src1_value_)
             uni_vbroadcastss(vbcast_src1, src1_ptr());
         else if (offt_src1_ == 0)
             load(vbcast_src1, 0, DNNL_ARG_SRC_1, tail);
     }
 
-    void compute_dst(int unroll, bool tail = false) override {
+    void compute_dst(int unroll, bool tail) override {
         for (int i = 0; i < unroll; i++) {
             Vmm vreg_tmp_src0 = Vmm(2 * i + 1);
             Vmm vreg_tmp_src1 = vbcast_src1;
@@ -702,9 +697,7 @@ struct jit_uni_binary_subkernel_t<sse41, src_type>
     }
 
     jit_uni_binary_subkernel_t(const binary_pd_t *pd)
-        : jit_uni_binary_kernel_t(pd) {
-        get_code();
-    }
+        : jit_uni_binary_kernel_t(pd) {}
 };
 
 template <data_type_t src_type>
@@ -727,12 +720,16 @@ std::unique_ptr<binary_kernel_t> create_binary_kernel(const binary_pd_t *pd) {
 
 template <data_type_t src_type>
 jit_uni_binary_t<src_type>::jit_uni_binary_t(const pd_t *apd)
-    : primitive_t(apd) {
-    kernel_ = create_binary_kernel<src_type>(pd());
-}
+    : primitive_t(apd) {}
 
 template <data_type_t src_type>
 jit_uni_binary_t<src_type>::~jit_uni_binary_t() = default;
+
+template <data_type_t src_type>
+status_t jit_uni_binary_t<src_type>::init(engine_t *engine) {
+    kernel_ = create_binary_kernel<src_type>(pd());
+    return kernel_->create_kernel();
+}
 
 template <data_type_t src_type>
 status_t jit_uni_binary_t<src_type>::execute(const exec_ctx_t &ctx) const {

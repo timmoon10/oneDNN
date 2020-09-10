@@ -20,26 +20,32 @@
 
 namespace pool {
 
-void compute_ref_fwd(
-        const prb_t *p, const dnn_mem_t &src, dnn_mem_t &dst, dnn_mem_t &ws) {
+void compute_ref_fwd(const prb_t *p, const dnn_mem_t &src,
+        const std::vector<dnn_mem_t> &binary_po, dnn_mem_t &dst,
+        dnn_mem_t &ws) {
+    std::vector<int> v_bin_po_mask = p->attr.post_ops.get_binary_po_masks();
     auto ker = [&](int64_t mb, int64_t ic, int64_t od, int64_t oh, int64_t ow) {
         const int64_t ID = p->id, IH = p->ih, IW = p->iw;
         const int64_t KD = p->kd, KH = p->kh, KW = p->kw;
         const int64_t PD = p->pd, PH = p->ph, PW = p->pw;
         const int64_t SD = p->sd, SH = p->sh, SW = p->sw;
+        const int64_t DD = p->dd, DH = p->dh, DW = p->dw;
 
-        float max_value = -FLT_MAX;
+        // XXX: this is a hack to let tests with padded area to pass for bf16
+        // dt due to the library initialize values with -max_dt, but not -INF.
+        float max_value = lowest_dt(p->cfg[DST].dt);
         float avg_value = 0.;
         int ws_off = INT_MAX;
+        int num_summands = 0;
 
         for (int64_t kd = 0; kd < KD; ++kd) {
-            const int64_t id = od * SD - PD + kd;
+            const int64_t id = od * SD - PD + kd * (DD + 1);
             if (id < 0 || id >= ID) continue;
             for (int64_t kh = 0; kh < KH; ++kh) {
-                const int64_t ih = oh * SH - PH + kh;
+                const int64_t ih = oh * SH - PH + kh * (DH + 1);
                 if (ih < 0 || ih >= IH) continue;
                 for (int64_t kw = 0; kw < KW; ++kw) {
-                    const int64_t iw = ow * SW - PW + kw;
+                    const int64_t iw = ow * SW - PW + kw * (DW + 1);
                     if (iw < 0 || iw >= IW) continue;
 
                     float s = src.get_elem(src_off_f(p, mb, ic, id, ih, iw));
@@ -48,16 +54,29 @@ void compute_ref_fwd(
                         ws_off = ker_off_f(p, kd, kh, kw);
                     }
                     avg_value += s;
+                    num_summands++;
                 }
             }
         }
 
         const auto dst_off = dst_off_f(p, mb, ic, od, oh, ow);
+        float res = 0.f;
         if (p->alg == MAX) {
-            dst.set_elem(dst_off, max_value);
+            res = max_value;
             if (!(p->dir & FLAG_INF)) ws.set_elem(dst_off, ws_off);
-        } else if (p->alg == AVG_NP || p->alg == AVG_P)
-            dst.set_elem(dst_off, avg_value / get_num_summands(p, od, oh, ow));
+        } else if (p->alg == AVG_NP || p->alg == AVG_P) {
+            res = avg_value / get_num_summands(p, od, oh, ow);
+        }
+
+        std::vector<float> v_binary_vals;
+        v_binary_vals.reserve(v_bin_po_mask.size());
+        for (size_t d = 0; d < v_bin_po_mask.size(); ++d) {
+            auto bin_po_offset = dst.get_scale_idx(dst_off, v_bin_po_mask[d]);
+            float binary_val = binary_po[d].get_elem(bin_po_offset);
+            v_binary_vals.push_back(binary_val);
+        }
+        maybe_post_ops(p->attr, res, 0.f, v_binary_vals);
+        dst.set_elem(dst_off, res);
     };
 
     dnnl::impl::parallel_nd(p->mb, p->ic, p->od, p->oh, p->ow,
@@ -82,17 +101,18 @@ void compute_ref_bwd(const prb_t *p, dnn_mem_t &diff_src,
 
         const int64_t ID = p->id, IH = p->ih, IW = p->iw;
         const int64_t KD = p->kd, KH = p->kh, KW = p->kw;
+        const int64_t DD = p->dd, DH = p->dh, DW = p->dw;
         const int64_t PD = p->pd, PH = p->ph, PW = p->pw;
         const int64_t SD = p->sd, SH = p->sh, SW = p->sw;
 
         for (int64_t kd = 0; kd < KD; ++kd) {
-            const int64_t id = od * SD - PD + kd;
+            const int64_t id = od * SD - PD + kd * (DD + 1);
             if (id < 0 || id >= ID) continue;
             for (int64_t kh = 0; kh < KH; ++kh) {
-                const int64_t ih = oh * SH - PH + kh;
+                const int64_t ih = oh * SH - PH + kh * (DH + 1);
                 if (ih < 0 || ih >= IH) continue;
                 for (int64_t kw = 0; kw < KW; ++kw) {
-                    const int64_t iw = ow * SW - PW + kw;
+                    const int64_t iw = ow * SW - PW + kw * (DW + 1);
                     if (iw < 0 || iw >= IW) continue;
 
                     float &S = ((

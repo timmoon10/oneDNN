@@ -278,6 +278,7 @@ struct conv_conf_t {
     format_tag_t src_tag, dst_tag, wei_tag;
     bool is_nchw;
     bool is_src_nchw, is_src_nhwc;
+    bool is_dst_nhwc;
 
     data_type_t src_data_type;
     data_type_t weights_data_type;
@@ -293,8 +294,10 @@ struct pool_conf_t {
     int id, ih, iw, od, oh, ow;
     int stride_d, stride_h, stride_w;
     int kd, kh, kw;
+    int dd, dh, dw;
     int f_pad, t_pad, l_pad;
     data_type_t src_dt;
+    data_type_t dst_dt;
     alg_kind_t alg;
     bool is_training, is_backward;
     bool use_mb_block, use_c_block;
@@ -302,6 +305,9 @@ struct pool_conf_t {
     int nvect;
     compute::dispatch_t dispatch;
     int sub_group_size;
+
+    memory_desc_info_t src_md_info;
+    memory_desc_info_t dst_md_info;
 };
 
 // Inner Product
@@ -395,6 +401,7 @@ struct rnn_conf_t {
     size_t ws_diff_states_offset;
     size_t ws_grid_comp_offset;
     size_t scratch_cell_offset;
+    size_t ws_dhG1_offset;
     size_t ws_h_state_offset;
     size_t ws_c_state_offset;
     size_t ws_bias_offset;
@@ -545,8 +552,9 @@ struct shuffle_conf_t {
     size_t gws_d[3];
 };
 
-inline void set_default_pool_conf(pool_conf_t &conf, const pooling_desc_t &desc,
-        const memory_desc_t &src_md, const memory_desc_t &dst_md) {
+inline void set_default_pool_conf(pool_conf_t &conf,
+        const pooling_v2_desc_t &desc, const memory_desc_t &src_md,
+        const memory_desc_t &dst_md) {
     const memory_desc_wrapper src_mdw(src_md);
     const memory_desc_wrapper dst_mdw(dst_md);
 
@@ -573,6 +581,14 @@ inline void set_default_pool_conf(pool_conf_t &conf, const pooling_desc_t &desc,
     conf.kh = (ndims == 3) ? 1 : desc.kernel[ndims - 4];
     conf.kw = desc.kernel[ndims - 3];
 
+    if (desc.primitive_kind != dnnl_pooling_v2) {
+        conf.dd = conf.dh = conf.dw = 0;
+    } else {
+        conf.dd = (ndims == 5) ? desc.dilation[0] : 0;
+        conf.dh = (ndims == 3) ? 0 : desc.dilation[ndims - 4];
+        conf.dw = desc.dilation[ndims - 3];
+    }
+
     conf.f_pad = (ndims == 5) ? desc.padding[0][0] : 0;
     conf.t_pad = (ndims == 3) ? 0 : desc.padding[0][ndims - 4];
     conf.l_pad = desc.padding[0][ndims - 3];
@@ -580,6 +596,10 @@ inline void set_default_pool_conf(pool_conf_t &conf, const pooling_desc_t &desc,
     conf.alg = desc.alg_kind;
 
     conf.src_dt = src_mdw.data_type();
+    conf.dst_dt = dst_mdw.data_type();
+
+    conf.src_md_info = memory_desc_info_t::create(src_mdw);
+    conf.dst_md_info = memory_desc_info_t::create(dst_mdw);
 
     conf.is_training = desc.prop_kind == prop_kind::forward_training;
     conf.is_backward = desc.prop_kind == prop_kind::backward_data;

@@ -15,10 +15,12 @@
 *******************************************************************************/
 
 #include <assert.h>
+#include <cctype>
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #include <sstream>
 
@@ -28,11 +30,16 @@
 #include "dnn_types.hpp"
 #include "dnnl_common.hpp"
 #include "dnnl_debug.hpp"
+#include "dnnl_memory.hpp"
 #include "src/common/math_utils.hpp"
 #include "tests/test_thread.hpp"
 
+#define BENCHDNN_DNNL_ARG_UNDEF 0
+
 namespace tag {
+const char *x {"x"};
 const char *abx {"abx"};
+const char *axb {"axb"};
 const char *any {"any"};
 const char *undef {"undef"};
 } // namespace tag
@@ -59,7 +66,7 @@ std::ostream &operator<<(std::ostream &s, const dims_t &dims) {
 
 std::ostream &operator<<(std::ostream &s, dir_t dir) {
 #define CASE(x) \
-    if (dir == x) return s << STRINGIFY(x)
+    if (dir == (x)) return s << STRINGIFY(x)
     CASE(FWD_B);
     CASE(FWD_D);
     CASE(FWD_I);
@@ -128,18 +135,17 @@ const char *data_kind2str(data_kind_t kind) {
     return "incorrect data kind";
 }
 
-static const std::map<int, const char *> arg2str = {
+static const std::map<int, const char *> supported_args {
         {DNNL_ARG_SRC, "src"},
         {DNNL_ARG_SRC_1, "src1"},
         {DNNL_ARG_WEIGHTS, "wei"},
         {DNNL_ARG_DST, "dst"},
 };
 
-#define DNNL_ARG_UNDEF 0
 static int str2arg(const std::string &str) {
-    for (const auto &arg : arg2str)
+    for (const auto &arg : supported_args)
         if (str.compare(arg.second) == 0) return arg.first;
-    return DNNL_ARG_UNDEF;
+    return BENCHDNN_DNNL_ARG_UNDEF;
 }
 
 policy_t attr_t::str2policy(const std::string &str) {
@@ -228,7 +234,7 @@ int attr_t::zero_points_t::from_str(const std::string &s) {
     size_t start_pos = 0;
     while (start_pos != std::string::npos) {
         auto arg = str2arg(get_substr(s, start_pos));
-        if (arg == DNNL_ARG_UNDEF || start_pos == std::string::npos
+        if (arg == BENCHDNN_DNNL_ARG_UNDEF || start_pos == std::string::npos
                 || start_pos >= s.size())
             return FAIL;
 
@@ -255,14 +261,14 @@ int attr_t::arg_scales_t::from_str(const std::string &s) {
     size_t start_pos = 0;
     while (start_pos != std::string::npos) {
         auto arg = str2arg(get_substr(s, start_pos));
-        if (arg == DNNL_ARG_UNDEF || start_pos == std::string::npos
+        if (arg == BENCHDNN_DNNL_ARG_UNDEF || start_pos == std::string::npos
                 || start_pos >= s.size())
             return FAIL;
 
         auto policy_str = get_substr(s, start_pos);
         auto scale_str = policy_str + ":" + get_substr(s, start_pos, '_');
         scale_t arg_scale;
-        auto status = arg_scale.from_str(scale_str.c_str());
+        auto status = arg_scale.from_str(scale_str);
         if (status != OK) return status;
         set(arg, arg_scale);
     }
@@ -271,11 +277,11 @@ int attr_t::arg_scales_t::from_str(const std::string &s) {
 
 using pk_t = attr_t::post_ops_t::kind_t;
 
-typedef struct {
+struct po_table_entry_t {
     pk_t kind;
     const char *kind_name;
     dnnl_alg_kind_t dnnl_kind;
-} po_table_entry_t;
+};
 
 static po_table_entry_t kind_table[] = {
         // sum
@@ -331,7 +337,8 @@ pk_t attr_t::post_ops_t::str2kind(const std::string &str) {
         if (s.compare(e.kind_name) == 0) return e.kind;
     }
     assert(!"unknown attr_t::post_ops_t::kind_t kind");
-    return kind_table[KIND_TOTAL].kind;
+    const auto table_size = sizeof(kind_table) / sizeof(*kind_table);
+    return kind_table[table_size - 1].kind;
 }
 
 const char *attr_t::post_ops_t::kind2str(pk_t kind) {
@@ -339,7 +346,8 @@ const char *attr_t::post_ops_t::kind2str(pk_t kind) {
         if (e.kind == kind) return e.kind_name;
     }
     assert(!"unknown attr::post_ops::kind");
-    return kind_table[KIND_TOTAL].kind_name;
+    const auto table_size = sizeof(kind_table) / sizeof(*kind_table);
+    return kind_table[table_size - 1].kind_name;
 }
 
 dnnl_alg_kind_t attr_t::post_ops_t::kind2dnnl_kind(pk_t kind) {
@@ -347,7 +355,21 @@ dnnl_alg_kind_t attr_t::post_ops_t::kind2dnnl_kind(pk_t kind) {
         if (e.kind == kind) return e.dnnl_kind;
     }
     assert(!"unknown attr::post_ops::kind");
-    return kind_table[KIND_TOTAL].dnnl_kind;
+    const auto table_size = sizeof(kind_table) / sizeof(*kind_table);
+    return kind_table[table_size - 1].dnnl_kind;
+}
+
+std::vector<int> attr_t::post_ops_t::get_binary_po_masks() const {
+    std::vector<int> v_masks;
+    for (int idx = 0; idx < len(); ++idx) {
+        const auto &e = this->entry[idx];
+        if (!e.is_binary_kind()) continue;
+
+        const auto policy = e.binary.policy;
+        const auto mask = attr_t::get_default_mask(policy);
+        v_masks.push_back(mask);
+    }
+    return v_masks;
 }
 
 int attr_t::post_ops_t::from_str(const std::string &s) {
@@ -387,7 +409,7 @@ int attr_t::post_ops_t::from_str(const std::string &s) {
 
             auto policy_str = get_substr(subs, subs_pos);
             auto scale_str = policy_str + ":" + get_substr(subs, subs_pos);
-            auto status = e.convolution.oscale.from_str(scale_str.c_str());
+            auto status = e.convolution.oscale.from_str(scale_str);
             if (status != OK) return status;
         } else if (e.is_eltwise_kind()) {
             e.eltwise.alpha = std::stof(get_substr(subs, subs_pos));
@@ -400,6 +422,13 @@ int attr_t::post_ops_t::from_str(const std::string &s) {
 
             e.eltwise.scale = std::stof(get_substr(subs, subs_pos));
             if (e.eltwise.scale <= 0) return FAIL;
+        } else if (e.is_binary_kind()) {
+            e.binary.src1_dt = str2dt(get_substr(subs, subs_pos).c_str());
+            if (e.binary.src1_dt == dnnl_data_type_undef) return FAIL;
+            if (subs_pos == std::string::npos) continue;
+            if (subs_pos >= subs.size()) return FAIL; // to catch dangling ':'
+
+            e.binary.policy = str2policy(get_substr(subs, subs_pos));
         }
     }
     return OK;
@@ -407,7 +436,8 @@ int attr_t::post_ops_t::from_str(const std::string &s) {
 
 bool attr_t::is_def() const {
     return oscale.is_def() && scales.is_def() && zero_points.is_def()
-            && post_ops.is_def();
+            && post_ops.is_def()
+            && scratchpad_mode == dnnl_scratchpad_mode_library;
 }
 
 int attr_t::post_ops_t::find(pk_t kind, int start, int stop) const {
@@ -427,12 +457,8 @@ bool attr_t::post_ops_t::entry_t::is_convolution_kind() const {
 bool attr_t::post_ops_t::entry_t::is_eltwise_kind() const {
     return kind > ELTWISE_START && kind < ELTWISE_END;
 }
-
-int attr_t::post_ops_t::eltwise_index() const {
-    for (int i = 0; i < len(); ++i) {
-        if (entry[i].is_eltwise_kind()) return i;
-    }
-    return -1;
+bool attr_t::post_ops_t::entry_t::is_binary_kind() const {
+    return kind > pk_t::BINARY_START && kind < pk_t::BINARY_END;
 }
 
 int attr_t::post_ops_t::convolution_index() const {
@@ -442,8 +468,22 @@ int attr_t::post_ops_t::convolution_index() const {
     return -1;
 }
 
+int attr_t::post_ops_t::eltwise_index() const {
+    for (int i = 0; i < len(); ++i) {
+        if (entry[i].is_eltwise_kind()) return i;
+    }
+    return -1;
+}
+
+int attr_t::post_ops_t::binary_index() const {
+    for (int i = 0; i < len(); ++i) {
+        if (entry[i].is_binary_kind()) return i;
+    }
+    return -1;
+}
+
 int str2attr(attr_t *attr, const char *str) {
-    if (attr == NULL || str == NULL) return FAIL;
+    if (attr == nullptr || str == nullptr) return FAIL;
 
     *attr = attr_t();
     std::string s(str), entry_name;
@@ -521,7 +561,7 @@ std::ostream &operator<<(
         if (!first) s << '_';
         first = false;
 
-        s << arg2str.at(point.first) << ":" << point.second.policy << ":"
+        s << supported_args.at(point.first) << ":" << point.second.policy << ":"
           << point.second.value;
         if (point.second.runtime) s << '*';
     }
@@ -536,7 +576,7 @@ std::ostream &operator<<(std::ostream &s, const attr_t::arg_scales_t &scales) {
             if (!first) s << '_';
             first = false;
 
-            s << arg2str.at(v.first) << ":" << v.second;
+            s << supported_args.at(v.first) << ":" << v.second;
         }
     }
     return s;
@@ -573,6 +613,10 @@ std::ostream &operator<<(std::ostream &s, const attr_t::post_ops_t &post_ops) {
                 s << ":" << e.eltwise.alpha << ":" << e.eltwise.beta;
             else if (e.eltwise.alpha != 0.f)
                 s << ":" << e.eltwise.alpha;
+        } else if (e.is_binary_kind()) {
+            s << ":" << e.binary.src1_dt;
+            if (e.binary.policy != policy_t::COMMON)
+                s << ":" << e.binary.policy;
         } else {
             assert(!"unknown kind");
             s << "unknown_kind";
@@ -584,6 +628,11 @@ std::ostream &operator<<(std::ostream &s, const attr_t::post_ops_t &post_ops) {
     return s;
 }
 
+std::ostream &operator<<(std::ostream &s, dnnl_scratchpad_mode_t sm) {
+    s << scratchpad_mode2str(sm);
+    return s;
+}
+
 std::ostream &operator<<(std::ostream &s, const attr_t &attr) {
     if (!attr.is_def()) {
         if (!attr.oscale.is_def()) s << "--attr-oscale=" << attr.oscale << " ";
@@ -592,6 +641,8 @@ std::ostream &operator<<(std::ostream &s, const attr_t &attr) {
             s << "--attr-zero-points=" << attr.zero_points << " ";
         if (!attr.post_ops.is_def())
             s << "--attr-post-ops=\"" << attr.post_ops << "\" ";
+        if (attr.scratchpad_mode != dnnl_scratchpad_mode_library)
+            s << "--attr-scratchpad=" << attr.scratchpad_mode << " ";
     }
     return s;
 }
@@ -601,14 +652,13 @@ std::ostream &dump_global_params(std::ostream &s) {
     if (canonical) s << "--canonical=" << bool2str(canonical) << " ";
     if (canonical || engine_tgt_kind != dnnl_cpu)
         s << "--engine=" << engine_tgt_kind << " ";
-    if (canonical || scratchpad_mode != dnnl_scratchpad_mode_library)
-        s << "--attr-scratchpad=" << scratchpad_mode2str(scratchpad_mode)
-          << " ";
     if (canonical || fast_ref_gpu != true)
         s << "--fast-ref-gpu=" << bool2str(fast_ref_gpu) << " ";
     if (!skip_impl.empty()) s << "--skip-impl=" << skip_impl << " ";
     if (canonical || mem_check != true)
         s << "--mem-check=" << bool2str(mem_check) << " ";
+    if (canonical || allow_enum_tags_only != true)
+        s << "--allow-enum-tags-only=" << bool2str(allow_enum_tags_only) << " ";
 
     return s;
 }
@@ -637,81 +687,93 @@ dnnl_scratchpad_mode_t str2scratchpad_mode(const char *str) {
     return dnnl_scratchpad_mode_library;
 }
 
-void attr_bundle_t::init_zero_points() {
-    for (const auto &arg_entry : attr.zero_points)
-        zero_points[arg_entry.first] = {arg_entry.second.value};
+void attr_args_t::prepare_output_scales(
+        const attr_t &attr, const void *vals, int64_t count, int mask) {
+    insert(DNNL_ARG_ATTR_OUTPUT_SCALES, vals, count, mask, attr.oscale.runtime);
 }
 
-int attr_bundle_t::generate(int scale_mask) {
-    dnnl_primitive_attr_t dnnl_attr = create_dnnl_attr(
-            attr, (int64_t)oscale.size(), scale_mask, oscale.data());
-    if (dnnl_attr == NULL) return FAIL;
+int attr_args_t::prepare_binary_post_op_mds(
+        const attr_t &attr, int ndims, const dnnl_dims_t dims) {
+    const auto &po = attr.post_ops;
+    // iterate over all post ops and prepare md for each binary
+    for (int idx = 0; idx < po.len(); ++idx) {
+        const auto &e = po.entry[idx];
+        if (!e.is_binary_kind()) continue;
 
-    scale_mask_ = scale_mask;
-    dnnl_attr_.reset(dnnl_attr, &dnnl_primitive_attr_destroy);
-    initialized_ = true;
+        const auto dt = e.binary.src1_dt;
+        const auto policy = e.binary.policy;
+        const int mask = attr_t::get_default_mask(policy);
+
+        // deduce binary dims based on input policy
+        dnnl_dims_t binary_dims;
+        for (auto d = 0; d < ndims; ++d)
+            binary_dims[d] = (!(mask & (1 << d))) ? 1 : dims[d];
+
+        dnnl_memory_desc_t src1_desc;
+        SAFE(init_md(&src1_desc, ndims, binary_dims, dt, tag::abx), WARN);
+        mds.insert(std::make_pair(
+                (DNNL_ARG_ATTR_MULTIPLE_POST_OP(idx) | DNNL_ARG_SRC_1),
+                src1_desc));
+    }
 
     return OK;
 }
 
-dnnl_primitive_attr_t create_dnnl_attr(const attr_t &attr, int64_t scale_cnt,
-        int scale_mask, const float *scales) {
-    dnnl_primitive_attr_t dnnl_attr = NULL;
+dnnl_primitive_attr_t create_dnnl_attr(
+        const attr_t &attr, const attr_args_t &attr_args) {
+    dnnl_primitive_attr_t dnnl_attr = nullptr;
     DNN_SAFE_V(dnnl_primitive_attr_create(&dnnl_attr));
 
     if (!attr.oscale.is_def()) {
-        int64_t count = attr.oscale.policy == policy_t::COMMON ? 1 : scale_cnt;
-        if (scale_mask == -1)
-            scale_mask = attr.oscale.policy == policy_t::PER_OC ? 1 << 1 : 0;
+        const auto &os_args = attr_args.get(DNNL_ARG_ATTR_OUTPUT_SCALES);
+        const auto &policy = attr.oscale.policy;
 
-        const bool runtime = attr.oscale.runtime;
-        SAFE_V(scales == NULL && runtime ? FAIL : OK);
+        const auto count = os_args.get_count(policy);
+        const auto mask = os_args.get_mask(policy);
+        const auto scales = os_args.get_float_ptr();
 
-        float *gen_scs = NULL;
-        if (scales == NULL) {
-            gen_scs = (float *)zmalloc(count * sizeof(float), 64);
-            SAFE_V(gen_scs != NULL ? OK : FAIL);
-            for (int64_t i = 0; i < count; ++i)
-                gen_scs[i] = attr.oscale.scale;
-            scales = gen_scs;
-        }
-
-        DNN_SAFE_V(dnnl_primitive_attr_set_output_scales(dnnl_attr,
-                runtime ? 1 : count, scale_mask,
-                runtime ? &DNNL_RUNTIME_F32_VAL : scales));
-        if (gen_scs) zfree(gen_scs);
+        DNN_SAFE_V(dnnl_primitive_attr_set_output_scales(
+                dnnl_attr, count, mask, scales));
     } else if (!attr.scales.is_def()) {
-        // Only common policy is supported at this point
-        for (const auto &s : attr.scales.scales) {
-            int64_t count = s.second.policy == policy_t::COMMON ? 1 : scale_cnt;
-            int mask = -1;
-            if (scale_mask == -1)
-                mask = s.second.policy == policy_t::PER_OC ? 1 << 1 : 0;
+        for (const auto &arg : supported_args) {
+            const auto arg_name = arg.first;
+            const auto &as = attr.scales;
+            if (as.is_def(arg_name)) continue;
+
+            const auto &e = as.get(arg_name);
+            // Only common policy is supported in the library at this point
+            int64_t count = 1;
+            int mask = attr_t::get_default_mask(e.policy);
+            const float *scales = &e.scale;
 
             DNN_SAFE_V(dnnl_primitive_attr_set_scales(
-                    dnnl_attr, s.first, count, mask, &s.second.scale));
+                    dnnl_attr, arg_name, count, mask, scales));
         }
     }
 
     if (!attr.zero_points.is_def()) {
-        for (const auto &zero_points : attr.zero_points) {
-            const bool runtime = zero_points.second.runtime;
-            const auto mask = zero_points.second.policy == policy_t::PER_DIM_1
-                    ? 1 << 1
-                    : 0;
-            SAFE_V((runtime == true || mask == 0) ? OK : FAIL);
+        for (const auto &arg : supported_args) {
+            const auto arg_name = arg.first;
+            const auto &zp = attr.zero_points;
+            if (zp.is_def(arg_name)) continue;
 
-            DNN_SAFE_V(dnnl_primitive_attr_set_zero_points(dnnl_attr,
-                    zero_points.first, /* count */ 1, mask,
-                    runtime ? &DNNL_RUNTIME_S32_VAL
-                            : &zero_points.second.value));
+            const auto &e = zp.get(arg_name);
+            // Only common policy/single RT value are supported in the library
+            // at this point
+            int64_t count = 1;
+            int mask = attr_t::get_default_mask(e.policy);
+            const auto values = e.runtime ? &DNNL_RUNTIME_S32_VAL : &e.value;
+
+            DNN_SAFE_V(dnnl_primitive_attr_set_zero_points(
+                    dnnl_attr, arg_name, count, mask, values));
         }
     }
 
     if (!attr.post_ops.is_def()) {
-        const auto &po = attr.post_ops;
         dnnl_post_ops_t ops;
         DNN_SAFE_V(dnnl_post_ops_create(&ops));
+
+        const auto &po = attr.post_ops;
         for (int idx = 0; idx < po.len(); ++idx) {
             const auto &e = po.entry[idx];
             if (e.is_sum_kind()) {
@@ -720,6 +782,12 @@ dnnl_primitive_attr_t create_dnnl_attr(const attr_t &attr, int64_t scale_cnt,
             } else if (e.is_eltwise_kind()) {
                 DNN_SAFE_V(dnnl_post_ops_append_eltwise(ops, e.eltwise.scale,
                         e.eltwise.alg, e.eltwise.alpha, e.eltwise.beta));
+            } else if (e.is_binary_kind()) {
+                const auto &src1_md = attr_args.get_md(
+                        (DNNL_ARG_ATTR_MULTIPLE_POST_OP(idx) | DNNL_ARG_SRC_1));
+                assert(src1_md.ndims != 0);
+                DNN_SAFE_V(dnnl_post_ops_append_binary(
+                        ops, e.binary.alg, &src1_md));
             } else {
                 assert(!"unknown attr::post_ops::kind");
             }
@@ -734,106 +802,241 @@ dnnl_primitive_attr_t create_dnnl_attr(const attr_t &attr, int64_t scale_cnt,
     }
 
     DNN_SAFE_V(dnnl_primitive_attr_set_scratchpad_mode(
-            dnnl_attr, scratchpad_mode));
+            dnnl_attr, attr.scratchpad_mode));
 
     return dnnl_attr;
 }
 
-dnnl_format_tag_t get_abx_tag(int ndims) {
-    switch (ndims) {
-        case 1: return dnnl_a;
-        case 2: return dnnl_ab;
-        case 3: return dnnl_abc;
-        case 4: return dnnl_abcd;
-        case 5: return dnnl_abcde;
-        case 6: return dnnl_abcdef;
-        default: assert(!"unsupported ndims");
+// Exception free version of std::stoi, sets idx to 0 and returns 0 in case of
+// error.
+static int stoi_safe(const std::string &s, size_t *idx) {
+    if (s.empty() || !std::isdigit(s[0])) {
+        *idx = 0;
+        return 0;
     }
-    return dnnl_format_tag_undef;
+    return std::stoi(s, idx);
 }
 
-dnnl_format_tag_t get_axb_tag(int ndims) {
-    switch (ndims) {
-        case 1: return dnnl_a;
-        case 2: return dnnl_ab;
-        case 3: return dnnl_acb;
-        case 4: return dnnl_acdb;
-        case 5: return dnnl_acdeb;
-        default: assert(!"unsupported ndims");
+static bool is_abc_tag(const std::string &tag) {
+    if (tag == tag::undef || tag == tag::any) return true;
+
+    bool mask[DNNL_MAX_NDIMS] = {};
+    for (auto &c : tag) {
+        if (!std::isalpha(c)) continue;
+        int idx = std::tolower(c) - 'a';
+        if (idx < 0 || idx >= DNNL_MAX_NDIMS) return false;
+        mask[idx] = true;
     }
-    return dnnl_format_tag_undef;
+    // Check there are no gaps, e.g. [1 1 1 1 0 0 ...].
+    for (int i = 0; i < DNNL_MAX_NDIMS; i++) {
+        if (mask[i]) continue;
+        for (int j = i + 1; j < DNNL_MAX_NDIMS; j++)
+            if (mask[j]) return false;
+        break;
+    }
+    return true;
 }
 
-dnnl_format_tag_t get_xba_tag(int ndims) {
-    switch (ndims) {
-        case 1: return dnnl_a;
-        case 2: return dnnl_ba;
-        case 3: return dnnl_cba;
-        case 4: return dnnl_cdba;
-        case 5: return dnnl_cdeba;
-        default: assert(!"unsupported ndims");
+int check_abc_tag(const std::string &tag_, bool check_enum_tags_only) {
+    if (tag_.empty()) return FAIL;
+    if (!is_abc_tag(tag_)) return FAIL;
+    if (check_enum_tags_only) {
+        if (str2fmt_tag(tag_.c_str()) == dnnl_format_tag_last) return FAIL;
+        return OK;
     }
-    return dnnl_format_tag_undef;
+
+    enum class dim_state_t { undef = 0, upper, lower, lower_with_block };
+    dim_state_t dim_states[DNNL_MAX_NDIMS] = {};
+    bool in_inner_block = false;
+    auto tag = tag_;
+    while (!tag.empty()) {
+        // Parse block size if presented.
+        size_t idx;
+        int block = stoi_safe(tag, &idx);
+        if (block == 0 && idx != 0) return FAIL;
+        if (idx == 0) block = 0;
+        if (block > 0) in_inner_block = true;
+
+        // Move to the first position after the block.
+        tag = tag.substr(idx);
+        if (tag.empty()) return FAIL;
+
+        char c = tag[0];
+        bool is_lower = ('a' <= c && c <= 'a' + DNNL_MAX_NDIMS - 1);
+        bool is_upper = ('A' <= c && c <= 'A' + DNNL_MAX_NDIMS - 1);
+        if (!is_lower && !is_upper) return FAIL;
+
+        // Uppercase cannot be with block.
+        if (is_upper && block != 0) return FAIL;
+        // Block sizes are required within inner block.
+        if (block == 0 && in_inner_block) return FAIL;
+
+        // Check rules related to lowercase/uppercase/block order.
+        int dim_idx = std::tolower(c) - 'a';
+        dim_state_t prev_state = dim_states[dim_idx];
+        dim_state_t cur_state = is_upper
+                ? dim_state_t::upper
+                : block != 0 ? dim_state_t::lower_with_block
+                             : dim_state_t::lower;
+
+        switch (cur_state) {
+            case dim_state_t::upper:
+            case dim_state_t::lower:
+                // Letter without block must be the first.
+                if (prev_state != dim_state_t::undef) return FAIL;
+                break;
+            case dim_state_t::lower_with_block:
+                // Letter with block must be after uppercase or after a letter
+                // with block.
+                if (prev_state != dim_state_t::upper
+                        && prev_state != dim_state_t::lower_with_block)
+                    return FAIL;
+                break;
+            default: assert(!"not expected");
+        }
+
+        // Update state, move to the next position.
+        dim_states[dim_idx] = cur_state;
+        tag = tag.substr(1);
+    }
+
+    for (int i = 0; i < DNNL_MAX_NDIMS; i++) {
+        // Uppercase letter must be followed by lowercase.
+        if (dim_states[i] == dim_state_t::upper) return FAIL;
+
+        // Ensure there are no gaps (e.g. acd).
+        if (dim_states[i] == dim_state_t::undef) {
+            for (int j = i + 1; j < DNNL_MAX_NDIMS; j++)
+                if (dim_states[j] != dim_state_t::undef) return FAIL;
+            break;
+        }
+    }
+
+    return OK;
 }
 
-dnnl_format_tag_t get_aBx4b_tag(int ndims) {
-    switch (ndims) {
-        case 3: return dnnl_aBc4b;
-        case 4: return dnnl_aBcd4b;
-        case 5: return dnnl_aBcde4b;
-        default: assert(!"unsupported ndims");
+static std::string trim_letter(const std::string &tag_, char c) {
+    auto tag = tag_;
+    auto pos = tag.find(c);
+    if (pos == std::string::npos) return tag;
+
+    tag.replace(pos, 1, "");
+    if (pos == 0) return tag;
+
+    pos--;
+    while (std::isdigit(tag[pos])) {
+        tag.replace(pos, 1, "");
+        if (pos == 0) break;
+        pos--;
     }
-    return dnnl_format_tag_undef;
+    return tag;
 }
 
-dnnl_format_tag_t get_aBx8b_tag(int ndims) {
-    switch (ndims) {
-        case 3: return dnnl_aBc8b;
-        case 4: return dnnl_aBcd8b;
-        case 5: return dnnl_aBcde8b;
-        default: assert(!"unsupported ndims");
+// Removes extra dimensions from a tag according to ndims.
+static std::string trim_tag(const std::string &tag, int ndims) {
+    std::string trimmed_tag = tag;
+    for (char c = 'a' + ndims; c <= 'a' + (char)(DNNL_MAX_NDIMS - 1); c++) {
+        trimmed_tag = trim_letter(trimmed_tag, c);
+        trimmed_tag = trim_letter(trimmed_tag, std::toupper(c));
     }
-    return dnnl_format_tag_undef;
+    return trimmed_tag;
 }
 
-dnnl_format_tag_t get_aBx16b_tag(int ndims) {
-    switch (ndims) {
-        case 3: return dnnl_aBc16b;
-        case 4: return dnnl_aBcd16b;
-        case 5: return dnnl_aBcde16b;
-        default: assert(!"unsupported ndims");
+// Tries to map a tag to an abc-tag according to a logical tag. For example:
+// nchw -> abcd.
+static std::string try_map_tag(
+        const std::string &logical_tag, const std::string &tag, int *nmatched) {
+    // Check if all the required letters are presented.
+    for (auto &c : logical_tag) {
+        if (std::toupper(c) == c
+                && tag.find(std::tolower(c)) == std::string::npos)
+            return {};
     }
-    return dnnl_format_tag_undef;
+
+    // Check that all letters are known and assign indices to letters.
+    int logical_indices[DNNL_MAX_NDIMS] = {};
+    for (auto &c : tag) {
+        if (!std::isalpha(c)) continue;
+
+        auto lower_pos = logical_tag.find(std::tolower(c));
+        auto upper_pos = logical_tag.find(std::toupper(c));
+        auto pos = (lower_pos == std::string::npos ? upper_pos : lower_pos);
+        if (pos == std::string::npos) return {};
+
+        logical_indices[pos] = 1;
+    }
+
+    for (int i = 0, idx = 0; i < (int)logical_tag.size(); i++) {
+        if (logical_indices[i] == 0) continue;
+        logical_indices[i] = idx++;
+    }
+
+    (*nmatched)++;
+    std::string mapped_tag = tag;
+    for (int i = 0; i < (int)tag.size(); i++) {
+        char c = tag[i];
+        if (!std::isalpha(tag[i])) continue;
+        auto pos = logical_tag.find(std::tolower(c));
+        if (pos == std::string::npos) pos = logical_tag.find(std::toupper(c));
+
+        mapped_tag[i]
+                = (char)(tag[i] - std::tolower(c) + 'a' + logical_indices[pos]);
+    }
+    return mapped_tag;
 }
 
-dnnl_format_tag_t get_ABx16a16b_tag(int ndims) {
-    switch (ndims) {
-        case 3: return dnnl_ABc16a16b;
-        case 4: return dnnl_ABcd16a16b;
-        case 5: return dnnl_ABcde16a16b;
-        default: assert(!"unsupported ndims");
-    }
-    return dnnl_format_tag_undef;
+// Maps a tag to an abc-tag.
+static std::string map_tag_letters(const std::string &tag) {
+    int nmatched = 0;
+
+    // Mapping rules:
+    // - Uppercase letters are mandatory
+    // - Lowercase letters are optional
+    auto tag_goidhw = try_map_tag("GOIdhw", tag, &nmatched);
+    auto tag_oidhw = try_map_tag("OIdhw", tag, &nmatched);
+    auto tag_ncdhw = try_map_tag("NCdhw", tag, &nmatched);
+    auto tag_tnc = try_map_tag("TNc", tag, &nmatched);
+    auto tag_ldnc = try_map_tag("LDNC", tag, &nmatched);
+    auto tag_ldigo = try_map_tag("LDigO", tag, &nmatched);
+
+    if (nmatched == 0) return tag;
+    if (nmatched > 1) assert(!"Not expected: ambiguous tag.");
+
+    if (!tag_goidhw.empty()) return tag_goidhw;
+    if (!tag_oidhw.empty()) return tag_oidhw;
+    if (!tag_ncdhw.empty()) return tag_ncdhw;
+    if (!tag_tnc.empty()) return tag_tnc;
+    if (!tag_ldnc.empty()) return tag_ldnc;
+    if (!tag_ldigo.empty()) return tag_ldigo;
+
+    return tag;
 }
 
-dnnl_format_tag_t convert_tag(const std::string &tag_str, int ndims) {
-    // List of supported meta-tags
-    if (tag_str.compare("abx") == 0)
-        return get_abx_tag(ndims);
-    else if (tag_str.compare("axb") == 0)
-        return get_axb_tag(ndims);
-    else if (tag_str.compare("xba") == 0)
-        return get_xba_tag(ndims);
-    else if (tag_str.compare("aBx4b") == 0)
-        return get_aBx4b_tag(ndims);
-    else if (tag_str.compare("aBx8b") == 0)
-        return get_aBx8b_tag(ndims);
-    else if (tag_str.compare("aBx16b") == 0)
-        return get_aBx16b_tag(ndims);
-    else if (tag_str.compare("ABx16a16b") == 0)
-        return get_ABx16a16b_tag(ndims);
-    // fall-back to regular tag parse function
-    return str2fmt_tag(tag_str.c_str());
+std::string normalize_tag(const std::string &tag_, int ndims) {
+    std::string tag = tag_;
+    if (tag == tag::undef || tag == tag::any || ndims == 0) return tag;
+    if (tag == tag::x) {
+        if (ndims >= 0) assert(ndims == 1);
+        return "a";
+    }
+
+    // Handle meta-tags (abx, axb, etc).
+    auto pos = tag.find("x");
+    if (pos != std::string::npos) {
+        // If ndims is unknown, arbitrarily use 3 dimensions.
+        int meta_ndims = (ndims == -1 ? 3 : ndims);
+        std::string cdef_tail;
+        for (int i = 0; i < meta_ndims - 2; i++)
+            cdef_tail += ('c' + i);
+        return trim_tag(tag.replace(pos, 1, cdef_tail), meta_ndims);
+    }
+
+    return map_tag_letters(tag);
+}
+
+int check_tag(const std::string &tag_, bool check_enum_tags_only) {
+    auto tag = normalize_tag(tag_);
+    return check_abc_tag(tag, check_enum_tags_only);
 }
 
 void maybe_oscale(const attr_t &attr, float &d, float *scales, int64_t oc) {
@@ -940,9 +1143,11 @@ float compute_binary(pk_t kind, float src0, float src1) {
     return 0;
 }
 
-void maybe_post_ops(const attr_t &attr, float &val, float sum_val) {
+void maybe_post_ops(const attr_t &attr, float &val, float sum_val,
+        const std::vector<float> &v_binary_vals) {
     using namespace dnnl::impl::math;
 
+    auto it_bin_po = v_binary_vals.begin();
     const auto &po = attr.post_ops;
     for (int idx = 0; idx < po.len(); ++idx) {
         const auto &e = po.entry[idx];
@@ -956,6 +1161,9 @@ void maybe_post_ops(const attr_t &attr, float &val, float sum_val) {
             const auto &a = e.eltwise.alpha;
             const auto &b = e.eltwise.beta;
             val = compute_eltwise_fwd(e.kind, val, s, a, b);
+        } else if (e.is_binary_kind()) {
+            val = compute_binary(e.kind, val, *it_bin_po);
+            it_bin_po++;
         }
     }
 }
@@ -990,4 +1198,4 @@ stream_t::~stream_t() {
     DNN_SAFE_V(dnnl_stream_destroy(stream_));
 }
 
-#undef DNNL_ARG_UNDEF
+#undef BENCHDNN_DNNL_ARG_UNDEF

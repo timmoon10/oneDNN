@@ -12,8 +12,7 @@
 --alg=VANILLA_LSTM --activation=UNDEF --batch=shapes_small
 
 # GRU
---alg=LBR_GRU --batch=shapes_gru_small
---alg=VANILLA_GRU --prop=FWD_D  --batch=shapes_gru_small
+--alg=LBR_GRU,VANILLA_GRU --batch=shapes_small
 
 --reset
 
@@ -46,8 +45,7 @@
 --direction=right2left,concat,sum
 --mb=50
 
---alg=VANILLA_LSTM,LBR_GRU --prop=FWD_D,BWD_DW --batch=shapes_large
---alg=VANILLA_GRU --prop=FWD_D --batch=shapes_gru
+--alg=VANILLA_LSTM,LBR_GRU,VANILLA_GRU --prop=FWD_D,BWD_DW --batch=shapes_large
 
 # RNN
 # f16
@@ -58,4 +56,4 @@
 --mb=50
 --direction=right2left,concat,sum
 
---alg=VANILLA_RNN --activation=RELU --batch=shapes_large_nonuniform
+--alg=VANILLA_RNN --activation=RELU --batch=shapes_large

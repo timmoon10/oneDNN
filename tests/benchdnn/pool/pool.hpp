@@ -41,6 +41,7 @@ struct desc_t {
     int64_t id, ih, iw;
     int64_t od, oh, ow;
     int64_t kd, kh, kw;
+    int64_t dd, dh, dw;
     int64_t sd, sh, sw;
     int64_t pd, ph, pw;
     int64_t pd_r, ph_r, pw_r; // End side padding for each dimension
@@ -51,14 +52,14 @@ struct desc_t {
     // Initialize dependent opposite-side paddings values from the shape
     // parameters
     void init_pad_r() {
-        pw_r = opp_pad(iw, ow, kw, sw, pw, 0);
-        ph_r = opp_pad(ih, oh, kh, sh, ph, 0);
-        pd_r = opp_pad(id, od, kd, sd, pd, 0);
+        pw_r = opp_pad(iw, ow, kw, dw, sw, pw);
+        ph_r = opp_pad(ih, oh, kh, dh, sh, ph);
+        pd_r = opp_pad(id, od, kd, dd, sd, pd);
     }
 
 private:
     int64_t opp_pad(
-            int64_t i, int64_t o, int64_t k, int64_t s, int64_t p, int64_t d) {
+            int64_t i, int64_t o, int64_t k, int64_t d, int64_t s, int64_t p) {
         return (o - 1) * s - i + ((k - 1) * (d + 1) + 1) - p;
     }
 };
@@ -107,6 +108,9 @@ struct settings_t {
     std::vector<std::string> tag {tag::abx};
     std::vector<alg_t> alg {MAX};
     std::vector<int64_t> mb {0};
+    std::vector<attr_t::post_ops_t> post_ops {attr_t::post_ops_t()};
+    std::vector<dnnl_scratchpad_mode_t> scratchpad_mode {
+            dnnl_scratchpad_mode_library};
 
     const char *perf_template_csv
             = "perf,%engine%,%impl%,%name%,%dir%,%cfg%,%tag%,%alg%,%DESC%,%-"
@@ -120,8 +124,9 @@ struct settings_t {
 
 struct prb_t : public desc_t {
     prb_t(const desc_t &desc, dir_t dir, const dt_conf_t *cfg,
-            const std::string &tag, alg_t alg, int64_t mb = 0)
-        : desc_t(desc), dir(dir), cfg(cfg), tag(tag), alg(alg) {
+            const std::string &tag, alg_t alg, const attr_t &attr,
+            int64_t mb = 0)
+        : desc_t(desc), dir(dir), cfg(cfg), tag(tag), alg(alg), attr(attr) {
         if (mb) this->mb = mb;
     }
     ~prb_t() {}
@@ -130,6 +135,7 @@ struct prb_t : public desc_t {
     const dt_conf_t *cfg;
     std::string tag;
     alg_t alg;
+    attr_t attr;
 
     BENCHDNN_DISALLOW_COPY_AND_ASSIGN(prb_t);
 };
@@ -140,7 +146,7 @@ struct perf_report_t : public base_perf_report_t {
 
     void report(const prb_t *p, const res_t *r, const char *prb_str) {
         p_ = p;
-        tag_ = fmt_tag2str(convert_tag(p_->tag, p_->ndims));
+        tag_ = normalize_tag(p_->tag, p_->ndims);
         base_report(r, prb_str);
     }
 
@@ -163,7 +169,9 @@ struct perf_report_t : public base_perf_report_t {
 
           << p_->sd << ',' << p_->sh << ',' << p_->sw << ','
 
-          << p_->pd << ',' << p_->ph << ',' << p_->pw;
+          << p_->pd << ',' << p_->ph << ',' << p_->pw << ','
+
+          << p_->dd << ',' << p_->dh << ',' << p_->dw;
     }
 
     const char *name() const override { return p_->name; }
@@ -223,23 +231,35 @@ inline int64_t get_num_summands(
         const prb_t *p, int64_t d, int64_t h, int64_t w) {
     const int64_t ID = p->id, IH = p->ih, IW = p->iw;
     const int64_t KD = p->kd, KH = p->kh, KW = p->kw;
+    const int64_t DD = p->dd, DH = p->dh, DW = p->dw;
     const int64_t PD = p->pd, PH = p->ph, PW = p->pw;
     const int64_t SD = p->sd, SH = p->sh, SW = p->sw;
 
-    auto d_start = MAX2(d * SD - PD, 0);
-    auto h_start = MAX2(h * SH - PH, 0);
-    auto w_start = MAX2(w * SW - PW, 0);
-    auto d_end = MIN2(d * SD - PD + KD, ID);
-    auto h_end = MIN2(h * SH - PH + KH, IH);
-    auto w_end = MIN2(w * SW - PW + KW, IW);
+    auto id_start = d * SD - PD;
+    auto ih_start = h * SH - PH;
+    auto iw_start = w * SW - PW;
+    auto id_end = d * SD - PD + (KD - 1) * DD + KD;
+    auto ih_end = h * SH - PH + (KH - 1) * DH + KH;
+    auto iw_end = w * SW - PW + (KW - 1) * DW + KW;
 
-    return p->alg == AVG_P
-            ? KD * KH * KW
-            : (d_end - d_start) * (h_end - h_start) * (w_end - w_start);
+    auto id_start_excluded
+            = id_start < 0 ? (0 - id_start - 1) / (DD + 1) + 1 : 0;
+    auto ih_start_excluded
+            = ih_start < 0 ? (0 - ih_start - 1) / (DH + 1) + 1 : 0;
+    auto iw_start_excluded
+            = iw_start < 0 ? (0 - iw_start - 1) / (DW + 1) + 1 : 0;
+    auto id_end_excluded = id_end > ID ? (id_end - ID - 1) / (DD + 1) + 1 : 0;
+    auto ih_end_excluded = ih_end > IH ? (ih_end - IH - 1) / (DH + 1) + 1 : 0;
+    auto iw_end_excluded = iw_end > IW ? (iw_end - IW - 1) / (DW + 1) + 1 : 0;
+
+    return p->alg == AVG_P ? KD * KH * KW
+                           : (KD - id_start_excluded - id_end_excluded)
+                    * (KH - ih_start_excluded - ih_end_excluded)
+                    * (KW - iw_start_excluded - iw_end_excluded);
 }
 
-void compute_ref_fwd(
-        const prb_t *p, const dnn_mem_t &src, dnn_mem_t &dst, dnn_mem_t &ws);
+void compute_ref_fwd(const prb_t *p, const dnn_mem_t &src,
+        const std::vector<dnn_mem_t> &binary_po, dnn_mem_t &dst, dnn_mem_t &ws);
 void compute_ref_bwd(const prb_t *p, dnn_mem_t &diff_src,
         const dnn_mem_t &diff_dst, const dnn_mem_t &ws);
 
