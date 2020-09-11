@@ -67,13 +67,12 @@ propagation.
 When executed, the inputs and outputs should be mapped to an execution
 argument index as specified by the following table.
 
-| Primitive input/output | Execution argument index                                                  |
-| ---                    | ---                                                                       |
-| \src                   | DNNL_ARG_SRC                                                              |
-| \dst                   | DNNL_ARG_DST                                                              |
-| \diffsrc               | DNNL_ARG_DIFF_SRC                                                         |
-| \diffdst               | DNNL_ARG_DIFF_DST                                                         |
-| \f$binary post-op\f$   | DNNL_ARG_ATTR_MULTIPLE_POST_OP(binary_post_op_position) \| DNNL_ARG_SRC_1 |
+| Primitive input/output | Execution argument index |
+| ---                    | ---                      |
+| \src                   | DNNL_ARG_SRC             |
+| \dst                   | DNNL_ARG_DST             |
+| \diffsrc               | DNNL_ARG_DIFF_SRC        |
+| \diffdst               | DNNL_ARG_DIFF_DST        |
 
 ## Implementation Details
 
@@ -133,9 +132,7 @@ meaning associated with any logical dimensions.
 
 ### Post-ops and Attributes
 
-| Propagation | Type    | Operation                                    | Description                                            | Restrictions                        |
-| :--         | :--     | :--                                          | :--                                                    | :--                                 |
-| Forward     | Post-op | [Binary](@ref dnnl::post_ops::append_binary) | Applies a @ref dnnl_api_binary operation to the result | General binary post-op restrictions |
+The eltwise primitive does not support any post-ops or attributes.
 
 @anchor dg_eltwise_impl_limits
 ## Implementation Limitations

@@ -27,7 +27,6 @@
 #include "dnnl_common.hpp"
 #include "dnnl_memory.hpp"
 
-#include "binary/binary.hpp"
 #include "matmul/matmul.hpp"
 
 namespace matmul {
@@ -55,12 +54,18 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
     prep_bia_dims(p, bia_dims, dst_dims);
 
     dnnl_memory_desc_t src_d, wei_d, dst_d, bia_d {};
-    SAFE(init_md(&src_d, p->ndims, src_dims, p->cfg[SRC].dt, p->stag), CRIT);
-    SAFE(init_md(&wei_d, p->ndims, wei_dims, p->cfg[WEI].dt, p->wtag), CRIT);
-    SAFE(init_md(&dst_d, p->ndims, dst_dims, p->cfg[DST].dt, p->dtag), CRIT);
+    DNN_SAFE(dnnl_memory_desc_init_by_tag(&src_d, p->ndims, src_dims,
+                     p->cfg[SRC].dt, convert_tag(p->stag, p->ndims)),
+            WARN);
+    DNN_SAFE(dnnl_memory_desc_init_by_tag(&wei_d, p->ndims, wei_dims,
+                     p->cfg[WEI].dt, convert_tag(p->wtag, p->ndims)),
+            WARN);
+    DNN_SAFE(dnnl_memory_desc_init_by_tag(&dst_d, p->ndims, dst_dims,
+                     p->cfg[DST].dt, convert_tag(p->dtag, p->ndims)),
+            WARN);
     if (p->bia_dt != dnnl_data_type_undef)
         DNN_SAFE(dnnl_memory_desc_init_by_strides(
-                         &bia_d, p->ndims, bia_dims, p->bia_dt, nullptr),
+                         &bia_d, p->ndims, bia_dims, p->bia_dt, NULL),
                 WARN);
 
     dnnl_matmul_desc_t op_d;
@@ -73,21 +78,13 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
     // Overload PER_OC mask definition for batched case
     int mask = 0;
     if (p->attr.oscale.policy == policy_t::PER_OC)
-        mask = p->ndims == 3 ? (1 << 2) : (1 << 1);
+        mask = p->ndims == 3 ? 1 << 2 : 1 << 1;
 
-    dnnl_dims_t dst_dims_defined {};
-    dst_dims_defined[0 + (p->ndims == 3)] = p->m;
-    dst_dims_defined[1 + (p->ndims == 3)] = p->n;
-    if (p->ndims == 3) dst_dims_defined[0] = p->mb;
-
-    attr_args_t attr_args;
-    attr_args.prepare_output_scales(p->attr, p->scales, p->n, mask);
-    attr_args.prepare_binary_post_op_mds(p->attr, p->ndims, dst_dims_defined);
-    auto dnnl_attr = create_dnnl_attr(p->attr, attr_args);
+    auto dnnl_attr = create_dnnl_attr(p->attr, p->n, mask, p->scales);
 
     dnnl_status_t init_status = dnnl_success;
-    init_status = dnnl_primitive_desc_create(
-            &mpd, &op_d, dnnl_attr, engine, nullptr);
+    init_status
+            = dnnl_primitive_desc_create(&mpd, &op_d, dnnl_attr, engine, NULL);
     dnnl_primitive_attr_destroy(dnnl_attr);
 
     if (init_status == dnnl_unimplemented)
@@ -224,27 +221,20 @@ void check_known_skipped_case(const prb_t *p, res_t *r) {
     // memory layout should be defined when some dimension is unknown in pd
     // creation time
     if (p->runtime_mb
-            && (p->stag == tag::any || p->wtag == tag::any
-                    || p->dtag == tag::any)) {
+            && (p->stag == "any" || p->wtag == "any" || p->dtag == "any")) {
         r->state = SKIPPED, r->reason = INVALID_CASE;
         return;
     }
-    if (p->runtime_m && (p->stag == tag::any || p->dtag == tag::any)) {
+    if (p->runtime_m && (p->stag == "any" || p->dtag == "any")) {
         r->state = SKIPPED, r->reason = INVALID_CASE;
         return;
     }
-    if (p->runtime_n && (p->wtag == tag::any || p->dtag == tag::any)) {
+    if (p->runtime_n && (p->wtag == "any" || p->dtag == "any")) {
         r->state = SKIPPED, r->reason = INVALID_CASE;
         return;
     }
-    if (p->runtime_k && (p->stag == tag::any || p->wtag == tag::any)) {
+    if (p->runtime_k && (p->stag == "any" || p->wtag == "any")) {
         r->state = SKIPPED, r->reason = INVALID_CASE;
-        return;
-    }
-
-    // TODO: temporary disable binary post-op on GPU
-    if (engine_tgt_kind == dnnl_gpu && p->attr.post_ops.binary_index() != -1) {
-        r->state = SKIPPED, r->reason = CASE_NOT_SUPPORTED;
         return;
     }
 }
@@ -285,34 +275,37 @@ int doit(const prb_t *p, res_t *r) {
 
     // if md is same as default, it means we need to re-create it
     if (dnnl_memory_desc_equal(&src_md, &def_md)) {
-        assert(p->stag != tag::any);
+        assert(p->stag != "any");
         src_md.dims[0 + (p->ndims == 3)] = p->m;
         src_md.dims[1 + (p->ndims == 3)] = p->k;
         if (p->ndims == 3) src_md.dims[0] = p->mb;
-        SAFE(init_md(&src_md, p->ndims, src_md.dims, p->cfg[SRC].dt, p->stag),
+        DNN_SAFE(dnnl_memory_desc_init_by_tag(&src_md, p->ndims, src_md.dims,
+                         p->cfg[SRC].dt, convert_tag(p->stag, p->ndims)),
                 WARN);
     }
 
     if (dnnl_memory_desc_equal(&wei_md, &def_md)) {
-        assert(p->wtag != tag::any);
+        assert(p->wtag != "any");
         wei_md.dims[0 + (p->ndims == 3)] = p->k;
         wei_md.dims[1 + (p->ndims == 3)] = p->n;
         if (p->ndims == 3) wei_md.dims[0] = p->mb;
-        SAFE(init_md(&wei_md, p->ndims, wei_md.dims, p->cfg[WEI].dt, p->wtag),
+        DNN_SAFE(dnnl_memory_desc_init_by_tag(&wei_md, p->ndims, wei_md.dims,
+                         p->cfg[WEI].dt, convert_tag(p->wtag, p->ndims)),
                 WARN);
     }
 
     if (dnnl_memory_desc_equal(&dst_md, &def_md)) {
-        assert(p->dtag != tag::any);
+        assert(p->dtag != "any");
         dst_md.dims[0 + (p->ndims == 3)] = p->m;
         dst_md.dims[1 + (p->ndims == 3)] = p->n;
         if (p->ndims == 3) dst_md.dims[0] = p->mb;
-        SAFE(init_md(&dst_md, p->ndims, dst_md.dims, p->cfg[DST].dt, p->dtag),
+        DNN_SAFE(dnnl_memory_desc_init_by_tag(&dst_md, p->ndims, dst_md.dims,
+                         p->cfg[DST].dt, convert_tag(p->dtag, p->ndims)),
                 WARN);
         if (p->bia_dt != dnnl_data_type_undef) {
             prep_bia_dims(p, bia_md.dims, dst_md.dims);
-            DNN_SAFE(dnnl_memory_desc_init_by_strides(&bia_md, p->ndims,
-                             bia_md.dims, p->bia_dt, nullptr),
+            DNN_SAFE(dnnl_memory_desc_init_by_strides(
+                             &bia_md, p->ndims, bia_md.dims, p->bia_dt, NULL),
                     WARN);
         }
     }
@@ -330,12 +323,12 @@ int doit(const prb_t *p, res_t *r) {
     dnn_mem_t scratchpad_dt(scratchpad_md, test_engine);
 
     const auto fp = dnnl_f32;
-    dnn_mem_t src_fp(p->ndims, src_md.dims, fp, nullptr, test_engine);
-    dnn_mem_t wei_fp(p->ndims, wei_md.dims, fp, nullptr, test_engine);
-    dnn_mem_t dst_fp(p->ndims, dst_md.dims, fp, nullptr, test_engine);
+    dnn_mem_t src_fp(p->ndims, src_md.dims, fp, NULL, test_engine);
+    dnn_mem_t wei_fp(p->ndims, wei_md.dims, fp, NULL, test_engine);
+    dnn_mem_t dst_fp(p->ndims, dst_md.dims, fp, NULL, test_engine);
     dnn_mem_t bia_fp;
     if (p->bia_dt != dnnl_data_type_undef)
-        bia_fp = dnn_mem_t(p->ndims, bia_md.dims, fp, nullptr, test_engine);
+        bia_fp = dnn_mem_t(p->ndims, bia_md.dims, fp, NULL, test_engine);
 
     SAFE(fill_data(SRC, p, src_dt, src_fp, r), WARN);
     SAFE(fill_data(WEI, p, wei_dt, wei_fp, r), WARN);
@@ -351,12 +344,6 @@ int doit(const prb_t *p, res_t *r) {
             wei_zero_points_m, p->attr, DNNL_ARG_WEIGHTS);
     maybe_prepare_runtime_zero_points(dst_zero_points_m, p->attr, DNNL_ARG_DST);
 
-    std::vector<dnn_mem_t> binary_po_fp, binary_po_dt;
-    std::vector<int> binary_po_args;
-    SAFE(binary::setup_binary_po(
-                 const_pd, binary_po_args, binary_po_dt, binary_po_fp),
-            WARN);
-
     args_t args;
 
     args.set(DNNL_ARG_SRC, src_dt);
@@ -368,14 +355,11 @@ int doit(const prb_t *p, res_t *r) {
     args.set(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_SRC, src_zero_points_m);
     args.set(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_WEIGHTS, wei_zero_points_m);
     args.set(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_DST, dst_zero_points_m);
-    args.set(binary_po_args, binary_po_dt);
-
     SAFE(execute_and_wait(m, args), WARN);
 
     if (bench_mode & CORR) {
-        compute_ref(
-                test_engine, p, src_fp, wei_fp, bia_fp, binary_po_fp, dst_fp);
-        dnn_mem_t c(dst_dt, fp, tag::abx, test_engine);
+        compute_ref(test_engine, p, src_fp, wei_fp, bia_fp, dst_fp);
+        dnn_mem_t c(dst_dt, fp, get_abx_tag(p->ndims), test_engine);
         SAFE(compare_dat(p, DST, c, dst_fp, r), WARN);
     }
 

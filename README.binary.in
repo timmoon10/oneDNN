@@ -112,7 +112,7 @@ terms.
 
 3-clause BSD license:
 * Xbyak (https://github.com/herumi/xbyak)
-* Instrumentation and Tracing Technology API (ITT API) (https://github.com/intel/IntelSEAPI/tree/master/ittnotify)
+* ittnotify (https://github.com/intel/IntelSEAPI)
 * CMake (https://github.com/Kitware/CMake)
 
 Boost Software License, Version 1.0:

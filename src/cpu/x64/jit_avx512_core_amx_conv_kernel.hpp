@@ -20,6 +20,7 @@
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
 
+#include "cpu/x64/jit_avx512_core_amx_tilecfg.hpp"
 #include "cpu/x64/jit_generator.hpp"
 #include "cpu/x64/jit_primitive_conf.hpp"
 #include "cpu/x64/jit_uni_eltwise_injector.hpp"
@@ -34,8 +35,9 @@ struct jit_avx512_core_amx_copy_to_wbuffer_t : public jit_generator {
 
     using reg64_t = const Xbyak::Reg64;
 
-    jit_avx512_core_amx_copy_to_wbuffer_t(const jit_conv_conf_t &ajcp)
-        : jcp(ajcp) {}
+    jit_avx512_core_amx_copy_to_wbuffer_t(jit_conv_conf_t ajcp) : jcp(ajcp) {
+        generate();
+    }
 
 private:
     jit_conv_conf_t jcp;
@@ -51,7 +53,7 @@ private:
     const Xbyak::Zmm zmm_idx = Xbyak::Zmm(2);
     const Xbyak::Zmm zmm_zero = Xbyak::Zmm(3);
 
-    void generate() override;
+    void generate();
 };
 
 struct jit_avx512_core_amx_copy_to_pbuffer_t : public jit_generator {
@@ -59,8 +61,9 @@ struct jit_avx512_core_amx_copy_to_pbuffer_t : public jit_generator {
 
     using reg64_t = const Xbyak::Reg64;
 
-    jit_avx512_core_amx_copy_to_pbuffer_t(const jit_conv_conf_t &ajcp)
-        : jcp(ajcp) {}
+    jit_avx512_core_amx_copy_to_pbuffer_t(jit_conv_conf_t ajcp) : jcp(ajcp) {
+        generate();
+    }
 
 private:
     jit_conv_conf_t jcp;
@@ -106,7 +109,7 @@ private:
     const Xbyak::Zmm zmm_tmp = Xbyak::Zmm(0);
     const Xbyak::Zmm zmm_zero = Xbyak::Zmm(1);
 
-    void generate() override;
+    void generate();
     void copy_row(int icb);
     void copy_row_body(int lpad, int iw_len, int icb);
     void copy_row_reduced_lowering();
@@ -116,7 +119,7 @@ struct jit_avx512_core_amx_fwd_kernel_t : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_core_amx_fwd_kernel_t)
 
     jit_avx512_core_amx_fwd_kernel_t(
-            const jit_conv_conf_t &ajcp, const primitive_attr_t &attr)
+            jit_conv_conf_t ajcp, const primitive_attr_t &attr)
         : jcp(ajcp)
         , attr_(attr)
         , eltwise_injector_(nullptr)
@@ -127,18 +130,23 @@ struct jit_avx512_core_amx_fwd_kernel_t : public jit_generator {
         copy_to_pbuffer_ = new jit_avx512_core_amx_copy_to_pbuffer_t(jcp);
         if (jcp.is_relo)
             copy_to_wbuffer_ = new jit_avx512_core_amx_copy_to_wbuffer_t(jcp);
-    }
+        tilecfg_ = new jit_avx512_core_amx_tilecfg_t(jcp);
 
-    status_t create_kernel() override {
-        CHECK(jit_generator::create_kernel());
-        CHECK(copy_to_pbuffer_->create_kernel());
-        if (jcp.is_relo) CHECK(copy_to_wbuffer_->create_kernel());
-        return status::success;
+        generate();
+
+        jit_ker = (void (*)(jit_conv_call_s *))getCode();
+        jit_copy_to_pbuffer_ker
+                = (void (*)(jit_conv_call_s *))copy_to_pbuffer_->getCode();
+        if (jcp.is_relo)
+            jit_copy_to_wbuffer_ker
+                    = (void (*)(jit_conv_call_s *))copy_to_wbuffer_->getCode();
+        jit_tilecfg = (void (*)(void *))tilecfg_->getCode();
     }
     ~jit_avx512_core_amx_fwd_kernel_t() {
         delete eltwise_injector_;
         delete copy_to_pbuffer_;
         delete copy_to_wbuffer_;
+        delete tilecfg_;
     }
 
     static bool post_ops_ok(jit_conv_conf_t &jcp, const primitive_attr_t &attr);
@@ -154,18 +162,16 @@ struct jit_avx512_core_amx_fwd_kernel_t : public jit_generator {
 
     jit_conv_conf_t jcp;
     const primitive_attr_t &attr_;
-
-    const jit_avx512_core_amx_copy_to_pbuffer_t &copy_to_pbuffer() const {
-        return *copy_to_pbuffer_;
-    }
-    const jit_avx512_core_amx_copy_to_wbuffer_t &copy_to_wbuffer() const {
-        return *copy_to_wbuffer_;
-    }
+    void (*jit_ker)(jit_conv_call_s *);
+    void (*jit_copy_to_pbuffer_ker)(jit_conv_call_s *);
+    void (*jit_copy_to_wbuffer_ker)(jit_conv_call_s *);
+    void (*jit_tilecfg)(void *);
 
 private:
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
     jit_avx512_core_amx_copy_to_pbuffer_t *copy_to_pbuffer_;
     jit_avx512_core_amx_copy_to_wbuffer_t *copy_to_wbuffer_;
+    jit_avx512_core_amx_tilecfg_t *tilecfg_;
 
     int prv_width_;
     int row_count_;
@@ -228,9 +234,9 @@ private:
     bool maybe_eltwise(int position);
     void cvt2ps(data_type_t type_in, Xbyak::Zmm ymm_in,
             const Xbyak::Operand &op, bool mask_flag);
-    Xbyak::Ymm ymm_mask(
+    const Xbyak::Ymm ymm_mask(
             const Xbyak::Ymm zmm_in, bool mask_flag, bool store = false);
-    Xbyak::Zmm zmm_mask(
+    const Xbyak::Zmm zmm_mask(
             const Xbyak::Zmm zmm_in, bool mask_flag, bool store = false);
 
     void store_output_vector_bf16(
@@ -243,7 +249,7 @@ private:
     void compute_icb_loop(int width, bool do_store);
     void compute_ow_loop();
 
-    void generate() override;
+    void generate();
 };
 
 } // namespace x64

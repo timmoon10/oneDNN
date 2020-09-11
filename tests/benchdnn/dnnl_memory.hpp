@@ -19,9 +19,6 @@
 
 #include "dnnl_common.hpp"
 
-int init_md(dnnl_memory_desc_t *md, int ndims, const dnnl_dims_t dims,
-        dnnl_data_type_t data_type, const std::string &tag);
-
 struct dnn_mem_t {
     dnn_mem_t() { map(); }
 
@@ -35,7 +32,7 @@ struct dnn_mem_t {
     }
 
     dnn_mem_t(int ndims, const dnnl_dims_t dims, dnnl_data_type_t dt,
-            const std::string &tag, dnnl_engine_t engine) {
+            dnnl_format_tag_t tag, dnnl_engine_t engine) {
         active_ = (initialize(ndims, dims, dt, tag, engine) == OK);
     }
 
@@ -45,16 +42,16 @@ struct dnn_mem_t {
     }
 
     dnn_mem_t(const dnnl_memory_desc_t &md, dnnl_data_type_t dt,
-            const std::string &tag, dnnl_engine_t engine) {
+            dnnl_format_tag_t tag, dnnl_engine_t engine) {
         active_ = (initialize(md, dt, tag, engine) == OK);
     }
 
     dnn_mem_t(const dnnl_memory_desc_t &md, dnnl_data_type_t dt,
             dnnl_engine_t engine) {
-        active_ = (initialize(md, dt, tag::undef, engine) == OK);
+        active_ = (initialize(md, dt, dnnl_format_tag_undef, engine) == OK);
     }
 
-    dnn_mem_t(const dnn_mem_t &rhs, dnnl_data_type_t dt, const std::string &tag,
+    dnn_mem_t(const dnn_mem_t &rhs, dnnl_data_type_t dt, dnnl_format_tag_t tag,
             dnnl_engine_t engine)
         : dnn_mem_t(rhs.md_, dt, tag, engine) {
         if (active_) reorder(rhs);
@@ -84,8 +81,11 @@ struct dnn_mem_t {
 
     ~dnn_mem_t() { cleanup(); }
 
-    int reorder(const dnn_mem_t &rhs, const_dnnl_primitive_attr_t attr);
+    int reorder(const dnn_mem_t &rhs, const attr_bundle_t *attr_bundle);
     int reorder(const dnn_mem_t &rhs) { return reorder(rhs, nullptr); }
+    int reorder(const dnn_mem_t &rhs, const attr_bundle_t &attr_bundle) {
+        return reorder(rhs, &attr_bundle);
+    }
 
     size_t size() const { return dnnl_memory_desc_get_size(&md_); }
 
@@ -199,15 +199,17 @@ private:
     mutable void *mapped_ptr_ = NULL;
 
     int initialize(const dnnl_memory_desc_t &md, dnnl_data_type_t dt,
-            const std::string &tag, dnnl_engine_t engine,
+            dnnl_format_tag_t tag, dnnl_engine_t engine,
             void *handle = DNNL_MEMORY_ALLOCATE) {
         is_mapped_ = false;
 
-        if (tag == tag::undef) {
+        if (tag == dnnl_format_tag_undef) {
             md_ = md;
             md_.data_type = dt;
         } else {
-            SAFE(init_md(&md_, md.ndims, md.dims, dt, tag), CRIT);
+            DNN_SAFE(dnnl_memory_desc_init_by_tag(
+                             &md_, md.ndims, md.dims, dt, tag),
+                    CRIT);
         }
         engine_ = engine;
         DNN_SAFE_V(dnnl_engine_get_kind(engine_, &engine_kind_));
@@ -247,13 +249,15 @@ private:
 
     int initialize(const dnnl_memory_desc_t &md, dnnl_engine_t engine,
             void *handle = DNNL_MEMORY_ALLOCATE) {
-        return initialize(md, md.data_type, tag::undef, engine, handle);
+        return initialize(
+                md, md.data_type, dnnl_format_tag_undef, engine, handle);
     }
 
     int initialize(int ndims, const dnnl_dims_t dims, dnnl_data_type_t dt,
-            const std::string &tag, dnnl_engine_t engine) {
+            dnnl_format_tag_t tag, dnnl_engine_t engine) {
         dnnl_memory_desc_t xmd;
-        SAFE(init_md(&xmd, ndims, dims, dt, tag), CRIT);
+        DNN_SAFE(
+                dnnl_memory_desc_init_by_tag(&xmd, ndims, dims, dt, tag), CRIT);
         SAFE(initialize(xmd, engine), CRIT);
         return OK;
     }

@@ -84,7 +84,7 @@ struct global_scratchpad_t : public scratchpad_t {
         reference_count_++;
     }
 
-    ~global_scratchpad_t() override {
+    ~global_scratchpad_t() {
         reference_count_--;
         if (reference_count_ == 0) {
             delete mem_storage_;

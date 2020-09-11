@@ -170,7 +170,7 @@ struct isa_info_t {
     cpu_isa_t isa;
 };
 
-static isa_info_t get_isa_info_t(void) {
+static const isa_info_t get_isa_info_t(void) {
     // descending order due to mayiuse check
 #define HANDLE_CASE(cpu_isa) \
     if (mayiuse(cpu_isa)) return isa_info_t(cpu_isa);
@@ -248,7 +248,8 @@ int get_max_palette() {
     if (mayiuse(amx_tile)) {
         unsigned int data[4] = {};
         const unsigned int &EAX = data[0];
-        Xbyak::util::Cpu::getCpuidEx(0x1D, 0, data);
+
+        cpu.getCpuidEx(0x1D, 0, data);
         return EAX;
     } else {
         return 0;
@@ -261,7 +262,7 @@ int get_max_tiles(int palette) {
 
         unsigned int data[4] = {};
         const unsigned int &EBX = data[1];
-        Xbyak::util::Cpu::getCpuidEx(0x1D, palette, data);
+        cpu.getCpuidEx(0x1D, palette, data);
 
         return EBX >> 16;
     } else {
@@ -275,7 +276,7 @@ int get_max_column_bytes(int palette) {
 
         unsigned int data[4] = {};
         const unsigned int &EBX = data[1];
-        Xbyak::util::Cpu::getCpuidEx(0x1D, palette, data);
+        cpu.getCpuidEx(0x1D, palette, data);
 
         return (EBX << 16) >> 16;
     } else {
@@ -289,7 +290,7 @@ int get_max_rows(int palette) {
 
         unsigned int data[4] = {};
         const unsigned int &ECX = data[2];
-        Xbyak::util::Cpu::getCpuidEx(0x1D, palette, data);
+        cpu.getCpuidEx(0x1D, palette, data);
 
         return (ECX << 16) >> 16;
     } else {

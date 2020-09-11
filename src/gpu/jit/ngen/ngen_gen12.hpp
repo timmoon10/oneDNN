@@ -457,7 +457,7 @@ bool Instruction12::getOperandRegion(autoswsb::DependencyRegion &region, int opN
     RegData rd;
 
     switch (op) {
-        case Opcode::nop_gen12:
+        case Opcode::nop:
         case Opcode::illegal:
             return false;
         case Opcode::send:
@@ -490,10 +490,9 @@ bool Instruction12::getOperandRegion(autoswsb::DependencyRegion &region, int opN
                 region = DependencyRegion(GRFRange(base, len));
             return true;
         }
-        case Opcode::dp4a:
-        case Opcode::bfe_gen12:
-        case Opcode::bfi2_gen12:
-        case Opcode::csel_gen12:
+        case Opcode::bfe:
+        case Opcode::bfi2:
+        case Opcode::csel:
         case Opcode::mad:
         case Opcode::madm: {  // ternary
             TernaryOperand12 o;
@@ -606,7 +605,6 @@ bool Instruction12::getARFType(ARFType &arfType, int opNum) const
         case Opcode::csel:
         case Opcode::mad:
         case Opcode::madm:
-        case Opcode::dp4a:
             return false;
         default: {
             BinaryOperand12 o;

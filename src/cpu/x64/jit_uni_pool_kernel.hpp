@@ -40,6 +40,9 @@ struct jit_uni_pool_kernel : public jit_generator {
             bf16_emu_ = new bf16_emulation_t(this, bf16_emu_reserv_1,
                     bf16_emu_reserv_2, bf16_emu_reserv_3, bf16_emu_reserv_4,
                     bf16_emu_reserv_5);
+
+        this->generate();
+        jit_ker = (decltype(jit_ker))this->getCode();
     }
 
     ~jit_uni_pool_kernel() { delete bf16_emu_; }
@@ -48,6 +51,7 @@ struct jit_uni_pool_kernel : public jit_generator {
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_pool_kernel)
 
+    void operator()(jit_pool_call_s *arg) { jit_ker(arg); }
     static status_t init_conf(jit_pool_conf_t &jbp,
             memory_tracking::registrar_t &scratchpad, const pooling_pd_t *ppd,
             int nthreads);
@@ -147,6 +151,7 @@ private:
     bool sse_high_half = false;
 
     int prev_kw;
+    void (*jit_ker)(jit_pool_call_s *);
 
     void prepare_tail_mask();
     void put_one_in_vmm();
@@ -193,7 +198,7 @@ private:
         step(ur_w, ur_bc, pad_l, pad_r, with_c_tail_processing);
     }
 
-    void generate() override;
+    void generate();
 
     void avx_vpadd1(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
         assert(y0.getIdx() != x1.getIdx());

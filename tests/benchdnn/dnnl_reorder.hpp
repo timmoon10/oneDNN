@@ -25,7 +25,10 @@
 #include "dnn_types.hpp"
 
 int execute_reorder(const dnn_mem_t &src, dnn_mem_t &dst,
-        const_dnnl_primitive_attr_t attr) {
+        const attr_bundle_t *attr_bundle) {
+    const_dnnl_primitive_attr_t attr
+            = attr_bundle ? attr_bundle->dnnl_attr() : nullptr;
+
     std::shared_ptr<const dnn_mem_t> r_src(&src, [](const dnn_mem_t *) {});
     std::shared_ptr<dnn_mem_t> r_dst(&dst, [](dnn_mem_t *) {});
 
@@ -71,13 +74,6 @@ int execute_reorder(const dnn_mem_t &src, dnn_mem_t &dst,
                 CRIT);
     }
 
-    const auto q = [&](int index = 0) -> const dnnl_memory_desc_t & {
-        return *dnnl_primitive_desc_query_md(
-                r_pd, dnnl_query_exec_arg_md, index);
-    };
-    const auto &scratchpad_md = q(DNNL_ARG_SCRATCHPAD);
-    dnn_mem_t scratchpad(scratchpad_md, src.engine());
-
     DNN_SAFE(dnnl_primitive_create(&r, r_pd), CRIT);
     dnnl_status_t pd_destroy_status = dnnl_primitive_desc_destroy(r_pd);
     if (pd_destroy_status != dnnl_success) {
@@ -85,10 +81,21 @@ int execute_reorder(const dnn_mem_t &src, dnn_mem_t &dst,
         DNN_SAFE(pd_destroy_status, CRIT);
     }
 
+    dnn_mem_t scales, src_zero_points_m, dst_zero_points_m;
+    if (attr_bundle) {
+        maybe_prepare_runtime_scales(scales, *attr_bundle);
+        maybe_prepare_runtime_zero_points(
+                src_zero_points_m, attr_bundle->attr, DNNL_ARG_SRC);
+        maybe_prepare_runtime_zero_points(
+                dst_zero_points_m, attr_bundle->attr, DNNL_ARG_DST);
+    }
+
     args_t args;
     args.set(DNNL_ARG_FROM, *r_src);
     args.set(DNNL_ARG_TO, *r_dst);
-    args.set(DNNL_ARG_SCRATCHPAD, scratchpad);
+    args.set(DNNL_ARG_ATTR_OUTPUT_SCALES, scales);
+    args.set(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_SRC, src_zero_points_m);
+    args.set(DNNL_ARG_ATTR_ZERO_POINTS | DNNL_ARG_DST, dst_zero_points_m);
 
     SAFE(execute_and_wait(r, args), CRIT);
     DNN_SAFE(dnnl_primitive_destroy(r), CRIT);

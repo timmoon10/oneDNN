@@ -68,14 +68,8 @@ namespace tr {
 const size_t ker_prb_size_min = 64;
 
 /* kernel */
-struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
+struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_reorder_kernel_f32)
-
-    void operator()(const call_param_t *c) const override {
-        jit_generator::operator()(c);
-    }
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
 
     enum {
         len_unroll_max = 256,
@@ -837,8 +831,8 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
         assert(!"no implementation available");
     }
 
-    jit_uni_reorder_kernel_f32_t(const desc_t &desc)
-        : kernel_t(desc), bf16_emu_(nullptr) {
+    jit_uni_reorder_kernel_f32(const desc_t &desc)
+        : kernel_t(desc), jit_generator(), bf16_emu_(nullptr) {
         itype_sz = data_type_size(prb_.itype);
         otype_sz = data_type_size(prb_.otype);
         stype_sz = sizeof(float);
@@ -848,9 +842,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                     bf16_emu_reserv_4);
             bf16_emu_->init_vcvtneps2bf16();
         }
-    }
 
-    void generate() override {
         preamble();
 #define PARAM(x) ptr[abi_param1 + offsetof(call_param_t, x)]
         if (prb_.scale_type == scale_type_t::COMMON) {
@@ -882,8 +874,9 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         impl();
         postamble();
+        ker_ = (void (*)(const call_param_t *))getCode();
     }
-    ~jit_uni_reorder_kernel_f32_t() override { delete bf16_emu_; }
+    ~jit_uni_reorder_kernel_f32() { delete bf16_emu_; }
 
 private:
     int itype_sz;
@@ -919,7 +912,7 @@ private:
 };
 
 // Seperate class for no unroll/threading burden
-struct jit_single_blk_kernel_t : public jit_generator {
+struct jit_single_blk_kernel : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_single_blk_kernel)
     static bool applicable(const prb_t &p) {
         using namespace data_type;
@@ -962,18 +955,19 @@ struct jit_single_blk_kernel_t : public jit_generator {
         return ok;
     }
 
-    jit_single_blk_kernel_t(const tr::prb_t &prb)
-        : prb_(prb)
+    jit_single_blk_kernel(const tr::prb_t &prb)
+        : jit_generator()
+        , prb_(prb)
+        , ker_(nullptr)
         , itype_sz(data_type_size(prb_.itype))
         , otype_sz(data_type_size(prb_.otype))
-        , block_sz(prb.nodes[0].n) {}
-
-    void generate() override {
+        , block_sz(prb.nodes[0].n) {
         auto input_stride
                 = prb_.nodes[0].is != 1 ? prb_.nodes[0].is : prb_.nodes[1].is;
         auto output_stride
                 = prb_.nodes[0].os != 1 ? prb_.nodes[0].os : prb_.nodes[1].os;
 
+        auto ker_off = getSize();
         Label tail_processing;
 
         preamble();
@@ -1017,6 +1011,9 @@ struct jit_single_blk_kernel_t : public jit_generator {
         }
 
         postamble();
+
+        auto *ker_start = getCode();
+        this->ker_ = (decltype(ker_))(ker_start + ker_off);
     }
 
     void gen_loadu(const Ymm &ymm, const Address &addr, int size) {
@@ -1185,6 +1182,10 @@ struct jit_single_blk_kernel_t : public jit_generator {
         }
     }
 
+    void operator()(const void *in, void *out, bool tail) const {
+        ker_(in, out, tail);
+    }
+
 private:
     // 6 ~ 12
     constexpr static int xmm_save_for_windows = is_windows ? 7 : 0;
@@ -1213,6 +1214,7 @@ private:
     }
 
     const prb_t &prb_;
+    void (*ker_)(const void *, void *, bool tail);
 
     int itype_sz;
     int otype_sz;
@@ -1248,7 +1250,7 @@ status_t kernel_t::desc_init(
     desc.id = 0;
     for (int ndims_ker = ndims_ker_max; ndims_ker > 0; --ndims_ker) {
         desc.prb.ndims = ndims_ker;
-        if (jit_uni_reorder_kernel_f32_t::applicable(desc.prb))
+        if (jit_uni_reorder_kernel_f32::applicable(desc.prb))
             return status::success;
     }
 
@@ -1257,7 +1259,7 @@ status_t kernel_t::desc_init(
 
 kernel_t *kernel_t::create(const kernel_t::desc_t &desc) {
     switch (desc.id) {
-        case 0: return new jit_uni_reorder_kernel_f32_t(desc);
+        case 0: return new jit_uni_reorder_kernel_f32(desc);
         default: assert(!"unknown kernel id"); return nullptr;
     }
 
@@ -1460,7 +1462,7 @@ struct jit_uni_reorder_t : public primitive_t {
             _pd->ker_desc_ = ker_desc;
             _pd->init_scratchpad_md();
             _pd->nthr_ = nthr;
-            return safe_ptr_assign(*reorder_pd, _pd);
+            return safe_ptr_assign<reorder_pd_t>(*reorder_pd, _pd);
         }
 
         tr::prb_t prb_;
@@ -1468,7 +1470,11 @@ struct jit_uni_reorder_t : public primitive_t {
         int nthr_;
     };
 
-    jit_uni_reorder_t(const pd_t *apd) : primitive_t(apd) {}
+    jit_uni_reorder_t(const pd_t *apd) : primitive_t(apd) {
+        kernel_ = tr::kernel_t::create(pd()->ker_desc_);
+        assert(kernel_);
+    }
+    ~jit_uni_reorder_t() { delete kernel_; }
 
     void omp_driver_0d(
             int off, const char *in, char *out, const float *scale) const {
@@ -1585,11 +1591,6 @@ struct jit_uni_reorder_t : public primitive_t {
         }
     }
 
-    status_t init(engine_t *engine) override {
-        CHECK(safe_ptr_assign(kernel_, tr::kernel_t::create(pd()->ker_desc_)));
-        return kernel_->create_kernel();
-    }
-
     status_t execute(const exec_ctx_t &ctx) const override {
         auto in = CTX_IN_MEM(const char *, DNNL_ARG_FROM);
         auto out = CTX_OUT_MEM(char *, DNNL_ARG_TO);
@@ -1604,7 +1605,7 @@ struct jit_uni_reorder_t : public primitive_t {
 
 private:
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
-    std::unique_ptr<tr::kernel_t> kernel_;
+    tr::kernel_t *kernel_;
 };
 
 struct jit_blk_reorder_t : public primitive_t {
@@ -1644,7 +1645,7 @@ struct jit_blk_reorder_t : public primitive_t {
                 prb_dump(prb);
             });
 
-            if (!tr::jit_single_blk_kernel_t::applicable(prb)) {
+            if (!tr::jit_single_blk_kernel::applicable(prb)) {
                 return status::unimplemented;
             }
 
@@ -1657,7 +1658,7 @@ struct jit_blk_reorder_t : public primitive_t {
             }
             _pd->prb_ = prb;
             _pd->init_scratchpad_md();
-            return safe_ptr_assign(*reorder_pd, _pd);
+            return safe_ptr_assign<reorder_pd_t>(*reorder_pd, _pd);
         }
 
         tr::prb_t prb_;
@@ -1672,7 +1673,9 @@ struct jit_blk_reorder_t : public primitive_t {
         }
     };
 
-    jit_blk_reorder_t(const pd_t *apd) : primitive_t(apd) {}
+    jit_blk_reorder_t(const pd_t *apd) : primitive_t(apd) {
+        kernel_ = utils::make_unique<tr::jit_single_blk_kernel>(pd()->prb_);
+    }
 
     size_t n(int d) const {
         assert(d < pd()->prb_.ndims);
@@ -1685,11 +1688,6 @@ struct jit_blk_reorder_t : public primitive_t {
     ptrdiff_t os(int d) const {
         assert(d < pd()->prb_.ndims);
         return pd()->prb_.nodes[d].os;
-    }
-
-    status_t init(engine_t *engine) override {
-        kernel_ = utils::make_unique<tr::jit_single_blk_kernel_t>(pd()->prb_);
-        return kernel_->create_kernel();
     }
 
     status_t execute(const exec_ctx_t &ctx) const override {
@@ -1726,7 +1724,7 @@ struct jit_blk_reorder_t : public primitive_t {
 
 private:
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
-    std::unique_ptr<tr::jit_single_blk_kernel_t> kernel_;
+    std::unique_ptr<tr::jit_single_blk_kernel> kernel_;
 };
 
 status_t jit_uni_reorder_create(reorder_pd_t **reorder_pd, engine_t *engine,

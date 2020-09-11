@@ -89,7 +89,7 @@ void jit_avx512_common_1x1_convolution_fwd_t<src_type, wei_type,
     const auto &jcp = kernel_->jcp;
     auto rtus_space = pd()->rtus_.reduce_src_
             ? scratchpad.get<src_data_t>(key_conv_rtus_space)
-            : nullptr;
+            : NULL;
 
     const int ndims = src_d.ndims();
     const int stride_d = (ndims == 5) ? pd()->desc()->strides[0] : 1;
@@ -200,13 +200,13 @@ void jit_avx512_common_1x1_convolution_fwd_t<src_type, wei_type,
                                          : jcp.is * ic_off_idx * jcp.ic_block);
             if (ocb == ocb_start) {
                 rp.src = src + data_blk_off(src_d, n, ic_off_idx, id, ih, iw);
-                (*rtus_driver_)(&rp);
+                rtus_driver_->ker_(&rp);
             }
             p.bcast_data = rp.ws;
         } else
             p.bcast_data = src + data_blk_off(src_d, n, ic_off_idx, id, ih, iw);
 
-        (*kernel_)(&p);
+        kernel_->jit_ker(&p);
     };
     auto conv_1x1 = [&](int bcast_start, int bcast_end, int ocb_start,
                             int ocb_end) {
@@ -342,7 +342,7 @@ void jit_avx512_common_1x1_convolution_fwd_t<src_type, wei_type,
 
             par_conv_dw.ch_blocks = nstl::min(ch + ch_num, jcp_dw.nb_ch) - ch;
 
-            (*kernel_dw_)(&par_conv_dw);
+            kernel_dw_->jit_ker(&par_conv_dw);
 
             for (int i = 0; i < jcp_dw.kh; ++i)
                 addrs[i] += wch_stride;
@@ -431,7 +431,7 @@ void jit_avx512_common_1x1_convolution_bwd_data_t<diff_dst_type, wei_type,
     auto rtus_space = pd()->rtus_.reduce_src_
             ? ctx.get_scratchpad_grantor().template get<diff_src_data_t>(
                     key_conv_rtus_space)
-            : nullptr;
+            : NULL;
 
     const int ndims = diff_src_d.ndims();
 
@@ -554,9 +554,9 @@ void jit_avx512_common_1x1_convolution_bwd_data_t<diff_dst_type, wei_type,
                         p.reduce_dim = this_block_size(ocb * jcp.oc_block,
                                 jcp.oc, nb_oc_blocking_step * jcp.oc_block);
 
-                        (*kernel_)(&p);
+                        kernel_->jit_ker(&p);
                     }
-                    if (pd()->rtus_.reduce_src_) (*rtus_driver_)(&rp);
+                    if (pd()->rtus_.reduce_src_) rtus_driver_->ker_(&rp);
                 }
             }
         }
@@ -571,17 +571,18 @@ template struct jit_avx512_common_1x1_convolution_bwd_data_t<data_type::f32>;
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
 
-status_t jit_avx512_common_1x1_convolution_bwd_weights_t ::init(
-        engine_t *engine) {
-    CHECK(safe_ptr_assign(kernel_,
-            new jit_avx512_common_1x1_conv_kernel(pd()->jcp_, *pd()->attr())));
-    CHECK(safe_ptr_assign(
-            acc_ker_, new cpu_accumulator_1d_t<data_type::f32>()));
-    CHECK(safe_ptr_assign(reducer_bias_,
-            new cpu_reducer_t<data_type::f32>(pd()->reducer_bia_conf_)));
-    CHECK(kernel_->create_kernel());
-    CHECK(acc_ker_->create_kernel());
-    CHECK(reducer_bias_->create_kernel());
+jit_avx512_common_1x1_convolution_bwd_weights_t ::
+        jit_avx512_common_1x1_convolution_bwd_weights_t(const pd_t *apd)
+    : primitive_t(apd)
+    , kernel_(nullptr)
+    , acc_ker_(nullptr)
+    , reducer_bias_(nullptr)
+    , trans_kernel_(nullptr)
+    , rtus_driver_(nullptr) {
+    kernel_ = new jit_avx512_common_1x1_conv_kernel(pd()->jcp_, *pd()->attr());
+    acc_ker_ = new cpu_accumulator_1d_t<data_type::f32>();
+    reducer_bias_ = new cpu_reducer_t<data_type::f32>(pd()->reducer_bia_conf_);
+    init_rtus_driver<avx512_common>(this);
 
     const auto &jcp = kernel_->jcp;
 
@@ -591,13 +592,8 @@ status_t jit_avx512_common_1x1_convolution_bwd_weights_t ::init(
         tp.tr_src_pf0_distance = 0;
         tp.src_pf1 = true;
         tp.tr_src_pf1 = false;
-        CHECK(safe_ptr_assign(
-                trans_kernel_, new jit_transpose4x16_src(&jcp, &tp)));
-        CHECK(trans_kernel_->create_kernel());
+        trans_kernel_ = new jit_transpose4x16_src(&jcp, &tp);
     }
-
-    CHECK(init_rtus_driver<avx512_common>(this));
-    return status::success;
 }
 
 void jit_avx512_common_1x1_convolution_bwd_weights_t::execute_backward_weights(
@@ -617,7 +613,7 @@ void jit_avx512_common_1x1_convolution_bwd_weights_t::execute_backward_weights(
 
     auto rtus_space = pd()->rtus_.reduce_src_
             ? scratchpad.get<data_t>(key_conv_rtus_space)
-            : nullptr;
+            : NULL;
     const bool is_bias_padded
             = pd()->with_bias() && jcp.oc_without_padding % jcp.oc_block != 0;
 
@@ -644,7 +640,7 @@ void jit_avx512_common_1x1_convolution_bwd_weights_t::execute_backward_weights(
 
     const auto reducer_bia_scratchpad
             = memory_tracking::grantor_t(scratchpad, prefix_reducer_bia);
-    auto rb = this->reducer_bias_.get();
+    auto rb = this->reducer_bias_;
     rb->init(reducer_bia_scratchpad);
 
     // TODO (Roma): remove this restriction
@@ -718,7 +714,7 @@ void jit_avx512_common_1x1_convolution_bwd_weights_t::execute_backward_weights(
             par_trans.tr_src = tr_src1;
             par_trans.src_prf = src1 + 64 * 16;
             par_trans.tr_src_prf = tr_src1 + 80 * 16;
-            (*trans_kernel_)(&par_trans);
+            trans_kernel_->jit_ker(&par_trans);
 
             src1 += src_stride;
             tr_src1 += tr_src_stride;
@@ -892,7 +888,7 @@ void jit_avx512_common_1x1_convolution_bwd_weights_t::execute_backward_weights(
                                 rp.src = local_src
                                         + ih * src_d.blocking_desc().strides[2]
                                         + iw * src_d.blocking_desc().strides[3];
-                            (*rtus_driver_)(&rp);
+                            rtus_driver_->ker_(&rp);
 
                             p.bcast_data = rp.ws;
                         } else {
@@ -901,7 +897,7 @@ void jit_avx512_common_1x1_convolution_bwd_weights_t::execute_backward_weights(
                             p.bcast_data = local_src + sp * ic_mult;
                         }
 
-                        (*kernel_)(&p);
+                        kernel_->jit_ker(&p);
                     }
                 }
             }

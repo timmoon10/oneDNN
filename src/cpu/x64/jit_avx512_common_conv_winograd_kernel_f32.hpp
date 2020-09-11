@@ -37,16 +37,11 @@ constexpr int simd_w = 16;
 struct _jit_avx512_common_conv_winograd_data_kernel_f32 : public jit_generator {
     _jit_avx512_common_conv_winograd_data_kernel_f32(
             jit_conv_winograd_conf_t ajcp)
-        : jit_generator(nullptr, MAX_CODE_SIZE, false), jcp(ajcp) {}
-
-    void generate() override {
+        : jit_generator(nullptr, MAX_CODE_SIZE, false), jcp(ajcp) {
         //******************* First iter kernel ********************//
-        {
-            const Xbyak::uint8 *addr = getCurr();
-            this->gemm_loop_generate(true);
-            gemm_loop_ker_first_iter = (decltype(gemm_loop_ker_first_iter))addr;
-            register_jit_code(addr, getCurr() - addr);
-        }
+        this->gemm_loop_generate(true);
+        gemm_loop_ker_first_iter
+                = (decltype(gemm_loop_ker_first_iter))this->getCode();
 
         //************** Subsequent iterations kernel **************//
         if (jcp.dimK_nb_block > 1) {
@@ -119,9 +114,7 @@ struct jit_avx512_common_conv_winograd_bwd_weights_kernel_f32
 
     jit_avx512_common_conv_winograd_bwd_weights_kernel_f32(
             jit_conv_winograd_conf_t ajcp)
-        : jit_generator(nullptr, MAX_CODE_SIZE, false), jcp(ajcp) {}
-
-    void generate() override {
+        : jit_generator(nullptr, MAX_CODE_SIZE, false), jcp(ajcp) {
 
         //******************* First iter kernel ********************//
         {

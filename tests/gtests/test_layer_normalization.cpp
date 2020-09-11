@@ -15,7 +15,6 @@
 *******************************************************************************/
 
 #include <cmath>
-#include <memory>
 
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
@@ -24,7 +23,7 @@
 
 #define CPU_INST_TEST_CASE(str, ...) \
     CPU_INSTANTIATE_TEST_SUITE_P( \
-            str, lnorm_test_t, ::testing::Values(__VA_ARGS__));
+            str, lnorm_test, ::testing::Values(__VA_ARGS__));
 
 namespace dnnl {
 
@@ -44,7 +43,7 @@ void fill(const memory &m) {
     fill_data<T>(numElements, m);
 }
 
-class lnorm_test_t : public ::testing::TestWithParam<test_lnorm_params_t> {
+class lnorm_test : public ::testing::TestWithParam<test_lnorm_params_t> {
 private:
     std::shared_ptr<test_memory> src, dst, diff_src, diff_dst;
     memory weights, diff_weights, mean, variance;
@@ -61,7 +60,7 @@ private:
     stream strm;
 
 protected:
-    void SetUp() override {
+    virtual void SetUp() {
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
@@ -71,18 +70,18 @@ protected:
         eng = get_test_engine();
         strm = make_stream(eng);
 
-        data_d = std::make_shared<memory::desc>(
-                p.dims, memory::data_type::f32, p.data_tag);
+        data_d.reset(
+                new memory::desc(p.dims, memory::data_type::f32, p.data_tag));
         memory::dims stat_dims(p.dims.begin(), p.dims.end() - 1);
-        stat_d = std::make_shared<memory::desc>(
-                stat_dims, memory::data_type::f32, p.stat_tag);
-        diff_d = std::make_shared<memory::desc>(
-                p.dims, memory::data_type::f32, p.diff_tag);
+        stat_d.reset(new memory::desc(
+                stat_dims, memory::data_type::f32, p.stat_tag));
+        diff_d.reset(
+                new memory::desc(p.dims, memory::data_type::f32, p.diff_tag));
 
-        src = std::make_shared<test_memory>(*data_d, eng);
-        dst = std::make_shared<test_memory>(*data_d, eng);
-        diff_src = std::make_shared<test_memory>(*diff_d, eng);
-        diff_dst = std::make_shared<test_memory>(*diff_d, eng);
+        src.reset(new test_memory(*data_d, eng));
+        dst.reset(new test_memory(*data_d, eng));
+        diff_src.reset(new test_memory(*diff_d, eng));
+        diff_dst.reset(new test_memory(*diff_d, eng));
 
         auto training = prop_kind::forward_training;
         auto inference = prop_kind::forward_inference;
@@ -574,7 +573,7 @@ private:
     }
 };
 
-TEST_P(lnorm_test_t, TestsLnormF32) {}
+TEST_P(lnorm_test, TestsLnormF32) {}
 
 #include "layer_normalization.h"
 } // namespace dnnl

@@ -36,7 +36,7 @@ namespace {
 using namespace dnnl::impl::data_type;
 
 // clang-format off
-const pd_create_f impl_list[] = {
+static const pd_create_f impl_list[] = {
         /* fp */
         CPU_INSTANCE_X64(jit_uni_pooling_fwd_t<avx512_core, bf16>)
         CPU_INSTANCE_X64(jit_uni_pooling_bwd_t<avx512_core, bf16>)
@@ -61,7 +61,6 @@ const pd_create_f impl_list[] = {
         /* int */
         CPU_INSTANCE_X64(jit_uni_i8i8_pooling_fwd_t<avx512_core>)
         CPU_INSTANCE_X64(jit_uni_i8i8_pooling_fwd_t<avx2>)
-        CPU_INSTANCE_X64(jit_uni_i8i8_pooling_fwd_t<sse41>)
         CPU_INSTANCE(ref_pooling_fwd_t<s32>)
         CPU_INSTANCE(ref_pooling_fwd_t<s8, s32>)
         CPU_INSTANCE(ref_pooling_fwd_t<u8, s32>)
@@ -72,7 +71,7 @@ const pd_create_f impl_list[] = {
 // clang-format on
 } // namespace
 
-const pd_create_f *get_pooling_v2_impl_list(const pooling_v2_desc_t *desc) {
+const pd_create_f *get_pooling_impl_list(const pooling_desc_t *desc) {
     UNUSED(desc);
     return impl_list;
 }

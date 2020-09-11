@@ -24,7 +24,7 @@
 namespace dnnl {
 class ocl_stream_test_c : public ::testing::Test {
 protected:
-    void SetUp() override {
+    virtual void SetUp() {
         if (!find_ocl_device(CL_DEVICE_TYPE_GPU)) { return; }
 
         DNNL_CHECK(dnnl_engine_create(&eng, dnnl_gpu, 0));
@@ -33,7 +33,7 @@ protected:
         DNNL_CHECK(dnnl_engine_get_ocl_device(eng, &ocl_dev));
     }
 
-    void TearDown() override {
+    virtual void TearDown() {
         if (eng) { DNNL_CHECK(dnnl_engine_destroy(eng)); }
     }
 
@@ -44,7 +44,7 @@ protected:
 
 class ocl_stream_test_cpp : public ::testing::Test {
 protected:
-    void SetUp() override {
+    virtual void SetUp() {
         if (!find_ocl_device(CL_DEVICE_TYPE_GPU)) { return; }
 
         eng = engine(engine::kind::gpu, 0);

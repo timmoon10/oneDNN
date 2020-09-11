@@ -60,8 +60,7 @@ struct jit_uni_i8i8_pooling_fwd_t : public primitive_t {
                     && memory_desc_matches_one_of_tag(*dst_md(),
                                format_tag::nwc, format_tag::nhwc,
                                format_tag::ndhwc)
-                            != format_tag::undef
-                    && !is_dilated();
+                            != format_tag::undef;
             if (!ok) return status::unimplemented;
 
             return jit_conf();
@@ -76,8 +75,6 @@ struct jit_uni_i8i8_pooling_fwd_t : public primitive_t {
     jit_uni_i8i8_pooling_fwd_t(const pd_t *apd);
     ~jit_uni_i8i8_pooling_fwd_t();
 
-    status_t init(engine_t *engine) override;
-
     status_t execute(const exec_ctx_t &ctx) const override {
         execute_forward(ctx);
         return status::success;
@@ -87,7 +84,7 @@ private:
     void execute_forward(const exec_ctx_t &ctx) const;
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
 
-    std::unique_ptr<jit_uni_i8i8_pooling_fwd_ker_t<isa>> ker_;
+    jit_uni_i8i8_pooling_fwd_ker_t<isa> *ker_;
 };
 
 } // namespace x64

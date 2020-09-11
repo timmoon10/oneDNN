@@ -389,7 +389,6 @@ dnnl_format_tag_t str2fmt_tag(const char *str) {
     CASE(IOdhw16o16i);
     CASE(Goiw16g);
     CASE(Goiw8g);
-    CASE(Goiw4g);
     CASE(gIOw16o16i);
     CASE(gIOw16i16o);
     CASE(gOIw16i16o);
@@ -438,7 +437,6 @@ dnnl_format_tag_t str2fmt_tag(const char *str) {
     CASE(gOIhw4o4i);
     CASE(gOihw4o);
     CASE(Goihw8g);
-    CASE(Goihw4g);
     CASE(gOIhw8i16o2i);
     CASE(gOIhw8i8o);
     CASE(gOIhw8o16i2o);
@@ -495,6 +493,7 @@ dnnl_format_tag_t str2fmt_tag(const char *str) {
         return dnnl_format_tag_undef;
     if (!strcmp("any", str) || !strcmp("dnnl_format_tag_any", str))
         return dnnl_format_tag_any;
+    assert(!"unknown fmt_tag");
     return dnnl_format_tag_last;
 }
 

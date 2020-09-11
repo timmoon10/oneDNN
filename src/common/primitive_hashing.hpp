@@ -32,16 +32,17 @@ struct primitive_desc_t;
 
 namespace primitive_hashing {
 
+// TODO: Consider replacing op_desc_t with cached_op_desc_t
 struct cached_op_desc_t {
-    cached_op_desc_t(const op_desc_t *op_desc)
-        : kind_(get_kind(op_desc->kind)) {
+    cached_op_desc_t(primitive_kind_t kind, const op_desc_t *op_desc)
+        : kind_(get_kind(kind)) {
+
 #define CASE(pkind) \
     case primitive_kind::pkind: \
-        placeholder_ \
-                = new pkind##_desc_t(cast_to_desc<pkind##_desc_t>(op_desc)); \
+        new (&pkind) pkind##_desc_t( \
+                *(reinterpret_cast<const pkind##_desc_t *>(op_desc))); \
         break;
 
-        // clang-format off
         switch ((int)kind_) {
             CASE(batch_normalization)
             CASE(binary)
@@ -52,7 +53,6 @@ struct cached_op_desc_t {
             CASE(layer_normalization)
             CASE(lrn)
             CASE(matmul)
-            case primitive_kind::pooling_v2:
             CASE(pooling)
             CASE(reorder)
             CASE(resampling)
@@ -64,24 +64,45 @@ struct cached_op_desc_t {
             CASE(zero_pad)
             default: assert(!"unknown primitive kind");
         }
-            // clang-format on
 #undef CASE
     }
 
-    cached_op_desc_t(const cached_op_desc_t &other)
-        : cached_op_desc_t(
-                reinterpret_cast<const op_desc_t *>(other.placeholder_)) {}
+    cached_op_desc_t(const cached_op_desc_t &other) : kind_(other.kind_) {
+
+#define CASE(pkind) \
+    case primitive_kind::pkind: new (&pkind) pkind##_desc_t(other.pkind); break;
+
+        switch ((int)kind_) {
+            CASE(batch_normalization)
+            CASE(binary)
+            CASE(convolution)
+            CASE(eltwise)
+            CASE(gemm)
+            CASE(inner_product)
+            CASE(layer_normalization)
+            CASE(lrn)
+            CASE(matmul)
+            CASE(pooling)
+            CASE(reorder)
+            CASE(resampling)
+            CASE(rnn)
+            CASE(shuffle)
+            CASE(softmax)
+            CASE(concat)
+            CASE(sum)
+            CASE(zero_pad);
+            default: assert(!"unknown primitive kind");
+        }
+#undef CASE
+    }
 
     bool operator==(const cached_op_desc_t &other) const {
         if (kind_ != other.kind_) return false;
+
 #define CASE(pkind) \
-    case primitive_kind::pkind: \
-        ret = cast_to_desc<pkind##_desc_t>(placeholder_) \
-                == cast_to_desc<pkind##_desc_t>(other.placeholder_); \
-        break;
+    case primitive_kind::pkind: ret = pkind == other.pkind; break;
 
         bool ret = true;
-        // clang-format off
         switch ((int)kind_) {
             CASE(batch_normalization)
             CASE(binary)
@@ -93,7 +114,6 @@ struct cached_op_desc_t {
             CASE(layer_normalization)
             CASE(lrn)
             CASE(matmul)
-            case primitive_kind::pooling_v2:
             CASE(pooling)
             CASE(reorder)
             CASE(resampling)
@@ -104,17 +124,14 @@ struct cached_op_desc_t {
             CASE(zero_pad)
             default: assert(!"unknown primitive kind");
         }
-            // clang-format on
 #undef CASE
         return ret;
     }
 
 #define DECLARE_CONVERSION_OPERATOR(pkind) \
     operator pkind##_desc_t() const { \
-        assert(kind_ == primitive_kind::pkind \
-                || (primitive_kind::pkind == primitive_kind::pooling \
-                        && kind_ == primitive_kind::pooling_v2)); \
-        return cast_to_desc<pkind##_desc_t>(placeholder_); \
+        assert(kind_ == primitive_kind::pkind); \
+        return pkind; \
     }
     DECLARE_CONVERSION_OPERATOR(batch_normalization)
     DECLARE_CONVERSION_OPERATOR(binary)
@@ -127,7 +144,6 @@ struct cached_op_desc_t {
     DECLARE_CONVERSION_OPERATOR(lrn)
     DECLARE_CONVERSION_OPERATOR(matmul)
     DECLARE_CONVERSION_OPERATOR(pooling)
-    DECLARE_CONVERSION_OPERATOR(pooling_v2)
     DECLARE_CONVERSION_OPERATOR(reorder)
     DECLARE_CONVERSION_OPERATOR(resampling)
     DECLARE_CONVERSION_OPERATOR(rnn)
@@ -138,49 +154,35 @@ struct cached_op_desc_t {
 #undef DECLARE_CONVERSION_OPERATOR
 
     ~cached_op_desc_t() {
-#define CASE(pkind) \
-    case primitive_kind::pkind: \
-        delete reinterpret_cast<pkind##_desc_t *>(placeholder_); \
-        break;
-
-        // clang-format off
         switch ((int)kind_) {
-            CASE(batch_normalization)
-            CASE(binary)
-            CASE(concat)
-            CASE(convolution)
-            CASE(eltwise)
-            CASE(gemm)
-            CASE(inner_product)
-            CASE(layer_normalization)
-            CASE(logsoftmax)
-            CASE(lrn)
-            CASE(matmul)
-            case primitive_kind::pooling_v2:
-            CASE(pooling)
-            CASE(reorder)
-            CASE(resampling)
-            CASE(rnn)
-            CASE(shuffle)
-            CASE(softmax)
-            CASE(sum)
-            CASE(zero_pad)
+            case primitive_kind::batch_normalization:
+            case primitive_kind::binary:
+            case primitive_kind::convolution:
+            case primitive_kind::eltwise:
+            case primitive_kind::gemm:
+            case primitive_kind::inner_product:
+            case primitive_kind::layer_normalization:
+            case primitive_kind::logsoftmax:
+            case primitive_kind::lrn:
+            case primitive_kind::matmul:
+            case primitive_kind::pooling:
+            case primitive_kind::reorder:
+            case primitive_kind::resampling:
+            case primitive_kind::rnn:
+            case primitive_kind::shuffle:
+            case primitive_kind::softmax:
+            case primitive_kind::zero_pad: break;
+            case primitive_kind::concat: concat.~dnnl_concat_desc_t(); break;
+            case primitive_kind::sum: sum.~dnnl_sum_desc_t(); break;
             default: assert(!"unknown primitive_kind");
         }
-            // clang-format on
-#undef CASE
     }
 
 private:
     cached_op_desc_t() = delete;
     cached_op_desc_t &operator=(const cached_op_desc_t &) = delete;
 
-    template <typename desc_t>
-    static const desc_t &cast_to_desc(const void *p) {
-        return *(reinterpret_cast<const desc_t *>(p));
-    }
-
-    static primitive_kind_t get_kind(primitive_kind_t kind) {
+    primitive_kind_t get_kind(primitive_kind_t kind) {
         auto k = primitive_kind::undefined;
         switch (kind) {
             case primitive_kind::softmax:
@@ -195,7 +197,28 @@ private:
     }
 
     primitive_kind_t kind_;
-    void *placeholder_ = nullptr;
+    union {
+        batch_normalization_desc_t batch_normalization;
+        binary_desc_t binary;
+        concat_desc_t concat;
+        // This desc is common for convolution and deconvolution
+        convolution_desc_t convolution;
+        eltwise_desc_t eltwise;
+        gemm_desc_t gemm;
+        inner_product_desc_t inner_product;
+        layer_normalization_desc_t layer_normalization;
+        lrn_desc_t lrn;
+        matmul_desc_t matmul;
+        pooling_desc_t pooling;
+        reorder_desc_t reorder;
+        resampling_desc_t resampling;
+        rnn_desc_t rnn;
+        shuffle_desc_t shuffle;
+        // This desc is common for softmax and logsoftmax
+        softmax_desc_t softmax;
+        sum_desc_t sum;
+        zero_pad_desc_t zero_pad;
+    };
 };
 
 struct key_t {
@@ -239,7 +262,6 @@ size_t get_desc_hash(const layer_normalization_desc_t &desc);
 size_t get_desc_hash(const lrn_desc_t &desc);
 size_t get_desc_hash(const matmul_desc_t &desc);
 size_t get_desc_hash(const pooling_desc_t &desc);
-size_t get_desc_hash(const pooling_v2_desc_t &desc);
 size_t get_desc_hash(const reorder_desc_t &desc);
 size_t get_desc_hash(const resampling_desc_t &desc);
 size_t get_desc_hash(const rnn_desc_t &desc);
@@ -299,7 +321,6 @@ struct hash<dnnl::impl::primitive_hashing::key_t> {
                 seed, get_desc_hash((pkind##_desc_t)key.op_desc_)); \
         break;
 
-        // clang-format off
         switch ((int)key.primitive_kind_) {
             CASE(batch_normalization)
             CASE(binary)
@@ -312,7 +333,6 @@ struct hash<dnnl::impl::primitive_hashing::key_t> {
             CASE(layer_normalization)
             CASE(lrn)
             CASE(matmul)
-            case primitive_kind::pooling_v2:
             CASE(pooling)
             CASE(reorder)
             CASE(resampling)
@@ -323,7 +343,6 @@ struct hash<dnnl::impl::primitive_hashing::key_t> {
             CASE(zero_pad)
             default: assert(!"unknown primitive_kind");
         }
-            // clang-format on
 #undef CASE
         seed = get_array_hash(seed, key.mds.data(), (int)key.mds.size());
 

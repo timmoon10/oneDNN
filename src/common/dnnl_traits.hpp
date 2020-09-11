@@ -115,7 +115,6 @@ PKIND_TRAITS_INST(shuffle);
 PKIND_TRAITS_INST(eltwise);
 PKIND_TRAITS_INST(softmax);
 PKIND_TRAITS_INST(pooling);
-PKIND_TRAITS_INST(pooling_v2);
 PKIND_TRAITS_INST(lrn);
 PKIND_TRAITS_INST(batch_normalization);
 PKIND_TRAITS_INST(layer_normalization);

@@ -36,7 +36,9 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
     dnnl_softmax_desc_t sd;
     dnnl_memory_desc_t data_d;
 
-    SAFE(init_md(&data_d, p->ndims, p->dims.data(), p->dt, p->tag), CRIT);
+    DNN_SAFE(dnnl_memory_desc_init_by_tag(&data_d, p->ndims, p->dims.data(),
+                     p->dt, convert_tag(p->tag, p->ndims)),
+            WARN);
 
     if (p->dir & FLAG_FWD) {
         auto prop = p->dir & FLAG_INF ? dnnl_forward_inference
@@ -69,10 +71,10 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
             SAFE_V(FAIL);
     }
 
-    auto dnnl_attr = create_dnnl_attr(p->attr, attr_args_t());
+    auto dnnl_attr = create_dnnl_attr(attr_t());
 
     dnnl_status_t init_status
-            = dnnl_primitive_desc_create(&spd, &sd, dnnl_attr, engine, nullptr);
+            = dnnl_primitive_desc_create(&spd, &sd, dnnl_attr, engine, NULL);
 
     dnnl_primitive_attr_destroy(dnnl_attr);
 
@@ -233,7 +235,7 @@ int doit(const prb_t *p, res_t *r) {
     const auto &scratchpad_md = q(DNNL_ARG_SCRATCHPAD);
 
     const auto fp = dnnl_f32;
-    const auto tag = tag::abx;
+    const auto tag = get_abx_tag(p->ndims);
 
     const auto &test_engine = get_test_engine();
 

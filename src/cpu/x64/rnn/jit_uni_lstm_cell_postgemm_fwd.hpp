@@ -42,7 +42,7 @@ struct jit_uni_lstm_cell_postgemm_fwd : public jit_uni_rnn_postgemm {
         delete tanh_injector_;
     }
 
-    status_t init(data_type_t sdt) override {
+    void init(data_type_t sdt) override {
         jit_uni_rnn_postgemm::init(src_data_t);
         // we use rax for both constant tables and load correspondent label
         // into it when calling correspondent injector.
@@ -50,7 +50,8 @@ struct jit_uni_lstm_cell_postgemm_fwd : public jit_uni_rnn_postgemm {
                 this, alg_kind::eltwise_logistic, 0.0f, 0.0f, 1.0f, true, rax);
         tanh_injector_ = new injector_t(
                 this, alg_kind::eltwise_tanh, 0.0f, 0.0f, 1.0f, true, rax);
-        return create_kernel();
+        generate();
+        kernel_ = (kernel_t)this->getCode();
     }
 
 protected:
@@ -70,7 +71,7 @@ protected:
     size_t weights_peephole_dt_size = sizeof(float);
     size_t bias_dt_size = sizeof(float);
 
-    void generate() override {
+    void generate() {
         using namespace Xbyak;
 
         auto is_training

@@ -64,6 +64,10 @@ endif()
 if(WIN32)
     add_definitions(-D_WIN)
     add_definitions(-DNOMINMAX)
+    # Correct 'jnl' macro/jit issue
+    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Intel" AND ${CMAKE_CXX_COMPILER_VERSION} LESS 19.1)
+        append(CMAKE_CXX_FLAGS "/Qlong-double")
+    endif()
 endif()
 
 # Windows does not support weak/strong symbols and no guarrantees by the linker
@@ -157,23 +161,23 @@ install(CODE "execute_process(COMMAND ${CMAKE_COMMAND}
 if (WIN32)
     if (NOT MINGW)
         set(prefix "")
-        set(ext ".lib")
+        set(ext "lib")
     else()
         set(prefix "lib")
         if (DNNL_LIBRARY_TYPE STREQUAL "SHARED")
-            set(ext ".dll.a")
+            set(ext "dll.a")
         else()
-            set(ext ".a")
+            set(ext "a")
         endif()
     endif()
     add_custom_target(compat_libs ALL
         ${CMAKE_COMMAND} -E copy
-        $<TARGET_LINKER_FILE_DIR:${LIB_NAME}>/$<TARGET_LINKER_FILE_NAME:${LIB_NAME}>
-        $<TARGET_LINKER_FILE_DIR:${LIB_NAME}>/${prefix}mkldnn${ext}
+        $<TARGET_FILE_DIR:${LIB_NAME}>/${prefix}dnnl.${ext}
+        $<TARGET_FILE_DIR:${LIB_NAME}>/${prefix}mkldnn.${ext}
         # Workaround for MSB8065 warning.
         COMMAND ${CMAKE_COMMAND} -E touch "CMakeFiles/compat_libs"
         DEPENDS ${LIB_NAME})
-    install(FILES $<TARGET_LINKER_FILE_DIR:${LIB_NAME}>/${prefix}mkldnn${ext}
+    install(FILES $<TARGET_FILE_DIR:${LIB_NAME}>/${prefix}mkldnn.${ext}
         DESTINATION ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
 else()
     if(DNNL_LIBRARY_TYPE STREQUAL "SHARED")

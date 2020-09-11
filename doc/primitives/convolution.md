@@ -127,18 +127,17 @@ update.
 When executed, the inputs and outputs should be mapped to an execution
 argument index as specified by the following table.
 
-| Primitive input/output | Execution argument index                                                  |
-| ---                    | ---                                                                       |
-| \src                   | DNNL_ARG_SRC                                                              |
-| \weights               | DNNL_ARG_WEIGHTS                                                          |
-| \bias                  | DNNL_ARG_BIAS                                                             |
-| \dst                   | DNNL_ARG_DST                                                              |
-| \diffsrc               | DNNL_ARG_DIFF_SRC                                                         |
-| \diffweights           | DNNL_ARG_DIFF_WEIGHTS                                                     |
-| \diffbias              | DNNL_ARG_DIFF_BIAS                                                        |
-| \diffdst               | DNNL_ARG_DIFF_DST                                                         |
-| \f$depthwise\f$        | DNNL_ARG_ATTR_POST_OP_DW                                                  |
-| \f$binary post-op\f$   | DNNL_ARG_ATTR_MULTIPLE_POST_OP(binary_post_op_position) \| DNNL_ARG_SRC_1 |
+| Primitive input/output | Execution argument index |
+| ---                    | ---                      |
+| \src                   | DNNL_ARG_SRC             |
+| \weights               | DNNL_ARG_WEIGHTS         |
+| \bias                  | DNNL_ARG_BIAS            |
+| \dst                   | DNNL_ARG_DST             |
+| \diffsrc               | DNNL_ARG_DIFF_SRC        |
+| \diffweights           | DNNL_ARG_DIFF_WEIGHTS    |
+| \diffbias              | DNNL_ARG_DIFF_BIAS       |
+| \diffdst               | DNNL_ARG_DIFF_DST        |
+| \f$depthwise\f$        | DNNL_ARG_ATTR_POST_OP_DW |
 
 ## Implementation Details
 
@@ -210,12 +209,11 @@ primitive by applying the output scale to the result of the primitive and by
 chaining certain operations after the primitive. The following attributes and
 post-ops are supported:
 
-| Propagation | Type      | Operation                                                    | Description                                                                   | Restrictions                        |
-| :--         | :--       | :--                                                          | :--                                                                           | :--                                 |
-| forward     | attribute | [Output scale](@ref dnnl::primitive_attr::set_output_scales) | Scales the result of convolution by given scale factor(s)                     | int8 convolutions only              |
-| forward     | post-op   | [Eltwise](@ref dnnl::post_ops::append_eltwise)               | Applies an @ref dnnl_api_eltwise operation to the result                      |                                     |
-| forward     | post-op   | [Sum](@ref dnnl::post_ops::append_sum)                       | Adds the operation result to the destination tensor instead of overwriting it |                                     |
-| forward     | post-op   | [Binary](@ref dnnl::post_ops::append_binary)                 | Applies a @ref dnnl_api_binary operation to the result                        | General binary post-op restrictions |
+| Propagation | Type      | Operation                                                    | Description                                                                   | Restrictions           |
+| :--         | :--       | :--                                                          | :--                                                                           | :--                    |
+| forward     | attribute | [Output scale](@ref dnnl::primitive_attr::set_output_scales) | Scales the result of convolution by given scale factor(s)                     | int8 convolutions only |
+| forward     | post-op   | [eltwise](@ref dnnl::post_ops::append_eltwise)               | Applies an @ref dnnl_api_eltwise operation to the result                      |                        |
+| forward     | post-op   | [sum](@ref dnnl::post_ops::append_sum)                       | Adds the operation result to the destination tensor instead of overwriting it |                        |
 
 To facilitate dynamic quantization, the primitive supports run-time output
 scales. That means a user could configure attributes with output scales set to
@@ -231,8 +229,7 @@ additional output `workspace` that is required to compute backward propagation
 correctly. Hence, in this particular case one should use separate convolution
 and eltwise primitives for training.
 
-The library supports any number and order of post operations, but only the
-following sequences deploy optimized code:
+The following post-ops chaining is supported by the library:
 
 | Type of convolutions      | Post-ops sequence supported
 | :--                       | :--

@@ -31,7 +31,7 @@ dnnl_status_t dnnl_stream_attr_create(
 }
 
 dnnl_status_t dnnl_stream_attr_destroy(dnnl_stream_attr_t attr) {
-    delete attr;
+    if (attr != nullptr) delete attr;
     return status::success;
 }
 

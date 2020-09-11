@@ -36,11 +36,10 @@ using namespace Xbyak;
 struct jit_trans_iw_ic_t : public jit_trans_src_t, public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_trans_iw_ic_t)
 
-    jit_trans_iw_ic_t(const jit_conv_conf_t *conf) : jit_trans_src_t(conf) {}
-
-    void operator()(ctx_t *ctx) override { jit_generator::operator()(ctx); }
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
+    jit_trans_iw_ic_t(const jit_conv_conf_t *conf) : jit_trans_src_t(conf) {
+        generate();
+        ker_ = (decltype(ker_))this->getCode();
+    }
 
 private:
     using reg64_t = const Xbyak::Reg64;
@@ -69,7 +68,7 @@ private:
     reg32_t regw_tmp = r14d;
 
     void transpose(int nrows, int l_pad, int r_pad, bool nontemporal_stores);
-    void generate() override;
+    void generate();
 };
 
 void jit_trans_iw_ic_t::transpose(
@@ -280,7 +279,7 @@ void jit_trans_iw_ic_t::generate() {
     tr_src_stride = tr_iw * typesize;
 
     bool nontemporal_stores = false;
-    enable_prefetch = iw > small_spatial;
+    enable_prefetch = iw > small_spatial ? 1 : 0;
 
     assert(transpose_size == ic_block);
     const int src_step = ic_block * transpose_size * typesize;
@@ -340,11 +339,10 @@ void jit_trans_iw_ic_t::generate() {
 struct jit_trans_iw_ic_int16_t : public jit_trans_src_t, public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_trans_iw_ic_int16_t)
     jit_trans_iw_ic_int16_t(const jit_conv_conf_t *conf)
-        : jit_trans_src_t(conf) {}
-
-    void operator()(ctx_t *ctx) override { jit_generator::operator()(ctx); }
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
+        : jit_trans_src_t(conf) {
+        generate();
+        ker_ = (decltype(ker_))this->getCode();
+    }
 
 private:
     using reg64_t = const Xbyak::Reg64;
@@ -386,7 +384,7 @@ private:
     Xbyak::Zmm zmm_tmp = zmm26;
 
     void transpose(int nrows, int l_pad, int r_pad, bool nontemporal_stores);
-    void generate() override;
+    void generate();
 };
 
 void jit_trans_iw_ic_int16_t::transpose(
@@ -725,7 +723,7 @@ void jit_trans_iw_ic_int16_t::generate() {
         tr_src_stride = tr_iw * typesize;
 
         bool nontemporal_stores = false;
-        enable_prefetch = iw > small_spatial ? true : false;
+        enable_prefetch = iw > small_spatial ? 1 : 0;
 
         const size_t src_step = src_mult * transpose_size * str_w * typesize;
         const size_t tr_src_step = transpose_size * typesize;
@@ -777,11 +775,10 @@ void jit_trans_iw_ic_int16_t::generate() {
 
 struct jit_trans_ow_oc_t : public jit_trans_dst_t, public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_trans_ow_oc_t)
-    jit_trans_ow_oc_t(const jit_conv_conf_t *conf) : jit_trans_dst_t(conf) {}
-
-    void operator()(ctx_t *ctx) override { jit_generator::operator()(ctx); }
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
+    jit_trans_ow_oc_t(const jit_conv_conf_t *conf) : jit_trans_dst_t(conf) {
+        generate();
+        ker_ = (decltype(ker_))this->getCode();
+    }
 
 private:
     using reg64_t = const Xbyak::Reg64;
@@ -815,7 +812,7 @@ private:
     reg64_t imm_addr64 = rbx;
 
     void transpose(int nrows, int l_pad, int r_pad, bool nontemporal_stores);
-    void generate() override;
+    void generate();
 };
 
 void jit_trans_ow_oc_t::transpose(
@@ -933,8 +930,8 @@ void jit_trans_ow_oc_t::generate() {
     src_stride = src_mult * typesize;
     tr_src_stride = oc_block * typesize;
 
-    bool nontemporal_stores = conf_->use_nt_stores_ddst;
-    enable_prefetch = ow > small_spatial;
+    bool nontemporal_stores = false;
+    enable_prefetch = ow > small_spatial ? 1 : 0;
 
     const size_t src_step = src_mult * transpose_size * typesize;
     const size_t tr_src_step = (size_t)oc_block * transpose_size * typesize;
@@ -995,14 +992,12 @@ void jit_trans_ow_oc_t::generate() {
 struct jit_trans_iw_x4_4x_t : public jit_trans_src_t, public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_trans_iw_x4_4x_t)
 
-    jit_trans_iw_x4_4x_t(const jit_conv_conf_t *conf) : jit_trans_src_t(conf) {}
+    jit_trans_iw_x4_4x_t(const jit_conv_conf_t *conf) : jit_trans_src_t(conf) {
+        generate();
+        ker_ = (decltype(ker_))this->getCode();
+    }
 
-    void generate() override;
-
-    void operator()(ctx_t *ctx) override { jit_generator::operator()(ctx); }
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
-
+    void generate();
     enum { typesize = (int)sizeof(float) };
 };
 

@@ -223,7 +223,6 @@ status_t jit_avx512_core_x8s8s32x_deconv_fwd_kernel::init_conf(
 
     /* kernel blocking params */
     const int regs = jcp.ver == ver_vnni ? 30 : 28;
-    jcp.nb_ch_blocking = 1;
     jcp.nb_oc_blocking = nstl::min(4, jcp.nb_oc);
     for (; jcp.nb_oc_blocking > 1; jcp.nb_oc_blocking--)
         if (jcp.nb_oc % jcp.nb_oc_blocking == 0
@@ -990,9 +989,8 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
     }
     size_t offset = (size_t)jcp.ngroups * jcp.oc * jcp.ic * jcp.kh * jcp.kw;
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation = (jcp.signed_input)
-            ? reinterpret_cast<int32_t *>(&w[offset])
-            : nullptr;
+    int32_t *compensation
+            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
 
     parallel(jcp.nthr, [&](const int ithr, const int nthr) {
         int start {0}, end {0};
@@ -1019,15 +1017,15 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
             p.filt = weights + wht_blk_off(weights_d, g, ocb, 0);
             p.bias = jcp.with_bias
                     ? bias + (bias_d.blk_off(g_oc) * jcp.typesize_bia)
-                    : nullptr;
-            p.compensation = (jcp.signed_input) ? compensation + g_oc : nullptr;
+                    : 0;
+            p.compensation = (jcp.signed_input) ? compensation + g_oc : 0;
             p.scales = &oscales[jcp.is_oc_scale * g_oc];
             p.t_overflow = 0;
             p.b_overflow = 0;
             p.kh_padding = jcp.kh;
             p.oc_blocks = jcp.is_depthwise ? g : ocb;
 
-            (*kernel_)(&p);
+            kernel_->jit_ker(&p);
 
             ++start;
             if (jcp.loop_order == loop_ngc)
@@ -1078,9 +1076,8 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
     }
     size_t offset = (size_t)jcp.ngroups * jcp.oc * jcp.ic * jcp.kh * jcp.kw;
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation = (jcp.signed_input)
-            ? reinterpret_cast<int32_t *>(&w[offset])
-            : nullptr;
+    int32_t *compensation
+            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
 
     parallel(jcp.nthr, [&](const int ithr, const int nthr) {
         int start {0}, end {0};
@@ -1112,9 +1109,9 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
             auto wht_w = weights + wht_blk_off(weights_d, g, ocb, 0);
             auto bias_w = jcp.with_bias
                     ? bias + (bias_d.blk_off(g_oc) * jcp.typesize_bia)
-                    : nullptr;
+                    : 0;
             int32_t *compensation_w
-                    = (jcp.signed_input) ? compensation + g_oc : nullptr;
+                    = (jcp.signed_input) ? compensation + g_oc : 0;
 
             auto scales = &oscales[jcp.is_oc_scale * g_oc];
             for (int oj = oh_s; oj < oh_e; oj++) {
@@ -1170,7 +1167,7 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
                 p.kh_padding = kh_len;
                 p.scales = scales;
                 p.oc_blocks = jcp.is_depthwise ? g : ocb;
-                (*kernel_)(&p);
+                kernel_->jit_ker(&p);
             }
             if (jcp.loop_order == loop_ngc)
                 nd_iterator_jump(start, end, n, jcp.mb, g, nb_groups, occ,
@@ -1225,9 +1222,8 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
     }
     size_t offset = weights_d.size() - weights_d.additional_buffer_size();
     auto w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation = (jcp.signed_input)
-            ? reinterpret_cast<int32_t *>(&w[offset])
-            : nullptr;
+    int32_t *compensation
+            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(&w[offset]) : 0;
 
     parallel(jcp.nthr, [&](const int ithr, const int nthr) {
         int start {0}, end {0};
@@ -1295,9 +1291,9 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
                     + (jcp.signed_input ? 0 : kd_lo) * wht_kd_stride;
             auto bias_w = jcp.with_bias
                     ? bias + (bias_d.blk_off(g_oc) * jcp.typesize_bia)
-                    : nullptr;
+                    : 0;
             int32_t *compensation_w
-                    = (jcp.signed_input) ? compensation + g_oc : nullptr;
+                    = (jcp.signed_input) ? compensation + g_oc : 0;
 
             auto scales = &oscales[jcp.is_oc_scale * g_oc];
 
@@ -1366,7 +1362,7 @@ void _jit_avx512_core_x8s8s32x_deconvolution_fwd_t<src_type,
                 p.kd_padding = kd_len;
                 p.scales = scales;
                 p.oc_blocks = jcp.is_depthwise ? g : ocb;
-                (*kernel_)(&p);
+                kernel_->jit_ker(&p);
             }
             if (jcp.loop_order == loop_ngc)
                 nd_iterator_jump(start, end, n, jcp.mb, g, nb_groups, occ,

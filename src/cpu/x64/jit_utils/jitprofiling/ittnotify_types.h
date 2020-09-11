@@ -1,7 +1,7 @@
 /* <copyright>
 
   Contact Information:
-  https://software.intel.com/content/www/us/en/develop/tools/vtune-profiler.html
+  http://software.intel.com/en-us/articles/intel-vtune-amplifier-xe/
 
   BSD LICENSE
 

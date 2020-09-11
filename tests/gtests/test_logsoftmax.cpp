@@ -24,7 +24,7 @@ namespace dnnl {
 using tag = memory::format_tag;
 
 template <typename data_t>
-struct logsoftmax_test_params_t {
+struct logsoftmax_test_params {
     prop_kind aprop_kind;
     tag memory_format;
     tag diff_memory_format;
@@ -35,17 +35,17 @@ struct logsoftmax_test_params_t {
 };
 
 template <typename data_t>
-class logsoftmax_test_t
-    : public ::testing::TestWithParam<logsoftmax_test_params_t<data_t>> {
+class logsoftmax_test
+    : public ::testing::TestWithParam<logsoftmax_test_params<data_t>> {
 private:
-    logsoftmax_test_params_t<data_t> p;
+    logsoftmax_test_params<data_t> p;
     std::shared_ptr<memory> dst, workspace;
     std::shared_ptr<logsoftmax_forward::primitive_desc> pd_fwd_hint;
 
 protected:
-    void SetUp() override {
+    virtual void SetUp() {
         p = ::testing::TestWithParam<
-                logsoftmax_test_params_t<data_t>>::GetParam();
+                logsoftmax_test_params<data_t>>::GetParam();
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
@@ -54,7 +54,7 @@ protected:
         // logsoftmax specific types and values
         using op_desc_t = logsoftmax_forward::desc;
         using pd_t = logsoftmax_forward::primitive_desc;
-        allows_attr_t aa {false}; // doesn't support anything
+        allows_attr_t aa {0}; // doesn't support anything
 
         auto eng = get_test_engine();
         auto strm = make_stream(eng);
@@ -136,7 +136,7 @@ protected:
         using op_desc_t = logsoftmax_backward::desc;
         using pd_t = logsoftmax_backward::primitive_desc;
         using hint_pd_t = logsoftmax_forward::primitive_desc;
-        allows_attr_t aa {false}; // doesn't support anything
+        allows_attr_t aa {0}; // doesn't support anything
 
         auto eng = get_test_engine();
         auto strm = make_stream(eng);
@@ -207,14 +207,14 @@ protected:
     }
 };
 
-using logsoftmax_forward_test_float = logsoftmax_test_t<float>;
-using logsoftmax_forward_test_half = logsoftmax_test_t<float16_t>;
-using logsoftmax_forward_test_bfloat16 = logsoftmax_test_t<bfloat16_t>;
+using logsoftmax_forward_test_float = logsoftmax_test<float>;
+using logsoftmax_forward_test_half = logsoftmax_test<float16_t>;
+using logsoftmax_forward_test_bfloat16 = logsoftmax_test<bfloat16_t>;
 
-using logsoftmax_backward_test_float = logsoftmax_test_t<float>;
+using logsoftmax_backward_test_float = logsoftmax_test<float>;
 
 template <typename dt>
-using test_params = logsoftmax_test_params_t<dt>;
+using test_params = logsoftmax_test_params<dt>;
 
 TEST_P(logsoftmax_forward_test_float, TestsLogSoftmax) {}
 INSTANTIATE_TEST_SUITE_P(TestLogSoftmaxForwardFloat,

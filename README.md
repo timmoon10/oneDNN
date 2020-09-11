@@ -19,8 +19,8 @@ oneAPI Deep Neural Network Library (oneDNN) is an open-source cross-platform
 performance library of basic building blocks for deep learning applications.
 The library is optimized for Intel Architecture Processors, Intel Processor
 Graphics and Xe architecture-based Graphics. Support for other architectures
-such as Arm\* 64-bit Architecture (AArch64), OpenPOWER\* Power ISA (PPC64),
-and IBMz\* (s390x) is experimental.
+such as Arm\* 64-bit Architecture (AArch64) and OpenPOWER\* Power ISA (PPC64)
+is experimental.
 See the [System Requirements](#system-requirements) section below.
 
 oneDNN is intended for deep learning applications and framework
@@ -91,11 +91,10 @@ oneDNN supports platforms based on the following architectures:
 - [Intel 64 or AMD64](https://en.wikipedia.org/wiki/X86-64),
 - [Arm 64-bit Architecture (AArch64)](https://developer.arm.com/architectures/cpu-architecture/a-profile).
 - [OpenPOWER](https://openpowerfoundation.org/) / [IBM Power ISA](https://en.wikipedia.org/wiki/Power_ISA).
-- [IBMz z/Architecture (s390x)](https://en.wikipedia.org/wiki/Z/Architecture).
 
 > **WARNING**
 >
-> Arm 64-bit Architecture (AArch64), Power ISA (PPC64) and IBMz (s390x) support
+> Arm 64-bit Architecture (AArch64) and Power ISA (PPC64) support
 > is **experimental** with limited testing validation.
 
 The library is optimized for the following CPUs:
@@ -132,7 +131,7 @@ The library is optimized for the following GPUs:
 ## Requirements for Building from Source
 
 oneDNN supports systems meeting the following requirements:
-* Operating system with Intel 64 / Arm 64 / Power / IBMz architecture support
+* Operating system with Intel 64 / Arm 64 / Power architecture support
 * C++ compiler with C++11 standard support
 * [CMake](https://cmake.org/download/) 2.8.11 or later
 * [Doxygen](http://www.doxygen.nl/download.html#srcbin) 1.8.5 or later
@@ -145,7 +144,7 @@ dependencies.
 
 oneDNN CPU engine is used to execute primitives on Intel Architecture
 Processors, 64-bit Arm Architecture (AArch64) processors,
-64-bit Power ISA (PPC64) processors, IBMz (s390x), and compatible devices.
+64-bit Power ISA (PPC64) processors, and compatible devices.
 
 The CPU engine is built by default and cannot be disabled at build time. The
 engine can be configured to use the OpenMP or TBB threading runtime. The
@@ -225,34 +224,34 @@ Runtime-specific dependencies:
 CPU engine was validated on RedHat\* Enterprise Linux 7 with
 * GNU Compiler Collection 4.8, 5.4, 6.1, 7.2, and 8.1
 * Clang\* 3.8.0
-* [Intel C/C++ Compiler](https://software.intel.com/content/www/us/en/develop/tools/parallel-studio-xe.html)
+* [Intel C/C++ Compiler](https://software.intel.com/en-us/intel-parallel-studio-xe)
   17.0, 18.0, and 19.0
 
 on Windows Server\* 2012 R2 with
 * Microsoft Visual C++ 14.0 (Visual Studio 2015 Update 3)
-* [Intel C/C++ Compiler](https://software.intel.com/content/www/us/en/develop/tools/parallel-studio-xe.html)
+* [Intel C/C++ Compiler](https://software.intel.com/en-us/intel-parallel-studio-xe)
   17.0 and 19.0
 
 on macOS 10.13 (High Sierra) with
 * Apple LLVM version 9.2 (XCode 9.2)
-* [Intel C/C++ Compiler](https://software.intel.com/content/www/us/en/develop/tools/parallel-studio-xe.html)
+* [Intel C/C++ Compiler](https://software.intel.com/en-us/intel-parallel-studio-xe)
   18.0 and 19.0
 
 GPU engine was validated on Ubuntu\* 18.04 with
 * GNU Compiler Collection 6.1 and 8.1
 * Clang 3.8.1
-* [Intel C/C++ Compiler](https://software.intel.com/content/www/us/en/develop/tools/parallel-studio-xe.html)
+* [Intel C/C++ Compiler](https://software.intel.com/en-us/intel-parallel-studio-xe)
   19.0
-* [Intel SDK for OpenCL applications](https://software.intel.com/content/www/us/en/develop/tools/opencl-sdk.html)
+* [Intel SDK for OpenCL applications](https://software.intel.com/en-us/intel-opencl)
   2019 Update 3
 * [Intel Graphics Compute Runtime for OpenCL](https://github.com/intel/compute-runtime/releases)
   19.37.14191
 
 on Windows Server 2019 with
 * Microsoft Visual C++ 14.0 (Visual Studio 2015 Update 3)
-* [Intel C/C++ Compiler](https://software.intel.com/content/www/us/en/develop/tools/parallel-studio-xe.html)
+* [Intel C/C++ Compiler](https://software.intel.com/en-us/intel-parallel-studio-xe)
   19.0
-* [Intel SDK for OpenCL applications](https://software.intel.com/content/www/us/en/develop/tools/opencl-sdk.html) 2019 Update 3
+* [Intel SDK for OpenCL applications](https://software.intel.com/en-us/intel-opencl) 2019 Update 3
 * [Intel Graphics - Windows 10 DCH Drivers](https://downloadcenter.intel.com/download/28783/Intel-Graphics-Windows-10-DCH-Drivers) 26.20.100.6709
 
 ## Requirements for Pre-built Binaries
@@ -299,7 +298,7 @@ terms.
 3-clause BSD license:
 * [Xbyak](https://github.com/herumi/xbyak)
 * [gtest](https://github.com/google/googletest)
-* [Instrumentation and Tracing Technology API (ITT API)](https://github.com/intel/IntelSEAPI/tree/master/ittnotify)
+* [ittnotify](https://github.com/intel/IntelSEAPI)
 * [CMake](https://github.com/Kitware/CMake)
 
 Apache License Version 2.0:

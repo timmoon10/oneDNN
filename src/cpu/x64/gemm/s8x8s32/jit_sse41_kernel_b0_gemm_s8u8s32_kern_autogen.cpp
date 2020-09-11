@@ -24,9 +24,7 @@ namespace cpu {
 namespace x64 {
 
 jit_sse41_kernel_b0_gemm_s8u8s32_kern::jit_sse41_kernel_b0_gemm_s8u8s32_kern()
-    : jit_generator(nullptr, S8U8S32_COMPUTE_KERNEL_CODE_SIZE) {}
-
-void jit_sse41_kernel_b0_gemm_s8u8s32_kern::generate() {
+    : jit_generator(nullptr, S8U8S32_COMPUTE_KERNEL_CODE_SIZE) {
 
 #ifndef _WIN32
 
@@ -72,8 +70,8 @@ void jit_sse41_kernel_b0_gemm_s8u8s32_kern::generate() {
 #define ARG_A (args_offset - 16) + rsp
 #define ARG_B (args_offset - 8) + rsp
 #endif
-#define ARG_C ((args_offset + 0) + rsp)
-#define ARG_LDC ((args_offset + 8) + rsp)
+#define ARG_C (args_offset + 0) + rsp
+#define ARG_LDC (args_offset + 8) + rsp
 
     inLocalLabel();
     {

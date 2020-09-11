@@ -39,7 +39,7 @@ using namespace memory_tracking::names;
 
 namespace {
 
-using acc_data_t = float;
+typedef float acc_data_t;
 
 template <typename T>
 inline float maybe_up_convert(T x) {

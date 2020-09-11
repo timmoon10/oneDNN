@@ -65,7 +65,7 @@ jit_uni_lrn_kernel_t<Derived<isa, d_type>>::jit_uni_lrn_kernel_t(
 template <template <cpu_isa_t isa, data_type_t d_type> class Derived,
         cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_kernel_t<Derived<isa, d_type>>::jit_uni_lrn_kernel_t(
-        const within_config_t &config, void *code_ptr, size_t code_size)
+        const within_config &config, void *code_ptr, size_t code_size)
     : jit_uni_lrn_kernel_t(code_ptr, code_size) {
     if (config.dat_tag == nhwc)
         single_pixel_offset_
@@ -79,7 +79,7 @@ jit_uni_lrn_kernel_t<Derived<isa, d_type>>::~jit_uni_lrn_kernel_t() = default;
 template <template <cpu_isa_t isa, data_type_t d_type> class Derived,
         cpu_isa_t isa, data_type_t d_type>
 void jit_uni_lrn_kernel_t<Derived<isa, d_type>>::within_loop(
-        const within_config_t &config, int max_reg_blocks, prop_kind_t pk) {
+        const within_config &config, int max_reg_blocks, prop_kind_t pk) {
     const auto derived_ptr = static_cast<Derived<isa, d_type> *>(this);
 
     const int lower_bound = (config.size - 1) / 2,
@@ -306,7 +306,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::within_body(int hoff, int Hoff,
     IRB_LOOP(this->vdivps(
             vdst[irb], vdst[irb], vsum[irb])); // ydst <- ydst / ysum
 
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         IRB_LOOP(this->store_data(
                 this->ptr[scratch_ + pixel_offset + irb_off], vsum[irb]));
         IRB_LOOP(this->vdivps(vscratch[irb], vdst[irb], vscratch[irb]));
@@ -368,7 +368,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::within_body(
     this->addps(xsum_hi, xk_); // xsum <- xsum*xalpha_+xk_
     this->movaps(xtmp_lo, xsum_lo);
     this->movaps(xtmp_hi, xsum_hi);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         this->movups(this->ptr[scratch_ + pixel_offset], xtmp_lo);
         this->movups(this->ptr[scratch_ + pixel_offset + 4 * sizeof(float)],
                 xtmp_hi);
@@ -401,7 +401,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::move_data_pointers(
     const int pixel_offset = this->single_pixel_offset_ * pixel_count;
     this->add(src_, pixel_offset);
     this->add(dst_, pixel_offset);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         this->add(scratch_, pixel_offset);
         this->add(bwd_intermediate_res_, pixel_offset);
     }
@@ -409,24 +409,15 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::move_data_pointers(
 
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_fwd_kernel_t<isa, d_type>::jit_uni_lrn_fwd_kernel_t(
-        const within_config_t &config, float A, float K, prop_kind_t pk,
+        const within_config &config, float A, float K, prop_kind_t pk,
         void *code_ptr, size_t code_size)
-    : Base(config, code_ptr, code_size)
-    , config_(lrn_config_t::within_config)
-    , within_config_(config)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
-
-template <cpu_isa_t isa, data_type_t d_type>
-void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(
-        const within_config_t &config) {
+    : Base(config, code_ptr, code_size), alpha_(A), k_(K) {
     this->preamble();
 
 #define GET_OFF(field) offsetof(jit_args_fwd_t, field)
     this->mov(src_, this->ptr[this->param1 + GET_OFF(src)]);
     this->mov(dst_, this->ptr[this->param1 + GET_OFF(dst)]);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         this->mov(scratch_, this->ptr[this->param1 + GET_OFF(scratch)]);
         this->mov(bwd_intermediate_res_,
                 this->ptr[this->param1 + GET_OFF(bwd_intermediate_res)]);
@@ -437,24 +428,19 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(
     this->load_constant(k_, vk_, xk_);
 
     static const int max_reg_blocks = isa == avx512_common ? 3 : 1;
-    this->within_loop(config, max_reg_blocks, pk_);
+    this->within_loop(config, max_reg_blocks, pk);
 
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_fwd_kernel_t<isa, d_type>::jit_uni_lrn_fwd_kernel_t(
-        const struct nchw8c_across_t &J, float A, float K, prop_kind_t pk,
+        const struct nchw8c_across &J, float A, float K, prop_kind_t pk,
         void *code_ptr, size_t code_size)
-    : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nchw8c_across)
-    , nchw8c_across_(J)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
-
-template <cpu_isa_t isa, data_type_t d_type>
-void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw8c_across_t &J) {
+    : Base(code_ptr, code_size), alpha_(A), k_(K) {
     const Xbyak::Reg64 &t = this->rsp;
     const Xbyak::Reg64 &hw = this->r9;
     const Xbyak::Xmm &xsrc_prev = this->xmm2;
@@ -474,7 +460,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw8c_across_t &J) {
 
     this->mov(src_, this->ptr[this->param1 + 0]);
     this->mov(dst_, this->ptr[this->param1 + 8]);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->mov(scratch_, this->ptr[this->param1 + 16]);
     this->sub(t, 64);
     this->mov(this->imm_addr64_, float2int(this->alpha_));
@@ -521,7 +507,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw8c_across_t &J) {
     this->vfmadd132ps(ysum, yk_, valpha_); // ysum <- ysum*valpha_+yk_
 
     this->vmovaps(ybase, ysum);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->vmovups(this->ptr[scratch_], ybase);
     this->vmulps(ysum2, ysum, ysum);
     this->vmulps(ysum, ysum, ysum2); // ysum = ybase^3;
@@ -532,29 +518,23 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw8c_across_t &J) {
 
     this->add(src_, 32);
     this->add(dst_, 32);
-    if (pk_ != prop_kind::forward_inference) this->add(scratch_, 32);
+    if (pk != prop_kind::forward_inference) this->add(scratch_, 32);
     this->dec(hw);
     this->cmp(hw, 0);
     this->jne(lrn_loop, this->T_NEAR);
 
     this->add(t, 64);
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <>
 jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::
-        jit_uni_lrn_fwd_kernel_t(const struct nchw8c_across_t &J, float A,
+        jit_uni_lrn_fwd_kernel_t(const struct nchw8c_across &J, float A,
                 float K, prop_kind_t pk, void *code_ptr, size_t code_size)
-    : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nchw8c_across)
-    , nchw8c_across_(J)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
-
-template <>
-void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
-        const nchw8c_across_t &J) {
+    : Base(code_ptr, code_size), alpha_(A), k_(K) {
 
     const Xbyak::Reg64 &t = this->rsp;
     const Xbyak::Reg64 &hw = this->r9;
@@ -581,7 +561,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->mov(src_, this->ptr[this->param1 + 0]);
     this->mov(dst_, this->ptr[this->param1 + 8]);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->mov(scratch_, this->ptr[this->param1 + 16]);
     this->sub(t, 64);
     this->mov(this->imm_addr64_, float2int(this->alpha_));
@@ -653,7 +633,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->movaps(xbase_lo, xsum_lo);
     this->movaps(xbase_hi, xsum_hi);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         this->movups(this->ptr[scratch_], xbase_lo);
         this->movups(this->ptr[scratch_ + 4 * sizeof(float)], xbase_hi);
     }
@@ -672,28 +652,23 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->add(src_, 32);
     this->add(dst_, 32);
-    if (pk_ != prop_kind::forward_inference) add(scratch_, 32);
+    if (pk != prop_kind::forward_inference) add(scratch_, 32);
     this->dec(hw);
     this->cmp(hw, 0);
     this->jne(lrn_loop, this->T_NEAR);
 
     this->add(t, 64);
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_fwd_kernel_t<isa, d_type>::jit_uni_lrn_fwd_kernel_t(
-        const struct nhwc_across_t &J, float A, float K, prop_kind_t pk,
+        const struct nhwc_across &J, float A, float K, prop_kind_t pk,
         void *code_ptr, size_t code_size)
-    : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nhwc_across)
-    , nhwc_across_(J)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
-
-template <cpu_isa_t isa, data_type_t d_type>
-void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nhwc_across_t &J) {
+    : Base(code_ptr, code_size), alpha_(A), k_(K) {
     static const uint32_t mask[] = {0, 0, 0x80000000, 0x80000000, 0x80000000,
             0x80000000, 0x80000000, 0x80000000, 0x80000000, 0, 0};
 
@@ -712,7 +687,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nhwc_across_t &J) {
 
     this->mov(src_, this->ptr[this->param1 + 0]);
     this->mov(dst_, this->ptr[this->param1 + 8]);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->mov(scratch_, this->ptr[this->param1 + 16]);
     this->mov(this->imm_addr64_, float2int(this->alpha_));
     this->movq(xalpha_, this->imm_addr64_);
@@ -749,7 +724,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nhwc_across_t &J) {
     this->vfmadd132ps(ydst, yk_, valpha_); // ydst <- ysum*valpha_+yk_
 
     this->vmovaps(ybase, ydst);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->vmovups(this->ptr[scratch_], ybase);
     this->vmulps(ydst, ydst, ydst);
     this->vmulps(ydst, ydst, ybase); // ydst = (ysum*valpha_+yk_)^3;
@@ -763,7 +738,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nhwc_across_t &J) {
 
     this->add(src_, 32);
     this->add(dst_, 32);
-    if (pk_ != prop_kind::forward_inference) this->add(scratch_, 32);
+    if (pk != prop_kind::forward_inference) this->add(scratch_, 32);
 
     this->vmovups(ya, this->ptr[src_ - 8]);
     this->vfmadd231ps(ysum, ya, ya);
@@ -791,7 +766,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nhwc_across_t &J) {
     this->vfmadd132ps(ydst, yk_, valpha_); // ydst <- ysum*valpha_+yk_
 
     this->vmovaps(ybase, ydst);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->vmovups(this->ptr[scratch_], ybase);
     this->vmulps(ydst, ydst, ydst);
     this->vmulps(ydst, ydst, ybase); // ydst = (ysum*valpha_+yk_)^3;
@@ -802,22 +777,17 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nhwc_across_t &J) {
     this->vmovups(this->ptr[dst_], ydst);
 
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <>
 jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::
-        jit_uni_lrn_fwd_kernel_t(const struct nhwc_across_t &J, float A,
-                float K, prop_kind_t pk, void *code_ptr, size_t code_size)
-    : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nhwc_across)
-    , nhwc_across_(J)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
+        jit_uni_lrn_fwd_kernel_t(const struct nhwc_across &J, float A, float K,
+                prop_kind_t pk, void *code_ptr, size_t code_size)
+    : Base(code_ptr, code_size), alpha_(A), k_(K) {
 
-template <>
-void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
-        const nhwc_across_t &J) {
     static uint32_t store[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     const Xbyak::Reg64 c = this->r9;
 
@@ -843,7 +813,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->mov(src_, this->ptr[this->param1 + 0]);
     this->mov(dst_, this->ptr[this->param1 + 8]);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         mov(scratch_, this->ptr[this->param1 + 16]);
     this->mov(this->imm_addr64_, float2int(this->alpha_));
     this->movq(xalpha_, this->imm_addr64_);
@@ -920,7 +890,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->movaps(xbase_lo, xdst_lo);
     this->movaps(xbase_hi, xdst_hi);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         this->movups(this->ptr[scratch_], xbase_lo);
         this->movups(this->ptr[scratch_ + 4 * sizeof(float)], xbase_hi);
     }
@@ -945,7 +915,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->add(src_, 32);
     this->add(dst_, 32);
-    if (pk_ != prop_kind::forward_inference) this->add(scratch_, 32);
+    if (pk != prop_kind::forward_inference) this->add(scratch_, 32);
 
     this->movups(xa_lo, this->ptr[src_ - 8]);
     this->movups(xa_hi, this->ptr[src_ - 8 + 4 * sizeof(float)]);
@@ -1008,7 +978,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->movaps(xbase_lo, xdst_lo);
     this->movaps(xbase_hi, xdst_hi);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         this->movups(this->ptr[scratch_], xbase_lo);
         this->movups(this->ptr[scratch_ + 4 * sizeof(float)], xbase_hi);
     }
@@ -1029,6 +999,9 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
     this->movups(this->ptr[dst_ + 4 * sizeof(float)], xc_hi);
 
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <>
@@ -1050,7 +1023,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::nchw_body(int tail, int HW,
     this->vfmadd132ps(ydst, yk_, valpha_); // ydst <- ysum*valpha_+yk_
 
     this->vmovaps(ybase, ydst);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         if (tail != 0)
             this->vmaskmovps(this->ptr[scratch_], ymask, ybase);
         else
@@ -1143,7 +1116,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41,
 
     this->movaps(xbase_lo, xdst_lo);
     this->movaps(xbase_hi, xdst_hi);
-    if (pk_ != prop_kind::forward_inference) {
+    if (pk != prop_kind::forward_inference) {
         if (tail != 0) {
             nchw_tail_sse41(tail, scratch_, xbase_lo, xbase_hi);
         } else {
@@ -1212,17 +1185,9 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::nchw_body_sse41(int tail, int HW,
 
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_fwd_kernel_t<isa, d_type>::jit_uni_lrn_fwd_kernel_t(
-        const nchw_across_t &J, float A, float K, prop_kind_t pk,
-        void *code_ptr, size_t code_size)
-    : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nchw_across)
-    , nchw_across_(J)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
-
-template <cpu_isa_t isa, data_type_t d_type>
-void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw_across_t &J) {
+        const nchw_across &J, float A, float K, prop_kind_t pk, void *code_ptr,
+        size_t code_size)
+    : Base(code_ptr, code_size), alpha_(A), k_(K) {
     static const uint32_t mask[]
             = {0x80000000, 0x80000000, 0x80000000, 0x80000000, 0x80000000,
                     0x80000000, 0x80000000, 0, 0, 0, 0, 0, 0, 0};
@@ -1252,7 +1217,7 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw_across_t &J) {
 
     this->mov(src_, this->ptr[this->param1 + 0]);
     this->mov(dst_, this->ptr[this->param1 + 8]);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->mov(scratch_, this->ptr[this->param1 + 16]);
 
     this->vxorps(ya, ya, ya);
@@ -1279,44 +1244,39 @@ void jit_uni_lrn_fwd_kernel_t<isa, d_type>::generate(const nchw_across_t &J) {
     else
         this->vmovups(ye, this->ptr[src_ + J.HW * 8]);
 
-    nchw_body(J.tail, J.HW, pk_, ymask, ya, yb, yc, yd, ye, ysum);
+    nchw_body(J.tail, J.HW, pk, ymask, ya, yb, yc, yd, ye, ysum);
 
     this->add(src_, J.HW * 4);
     this->add(dst_, J.HW * 4);
-    if (pk_ != prop_kind::forward_inference) this->add(scratch_, J.HW * 4);
+    if (pk != prop_kind::forward_inference) this->add(scratch_, J.HW * 4);
     this->dec(c);
     this->cmp(c, 0);
     this->jne(lrn_loop, this->T_NEAR);
 
     this->vxorps(ye, ye, ye);
 
-    nchw_body(J.tail, J.HW, pk_, ymask, ya, yb, yc, yd, ye, ysum);
+    nchw_body(J.tail, J.HW, pk, ymask, ya, yb, yc, yd, ye, ysum);
     this->add(src_, J.HW * 4);
     this->add(dst_, J.HW * 4);
-    if (pk_ != prop_kind::forward_inference) this->add(scratch_, J.HW * 4);
+    if (pk != prop_kind::forward_inference) this->add(scratch_, J.HW * 4);
 
-    nchw_body(J.tail, J.HW, pk_, ymask, ya, yb, yc, yd, ye, ysum);
+    nchw_body(J.tail, J.HW, pk, ymask, ya, yb, yc, yd, ye, ysum);
 
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_fwd_kernel_t<isa, d_type>::~jit_uni_lrn_fwd_kernel_t() = default;
 
 template <>
-jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::
-        jit_uni_lrn_fwd_kernel_t(const nchw_across_t &J, float A, float K,
-                prop_kind_t pk, void *code_ptr, size_t code_size)
-    : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nchw_across)
-    , nchw_across_(J)
-    , alpha_(A)
-    , k_(K)
-    , pk_(pk) {}
-
-template <>
-void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
-        const nchw_across_t &J) {
+jit_uni_lrn_fwd_kernel_t<sse41,
+        dnnl::impl::data_type::f32>::jit_uni_lrn_fwd_kernel_t(const nchw_across
+                                                                      &J,
+        float A, float K, prop_kind_t pk, void *code_ptr, size_t code_size)
+    : Base(code_ptr, code_size), alpha_(A), k_(K) {
 
     /* Load from within the memory boundary of 'src_' and apply a zero-mask to
      * the 'x_hi' register:
@@ -1374,7 +1334,7 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
 
     this->mov(src_, this->ptr[this->param1 + 0]);
     this->mov(dst_, this->ptr[this->param1 + 8]);
-    if (pk_ != prop_kind::forward_inference)
+    if (pk != prop_kind::forward_inference)
         this->mov(scratch_, this->ptr[this->param1 + 16]);
 
     this->sub(rsp, stack_space_needed_);
@@ -1456,11 +1416,11 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
         this->andps(xe_hi, xmask_hi);
     }
 
-    nchw_body_sse41(J.tail, J.HW, pk_, xe_lo, xe_hi, xsum_lo, xsum_hi);
+    nchw_body_sse41(J.tail, J.HW, pk, xe_lo, xe_hi, xsum_lo, xsum_hi);
 
     this->add(src_, J.HW * 4);
     this->add(dst_, J.HW * 4);
-    if (pk_ != prop_kind::forward_inference) add(scratch_, J.HW * 4);
+    if (pk != prop_kind::forward_inference) add(scratch_, J.HW * 4);
     this->dec(c);
     this->cmp(c, 0);
     this->jne(lrn_loop, this->T_NEAR);
@@ -1468,32 +1428,30 @@ void jit_uni_lrn_fwd_kernel_t<sse41, dnnl::impl::data_type::f32>::generate(
     this->xorps(xe_lo, xe_lo);
     this->xorps(xe_hi, xe_hi);
 
-    nchw_body_sse41(J.tail, J.HW, pk_, xe_lo, xe_hi, xsum_lo, xsum_hi);
+    nchw_body_sse41(J.tail, J.HW, pk, xe_lo, xe_hi, xsum_lo, xsum_hi);
     this->add(src_, J.HW * 4);
     this->add(dst_, J.HW * 4);
-    if (pk_ != prop_kind::forward_inference) add(scratch_, J.HW * 4);
+    if (pk != prop_kind::forward_inference) add(scratch_, J.HW * 4);
 
-    nchw_body_sse41(J.tail, J.HW, pk_, xe_lo, xe_hi, xsum_lo, xsum_hi);
+    nchw_body_sse41(J.tail, J.HW, pk, xe_lo, xe_hi, xsum_lo, xsum_hi);
 
     this->add(rsp, stack_space_needed_);
 
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 //////////////////////////////////////////////////////////////////////////////
 // backward kernel
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_bwd_kernel_t<isa, d_type>::jit_uni_lrn_bwd_kernel_t(
-        const nchw8c_across_t &J, float A, float B, int use_h_parallel,
+        const nchw8c_across &J, float A, float B, int use_h_parallel,
         void *code_ptr, size_t code_size)
     : Base(code_ptr, code_size)
-    , config_(lrn_config_t::nchw8c_across)
-    , nchw8c_across_(J)
     , nalphabeta_(-2 * A * B)
-    , use_h_parallelizm_(use_h_parallel) {}
-
-template <cpu_isa_t isa, data_type_t d_type>
-void jit_uni_lrn_bwd_kernel_t<isa, d_type>::generate(const nchw8c_across_t &J) {
+    , use_h_parallelizm_(use_h_parallel) {
 
     const Xbyak::Reg64 &t = this->rsp;
     const Xbyak::Reg64 &hw = this->r10;
@@ -1617,20 +1575,16 @@ void jit_uni_lrn_bwd_kernel_t<isa, d_type>::generate(const nchw8c_across_t &J) {
 
     this->add(t, 64);
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <cpu_isa_t isa, data_type_t d_type>
 jit_uni_lrn_bwd_kernel_t<isa, d_type>::jit_uni_lrn_bwd_kernel_t(
-        const within_config_t &config, float A, float B, void *code_ptr,
+        const within_config &config, float A, float B, void *code_ptr,
         size_t code_size)
-    : Base(config, code_ptr, code_size)
-    , config_(lrn_config_t::within_config)
-    , within_config_(config)
-    , nalphabeta_(-2.0f * A * B) {}
-
-template <cpu_isa_t isa, data_type_t d_type>
-void jit_uni_lrn_bwd_kernel_t<isa, d_type>::generate(
-        const within_config_t &config) {
+    : Base(config, code_ptr, code_size), nalphabeta_(-2.0f * A * B) {
 
     this->preamble();
 
@@ -1648,6 +1602,9 @@ void jit_uni_lrn_bwd_kernel_t<isa, d_type>::generate(
     this->within_loop(config, max_reg_blocks, prop_kind::backward);
 
     this->postamble();
+
+    ker = reinterpret_cast<decltype(ker)>(
+            const_cast<uint8_t *>(this->getCode()));
 }
 
 template <cpu_isa_t isa, data_type_t d_type>

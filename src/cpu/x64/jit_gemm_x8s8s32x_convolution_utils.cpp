@@ -27,7 +27,7 @@ namespace gemm_x8s8s32x_convolution_utils {
 
 using namespace dnnl::impl::cpu::gemm_x8s8s32x_convolution_utils;
 
-struct jit_pp_ker_t : pp_ker_t, public jit_generator {
+struct jit_pp_ker_t : pp_ker_t, jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(
             gemm_x8s8s32x_convolution_utils::jit_pp_ker_t);
 
@@ -42,14 +42,15 @@ struct jit_pp_ker_t : pp_ker_t, public jit_generator {
         if (bias_data_type_ != data_type::undef)
             bias_data_type_size_ = types::data_type_size(bias_data_type_);
         dst_data_type_size_ = types::data_type_size(dst_data_type_);
-    }
 
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
+        generate();
+    }
 
     void operator()(void *void_dst, const acc_data_t *acc, const char *bias,
             const float *scales, float nslope, float sum_scale,
             float signed_scale, int g, size_t start,
             size_t end) const override {
+        assert(ker_);
 
         if (end <= start) return;
 
@@ -69,11 +70,11 @@ struct jit_pp_ker_t : pp_ker_t, public jit_generator {
         args.signed_scale = signed_scale;
         args.len = end - start;
         args.oc_offset = oc_offset;
-        jit_generator::operator()(&args);
+        ker_(&args);
     }
 
 private:
-    void generate() override;
+    void generate();
 
     struct ker_args_t {
         char *dst;
@@ -86,6 +87,7 @@ private:
         size_t len;
         size_t oc_offset;
     };
+    void (*ker_)(const ker_args_t *args);
 
     std::unique_ptr<jit_uni_eltwise_injector_f32<avx512_common>>
             eltwise_injector_;
@@ -427,6 +429,8 @@ void jit_pp_ker_t::generate() {
     postamble();
 
     if (do_eltwise_) eltwise_injector_->prepare_table();
+
+    ker_ = getCode<decltype(ker_)>();
 }
 
 pp_ker_t *jit_pp_ker_create(

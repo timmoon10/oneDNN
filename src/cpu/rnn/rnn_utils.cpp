@@ -97,11 +97,9 @@ void rnn_utils::set_offsets(const rnn_conf_t &rnn, size_t &ws_gates_offset,
     current_offset = 0; // assumes the workspace base pointer is page aligned
 
 #define register_space(a) \
-    do { \
-        current_offset = utils::rnd_up(current_offset, page_size); \
-        CONCAT2(a, _offset) = current_offset; \
-        current_offset += rnn.CONCAT2(a, _size); \
-    } while (false)
+    current_offset = utils::rnd_up(current_offset, page_size); \
+    CONCAT2(a, _offset) = current_offset; \
+    current_offset += rnn.CONCAT2(a, _size)
 
     register_space(ws_gates);
     register_space(ws_ht);

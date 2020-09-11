@@ -44,7 +44,7 @@ rw_mutex_t::rw_mutex_t() {
 #ifdef _WIN32
     InitializeSRWLock(&impl);
 #else
-    pthread_rwlock_init(&impl, nullptr);
+    pthread_rwlock_init(&impl, NULL);
 #endif
 }
 

@@ -437,6 +437,7 @@ jit_avx2_kernel_sgemm_kern::jit_avx2_kernel_sgemm_kern(bool beta_zero)
     : jit_generator(nullptr, 65536) {
 
     beta_zero_ = beta_zero;
+    generate();
 }
 } // namespace x64
 } // namespace cpu

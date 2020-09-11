@@ -64,16 +64,14 @@ nested_scratchpad_t::nested_scratchpad_t(const exec_ctx_t &master_ctx, int key,
 #endif
 }
 
-#ifdef DNNL_ENABLE_MEM_DEBUG
 nested_scratchpad_t::~nested_scratchpad_t() {
+#ifdef DNNL_ENABLE_MEM_DEBUG
     if (scratchpad_debug::is_protect_scratchpad()) {
         scratchpad_debug::unprotect_scratchpad_buffer(
                 grantor_->get_base_storage(), grantor_->get_registry());
     }
-}
-#else
-nested_scratchpad_t::~nested_scratchpad_t() = default;
 #endif
+}
 
 } // namespace impl
 } // namespace dnnl
@@ -81,7 +79,7 @@ nested_scratchpad_t::~nested_scratchpad_t() = default;
 // API
 status_t dnnl_primitive_desc_destroy(
         primitive_desc_iface_t *primitive_desc_iface) {
-    delete primitive_desc_iface;
+    if (primitive_desc_iface) delete primitive_desc_iface;
     return success;
 }
 
@@ -114,7 +112,7 @@ status_t dnnl_primitive_execute(const primitive_iface_t *primitive_iface,
         stream->wait();
         ms = get_msec() - ms;
         printf("dnnl_verbose,exec,%s,%g\n", primitive_iface->pd()->info(), ms);
-        fflush(stdout);
+        fflush(0);
     } else {
         status = primitive_iface->execute(ctx);
     }
@@ -131,11 +129,12 @@ status_t dnnl_primitive_get_primitive_desc(
         const primitive_desc_iface_t **primitive_desc_iface) {
     if (utils::any_null(primitive_iface, primitive_desc_iface))
         return invalid_arguments;
-    return safe_ptr_assign(*primitive_desc_iface, primitive_iface->pd());
+    return safe_ptr_assign<const primitive_desc_iface_t>(
+            *primitive_desc_iface, primitive_iface->pd());
 }
 
 status_t dnnl_primitive_destroy(primitive_iface_t *primitive_iface) {
-    delete primitive_iface;
+    if (primitive_iface != nullptr) delete primitive_iface;
     return success;
 }
 

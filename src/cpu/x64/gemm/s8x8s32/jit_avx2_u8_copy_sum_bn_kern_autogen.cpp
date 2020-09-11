@@ -24,9 +24,7 @@ namespace cpu {
 namespace x64 {
 
 jit_avx2_u8_copy_sum_bn_kern::jit_avx2_u8_copy_sum_bn_kern()
-    : jit_generator(nullptr, U8_COPY_KERNEL_CODE_SIZE) {}
-
-void jit_avx2_u8_copy_sum_bn_kern::generate() {
+    : jit_generator(nullptr, U8_COPY_KERNEL_CODE_SIZE) {
 
 #ifndef _WIN32
 #define M rdi
@@ -41,7 +39,7 @@ void jit_avx2_u8_copy_sum_bn_kern::generate() {
 #define A2 r8
 #define LDA3 r11
 
-#define ARG_BIAS (24 + stacksize + rsp)
+#define ARG_BIAS 24 + stacksize + rsp
 
 #else
 

@@ -109,7 +109,7 @@ void jit_avx512_core_x8s8s32x_1x1_convolution_fwd_t<src_type,
 
     auto rtus_space = pd()->rtus_.reduce_src_
             ? scratchpad.get<src_data_t>(key_conv_rtus_space)
-            : nullptr;
+            : NULL;
 
     auto local_scales = scratchpad.get<float>(key_conv_adjusted_scales);
 
@@ -130,9 +130,8 @@ void jit_avx512_core_x8s8s32x_1x1_convolution_fwd_t<src_type,
 
     auto offset = weights_d.size() - weights_d.additional_buffer_size();
     wei_data_t *w = const_cast<wei_data_t *>(weights);
-    int32_t *compensation = (jcp.signed_input)
-            ? reinterpret_cast<int32_t *>(w + offset)
-            : nullptr;
+    int32_t *compensation
+            = (jcp.signed_input) ? reinterpret_cast<int32_t *>(w + offset) : 0;
 
     auto p = jit_1x1_conv_call_s();
 
@@ -167,7 +166,7 @@ void jit_avx512_core_x8s8s32x_1x1_convolution_fwd_t<src_type,
         w = const_cast<wei_data_t *>(weights_dw);
         compensation_dw = (jcp_dw->signed_input)
                 ? reinterpret_cast<int32_t *>(w + offset)
-                : nullptr;
+                : 0;
         if (jcp_dw->signed_input && jcp_dw->ver != ver_vnni)
             dw_oscales = dw_scratchpad.get<float>(key_conv_adjusted_scales);
         else
@@ -243,8 +242,8 @@ void jit_avx512_core_x8s8s32x_1x1_convolution_fwd_t<src_type,
                 = &weights[pd()->with_groups() ? weights_d.blk_off(g, ocb, icb)
                                                : weights_d.blk_off(ocb, icb)];
         p.bias_data = &bias[_ocb * jcp.oc_block * bia_dt_size];
-        p.compensation = (jcp.signed_input) ? &compensation[_ocb * jcp.oc_block]
-                                            : nullptr;
+        p.compensation
+                = (jcp.signed_input) ? &compensation[_ocb * jcp.oc_block] : 0;
         p.scales = (jcp.signed_input && jcp.ver != ver_vnni)
                 ? &local_scales[jcp.is_oc_scale * _ocb * jcp.oc_block]
                 : &oscales[jcp.is_oc_scale * _ocb * jcp.oc_block];
@@ -257,13 +256,13 @@ void jit_avx512_core_x8s8s32x_1x1_convolution_fwd_t<src_type,
                     + _icb * jcp.is * jcp.ic_block;
             if (ocb == ocb_start) {
                 rp.src = src + src_off;
-                (*rtus_driver_)(&rp);
+                rtus_driver_->ker_(&rp);
             }
             p.bcast_data = rp.ws;
         } else
             p.bcast_data = src + src_off;
 
-        (*kernel_)(&p);
+        kernel_->jit_ker(&p);
     };
 
     auto conv_1x1 = [&](int bcast_start, int bcast_end, int ocb_start,
@@ -382,7 +381,7 @@ void jit_avx512_core_x8s8s32x_1x1_convolution_fwd_t<src_type,
                     ? &dw_oscales[jcp_dw->is_oc_scale * ocb * jcp_dw->ch_block]
                     : nullptr;
 
-            (*kernel_dw_)(&par_conv_dw);
+            kernel_dw_->jit_ker(&par_conv_dw);
 
             for (int i = 0; i < jcp_dw->kh; ++i)
                 addrs[i] += src_ch_stride;

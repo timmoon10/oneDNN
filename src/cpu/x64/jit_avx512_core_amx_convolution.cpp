@@ -32,6 +32,8 @@ using namespace dnnl::impl::utils;
 
 using namespace nstl;
 
+using jit_conv_ker_t = void (*)(jit_conv_call_s *);
+
 #define wht_blk_off(d, g, ...) \
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
@@ -95,7 +97,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
     auto p = jit_conv_call_s();
     p.src = weights;
     p.dst = wei_buffer;
-    kernel_->copy_to_wbuffer()(&p);
+    kernel_->jit_copy_to_wbuffer_ker(&p);
     const wei_data_t *wei = wei_buffer;
 
     size_t oc_subblock_step
@@ -113,7 +115,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
         balance211(work_amount, nthr, ithr, start, end);
 
         auto p = jit_conv_call_s();
-        amx_tile_configure(tcfg);
+        kernel_->jit_tilecfg(tcfg);
 
         int mb {0}, g {0}, ohc {0}, owb {0}, occ {0};
         // need "inner" oh blocks w.r.t. ow blocks to allow pbuffer reuse
@@ -130,8 +132,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
                     jcp.ngroups > 1, jcp.oc == jcp.oc_without_padding));
             int oc = g * jcp.oc + occ * jcp.nb_oc_blocking * jcp.oc_block;
             int ocb = jcp.is_nspc ? oc : oc / jcp.oc_block;
-            auto bias_w = bias ? bias + (bias_d.blk_off(oc) * bia_dt_size)
-                               : nullptr;
+            auto bias_w = bias ? bias + (bias_d.blk_off(oc) * bia_dt_size) : 0;
 
             int oh_s = ohc * jcp.oh_blk_size;
             int oh_e = nstl::min(jcp.oh, oh_s + jcp.oh_blk_size);
@@ -193,7 +194,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
                                 + doh * jcp.iwp * jcp.kh
                                         * jcp.ic_without_padding;
 
-                        kernel_->copy_to_pbuffer()(&p);
+                        kernel_->jit_copy_to_pbuffer_ker(&p);
                     }
                 }
 
@@ -210,7 +211,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
                 p.owb = owb;
                 p.oc_blocks = occ * jcp.nb_oc_blocking;
 
-                (*kernel_)(&p);
+                kernel_->jit_ker(&p);
             }
             last_copied_mb = mb;
             last_copied_ohc = ohc;
@@ -280,7 +281,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
         balance211(work_amount, nthr, ithr, start, end);
 
         auto p = jit_conv_call_s();
-        amx_tile_configure(tcfg);
+        kernel_->jit_tilecfg(tcfg);
 
         int mb {0}, g {0}, ohc {0}, owb {0}, occ {0};
         nd_iterator_init(start, mb, jcp.mb, g, jcp.ngroups, ohc, oh_chunks, owb,
@@ -296,8 +297,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
                     jcp.ngroups > 1, jcp.oc == jcp.oc_without_padding));
             int oc = g * jcp.oc + occ * jcp.nb_oc_blocking * jcp.oc_block;
             int ocb = jcp.is_nspc ? oc : oc / jcp.oc_block;
-            auto bias_w = bias ? bias + (bias_d.blk_off(oc) * bia_dt_size)
-                               : nullptr;
+            auto bias_w = bias ? bias + (bias_d.blk_off(oc) * bia_dt_size) : 0;
 
             int oh_s = ohc * jcp.oh_blk_size;
             int oh_e = nstl::min(jcp.oh, oh_s + jcp.oh_blk_size);
@@ -360,7 +360,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
                                 + (size_t)ih_buf * jcp.iwp
                                         * jcp.ic_block_int_np;
 
-                        kernel_->copy_to_pbuffer()(&p);
+                        kernel_->jit_copy_to_pbuffer_ker(&p);
                     }
                 }
 
@@ -382,7 +382,7 @@ void jit_avx512_core_amx_convolution_fwd_t<src_type, wei_type,
                 p.owb = owb;
                 p.oc_blocks = occ * jcp.nb_oc_blocking;
 
-                (*kernel_)(&p);
+                kernel_->jit_ker(&p);
             }
             last_copied_mb = mb;
             last_copied_ohc = ohc;

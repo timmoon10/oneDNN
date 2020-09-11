@@ -69,13 +69,6 @@ public:
 
     using data_t = typename prec_traits<d_type>::type;
 
-    status_t create_kernel() override {
-        CHECK(ker_->create_kernel());
-        if (ker_first_) CHECK(ker_first_->create_kernel());
-        if (ker_last_) CHECK(ker_last_->create_kernel());
-        return status::success;
-    }
-
     status_t execute(const exec_ctx_t &ctx) const override {
         const auto src = CTX_IN_MEM(const data_t *, DNNL_ARG_SRC);
         const auto dst = CTX_OUT_MEM(data_t *, DNNL_ARG_DST);
@@ -203,13 +196,6 @@ public:
     }
 
     using data_t = typename prec_traits<d_type>::type;
-
-    status_t create_kernel() override {
-        CHECK(ker_->create_kernel());
-        if (ker_first_) CHECK(ker_first_->create_kernel());
-        if (ker_last_) CHECK(ker_last_->create_kernel());
-        return status::success;
-    }
 
     status_t execute(const exec_ctx_t &ctx) const override {
         const auto src = CTX_IN_MEM(const data_t *, DNNL_ARG_SRC);

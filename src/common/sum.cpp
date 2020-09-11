@@ -37,7 +37,7 @@ status_t dnnl_sum_primitive_desc_create(primitive_desc_iface_t **sum_pd_iface,
     bool args_ok = !any_null(sum_pd_iface, src_mds, scales) && n > 0;
     if (!args_ok) return invalid_arguments;
 
-    if (attr == nullptr) attr = &default_attr();
+    if (attr == NULL) attr = &default_attr();
 
     const int ndims = src_mds[0].ndims;
     const dims_t &dims = src_mds[0].dims;
@@ -71,10 +71,8 @@ status_t dnnl_sum_primitive_desc_create(primitive_desc_iface_t **sum_pd_iface,
         sum_pd_t *sum_pd = nullptr;
         if ((*s)(&sum_pd, engine, attr, dst_md, n, scales, src_mds)
                 == success) {
-            auto status = safe_ptr_assign(
+            return safe_ptr_assign<primitive_desc_iface_t>(
                     *sum_pd_iface, new primitive_desc_iface_t(sum_pd, engine));
-            if (status != status::success) delete sum_pd;
-            return status;
         }
     }
     return unimplemented;

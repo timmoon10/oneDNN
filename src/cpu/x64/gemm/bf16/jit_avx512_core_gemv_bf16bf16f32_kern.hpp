@@ -52,7 +52,7 @@ protected:
     void outerloop(int unroll_y, Xbyak::Label *&cur_outerloop_label,
             Xbyak::Label *&outerloop_end_label);
 
-    void generate() override;
+    void generate();
 
 private:
     static const int UNROLL_M_ = 64;

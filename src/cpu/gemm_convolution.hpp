@@ -23,7 +23,7 @@
 
 #include "cpu/gemm/gemm.hpp"
 #include "cpu/gemm_convolution_utils.hpp"
-#include "cpu/primitive_attr_postops.hpp"
+#include "cpu/ref_eltwise.hpp"
 
 #include "cpu/cpu_convolution_pd.hpp"
 
@@ -78,20 +78,18 @@ struct gemm_convolution_fwd_t : public primitive_t {
     };
 
     gemm_convolution_fwd_t(const pd_t *apd)
-        : primitive_t(apd), eltwise_(nullptr) {}
-
-    status_t init(engine_t *engine) override {
+        : primitive_t(apd), eltwise_(nullptr) {
         const auto &post_ops = pd()->attr()->post_ops_;
         const data_t one = 1.0, zero = 0.0;
         beta_ = post_ops.find(primitive_kind::sum) >= 0 ? one : zero;
 
         const int entry_idx = post_ops.find(primitive_kind::eltwise);
         if (entry_idx != -1)
-            CHECK(safe_ptr_assign(eltwise_,
-                    new ref_eltwise_scalar_fwd_t(
-                            post_ops.entry_[entry_idx].eltwise)));
-        return status::success;
+            eltwise_ = new ref_eltwise_scalar_fwd_t(
+                    post_ops.entry_[entry_idx].eltwise);
     }
+
+    ~gemm_convolution_fwd_t() { delete eltwise_; }
 
     typedef typename prec_traits<data_type::f32>::type data_t;
 
@@ -111,7 +109,7 @@ private:
 
     data_t beta_;
 
-    std::unique_ptr<ref_eltwise_scalar_fwd_t> eltwise_;
+    ref_eltwise_scalar_fwd_t *eltwise_;
 };
 
 struct gemm_convolution_bwd_data_t : public primitive_t {

@@ -24,7 +24,7 @@ namespace dnnl {
 using tag = memory::format_tag;
 
 template <typename data_t>
-struct softmax_test_params_t {
+struct softmax_test_params {
     prop_kind aprop_kind;
     tag memory_format;
     tag diff_memory_format;
@@ -35,16 +35,16 @@ struct softmax_test_params_t {
 };
 
 template <typename data_t>
-class softmax_test_t
-    : public ::testing::TestWithParam<softmax_test_params_t<data_t>> {
+class softmax_test
+    : public ::testing::TestWithParam<softmax_test_params<data_t>> {
 private:
-    softmax_test_params_t<data_t> p;
+    softmax_test_params<data_t> p;
     std::shared_ptr<memory> dst, workspace;
     std::shared_ptr<softmax_forward::primitive_desc> pd_fwd_hint;
 
 protected:
-    void SetUp() override {
-        p = ::testing::TestWithParam<softmax_test_params_t<data_t>>::GetParam();
+    virtual void SetUp() {
+        p = ::testing::TestWithParam<softmax_test_params<data_t>>::GetParam();
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
@@ -53,7 +53,7 @@ protected:
         // softmax specific types and values
         using op_desc_t = softmax_forward::desc;
         using pd_t = softmax_forward::primitive_desc;
-        allows_attr_t aa {false}; // doesn't support anything
+        allows_attr_t aa {0}; // doesn't support anything
 
         auto eng = get_test_engine();
         auto strm = make_stream(eng);
@@ -135,7 +135,7 @@ protected:
         using op_desc_t = softmax_backward::desc;
         using pd_t = softmax_backward::primitive_desc;
         using hint_pd_t = softmax_forward::primitive_desc;
-        allows_attr_t aa {false}; // doesn't support anything
+        allows_attr_t aa {0}; // doesn't support anything
 
         auto eng = get_test_engine();
         auto strm = make_stream(eng);
@@ -206,14 +206,14 @@ protected:
     }
 };
 
-using softmax_forward_test_float = softmax_test_t<float>;
-using softmax_forward_test_half = softmax_test_t<float16_t>;
-using softmax_forward_test_bfloat16 = softmax_test_t<bfloat16_t>;
+using softmax_forward_test_float = softmax_test<float>;
+using softmax_forward_test_half = softmax_test<float16_t>;
+using softmax_forward_test_bfloat16 = softmax_test<bfloat16_t>;
 
-using softmax_backward_test_float = softmax_test_t<float>;
+using softmax_backward_test_float = softmax_test<float>;
 
 template <typename dt>
-using test_params = softmax_test_params_t<dt>;
+using test_params = softmax_test_params<dt>;
 
 TEST_P(softmax_forward_test_float, TestsSoftmax) {}
 INSTANTIATE_TEST_SUITE_P(TestSoftmaxForwardFloat, softmax_forward_test_float,

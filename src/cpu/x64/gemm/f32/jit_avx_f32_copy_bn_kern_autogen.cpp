@@ -24,9 +24,7 @@ namespace cpu {
 namespace x64 {
 
 jit_avx_f32_copy_bn_kern::jit_avx_f32_copy_bn_kern()
-    : jit_generator(nullptr, F32_COPY_KERNEL_CODE_SIZE) {}
-
-void jit_avx_f32_copy_bn_kern::generate() {
+    : jit_generator(nullptr, F32_COPY_KERNEL_CODE_SIZE) {
 
 #ifndef _WIN32
 #define M rdi

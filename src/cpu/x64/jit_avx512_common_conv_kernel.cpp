@@ -40,6 +40,8 @@ using namespace Xbyak;
 namespace {
 
 constexpr auto small_spatial = 14;
+unsigned int L1_cache_size = platform::get_per_core_cache_size(1);
+unsigned int L2_cache_size = platform::get_per_core_cache_size(2);
 
 inline void pick_loop_order(jit_conv_conf_t &jcp) {
     using namespace prop_kind;
@@ -1624,7 +1626,6 @@ status_t jit_avx512_common_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
         unsigned int ker_total_size
                 = ker_inp_size + ker_out_size + ker_wei_size;
 
-        const unsigned int L1_cache_size = platform::get_per_core_cache_size(1);
         bool embd_bcast_condition_base = true
                 && (jcp.kw == 3 && jcp.ow <= 28
                         && ker_total_size < L1_cache_size)
@@ -1696,8 +1697,6 @@ status_t jit_avx512_common_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
             jcp.kernel_kind = embd_bcast;
             jcp.ur_w = nstl::min(jcp.ow, regs);
             jcp.nb_ic_blocking = jcp.nb_oc_blocking = 1;
-            const unsigned int L1_cache_size
-                    = platform::get_per_core_cache_size(1);
             if (ker_total_size < L1_cache_size && jcp.ow <= 8 && jcp.kh <= 3
                     && jcp.kw <= 3 && jcp.nb_oc % try_nb_oc_blocking == 0
                     && IMPLICATION(jcp.is_1stconv, jcp.mb == 1)
@@ -2102,7 +2101,8 @@ void _jit_avx512_common_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
 
     const int ic_tail = jcp.ic_tail;
     const int oc_tail = jcp.oc_tail;
-    std::vector<Label> oc_tail_jmp(kw);
+    const int max_filter_size = 20;
+    Label oc_tail_jmp[max_filter_size];
     if (ic_tail || oc_tail) ker_pipeline_depth = 1;
 
     if (one_of(jcp.ndims, 3, 4)) {
@@ -2886,7 +2886,6 @@ status_t jit_avx512_common_conv_bwd_data_kernel_f32::init_conf(
             && utils::everyone_is(0, jcp.dilate_d, jcp.dilate_h, jcp.dilate_w);
 
     if (jcp.ver == ver_fma && mayiuse(avx512_core)) {
-        const unsigned int L1_cache_size = platform::get_per_core_cache_size(1);
         int try_nb_ic_blocking = 2;
         unsigned int ker_inp_size = typesize * jcp.iw * jcp.ic_block
                 * try_nb_ic_blocking * jcp.kh;
@@ -5067,7 +5066,7 @@ bool jit_avx512_common_conv_bwd_weights_kernel_f32 ::flat_4ops_compute() {
                             + (kw / j.stride_w);
                     v4fmaddps(
                             zmm_wei(kh, kw), zmm_dst(ow), addr_tr_src(kh, iw));
-                    if (kh == 0 && kw < 4) {
+                    if (1 && kh == 0 && kw < 4) {
                         prefetcht1(ptr[reg_ptr_dst
                                 + (j.ow + ow + kw) * jcp.oc_block
                                         * jcp.typesize_in]);
@@ -5473,7 +5472,7 @@ void jit_avx512_common_conv_bwd_weights_kernel_f32::generate_microkernel() {
     ret();
 }
 
-void jit_avx512_common_conv_bwd_weights_kernel_f32::generate_kernel() {
+void jit_avx512_common_conv_bwd_weights_kernel_f32::generate() {
     preamble();
 
     mov(reg_input, ptr[param + GET_OFF(src)]);
@@ -5809,7 +5808,6 @@ status_t jit_avx512_common_conv_bwd_weights_kernel_f32::init_conf(
         // less important. Due to the current blocked weights format, the
         // weights and the data buffers cannot both be traversed optimally, so
         // for performance, the weights must fit in cache.
-        const unsigned int L2_cache_size = platform::get_per_core_cache_size(2);
         use_nxc_harness
                 = (data_size / nthreads + kernel_size > L2_cache_size / 3)
                 && (jcp.oc % jcp.simd_w == 0) && (jcp.ic % jcp.simd_w == 0)

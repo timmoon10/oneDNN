@@ -48,9 +48,6 @@ struct settings_t {
     std::vector<float> scales {0, 0.25, -0.25}, alpha {scales}, beta {scales};
     std::vector<int64_t> mb {0};
     std::vector<bool> inplace {false};
-    std::vector<attr_t::post_ops_t> post_ops {attr_t::post_ops_t()};
-    std::vector<dnnl_scratchpad_mode_t> scratchpad_mode {
-            dnnl_scratchpad_mode_library};
 
     const char *perf_template_csv
             = "perf,%engine%,%impl%,%dir%,%dt%,%tag%,%alg%,%DESC%,%-time%,%"
@@ -65,7 +62,7 @@ struct settings_t {
 struct prb_t {
     prb_t(const dims_t &dims, dir_t dir, dnnl_data_type_t dt,
             const std::string &tag, alg_t alg, float alpha, float beta,
-            bool inplace, const attr_t &attr, int64_t mb = 0)
+            bool inplace, int64_t mb = 0)
         : dims(dims)
         , dir(dir)
         , dt(dt)
@@ -74,7 +71,6 @@ struct prb_t {
         , alpha(alpha)
         , beta(beta)
         , inplace(inplace)
-        , attr(attr)
         , ndims((int)dims.size()) {
         if (mb) this->dims[0] = mb;
     }
@@ -87,7 +83,6 @@ struct prb_t {
     alg_t alg;
     float alpha, beta;
     bool inplace;
-    attr_t attr;
     int ndims;
 
     bool use_dst() const {
@@ -103,7 +98,7 @@ struct perf_report_t : public base_perf_report_t {
 
     void report(const prb_t *p, const res_t *r, const char *prb_str) {
         p_ = p;
-        tag_ = normalize_tag(p_->tag, p_->ndims);
+        tag_ = fmt_tag2str(convert_tag(p_->tag, p_->ndims));
         base_report(r, prb_str);
     }
 
@@ -123,8 +118,7 @@ private:
 };
 
 bool check_extreme_values(const float &a, const float &b, alg_t alg);
-void compute_ref_fwd(const prb_t *p, const dnn_mem_t &src,
-        const std::vector<dnn_mem_t> &binary_po, dnn_mem_t &dst);
+void compute_ref_fwd(const prb_t *p, const dnn_mem_t &src, dnn_mem_t &dst);
 void compute_ref_bwd(const prb_t *p, const dnn_mem_t &src,
         const dnn_mem_t &diff_dst, dnn_mem_t &diff_src);
 

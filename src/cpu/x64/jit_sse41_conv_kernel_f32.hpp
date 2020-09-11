@@ -35,6 +35,9 @@ struct jit_sse41_conv_fwd_kernel_f32 : public jit_generator {
         if (jcp.with_eltwise)
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<sse41>(
                     this, jcp.eltwise);
+
+        this->generate();
+        jit_ker = (void (*)(jit_conv_call_s *))this->getCode();
     }
 
     ~jit_sse41_conv_fwd_kernel_f32() { delete eltwise_injector_; }
@@ -50,6 +53,7 @@ struct jit_sse41_conv_fwd_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_sse41_conv_fwd_kernel_f32)
     jit_conv_conf_t jcp;
     const primitive_attr_t &attr_;
+    void (*jit_ker)(jit_conv_call_s *);
 
 private:
     using reg64_t = const Xbyak::Reg64;
@@ -119,7 +123,7 @@ private:
         return sizeof(float) * offset;
     }
 
-    void generate() override;
+    void generate();
 };
 
 } // namespace x64

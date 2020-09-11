@@ -23,6 +23,7 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 #include "cpu/gemm_convolution.hpp"
+#include "cpu/ref_eltwise.hpp"
 
 namespace dnnl {
 namespace impl {

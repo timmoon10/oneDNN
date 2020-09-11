@@ -145,13 +145,13 @@ bool jit_avx512_core_amx_1x1_fwd_kernel_t::maybe_eltwise(int position) {
     return false;
 }
 
-Ymm jit_avx512_core_amx_1x1_fwd_kernel_t::ymm_mask(
+const Ymm jit_avx512_core_amx_1x1_fwd_kernel_t::ymm_mask(
         const Ymm ymm_in, bool mask_flag, bool store) {
     return mask_flag ? (store ? ymm_in | ktail_mask : ymm_in | ktail_mask | T_z)
                      : ymm_in;
 }
 
-Zmm jit_avx512_core_amx_1x1_fwd_kernel_t::zmm_mask(
+const Zmm jit_avx512_core_amx_1x1_fwd_kernel_t::zmm_mask(
         const Zmm zmm_in, bool mask_flag, bool store) {
     return mask_flag ? (store ? zmm_in | ktail_mask : zmm_in | ktail_mask | T_z)
                      : zmm_in;
@@ -276,6 +276,7 @@ void jit_avx512_core_amx_1x1_fwd_kernel_t::store_output_vector_bf16(
     } else {
         vmovups(addr, zmm_mask(zmm_out, mask_flag, true));
     }
+    return;
 }
 
 void jit_avx512_core_amx_1x1_fwd_kernel_t::store_output_vector(
@@ -571,7 +572,7 @@ void jit_avx512_core_amx_1x1_fwd_kernel_t::tile_configure(char *tcfg_buff) {
             = amx::get_max_column_bytes(amx::get_max_palette());
     const int max_palette_size_in_bytes = 64;
 
-    auto cfg_tiles = [=](palette_config_t *buff, int Ac) {
+    auto cfg_tiles = [=](tileconfig_t *buff, int Ac) {
         char *_tc = (char *)buff;
         for (int i = 0; i < max_palette_size_in_bytes; i++)
             _tc[i] = 0;
@@ -600,11 +601,11 @@ void jit_avx512_core_amx_1x1_fwd_kernel_t::tile_configure(char *tcfg_buff) {
             * ((jcp.nb_ic_int == 1 && get_ic_tail()) ? get_ic_tail()
                                                      : jcp.ic_block_int);
 
-    cfg_tiles((palette_config_t *)tcfg_buff, Ac);
+    cfg_tiles((tileconfig_t *)tcfg_buff, Ac);
     if (jcp.nb_ic_int > 1 && get_ic_tail()) {
         int Ac = jcp.typesize_in * get_ic_tail();
         char *_t = tcfg_buff + max_palette_size_in_bytes;
-        cfg_tiles((palette_config_t *)(_t), Ac);
+        cfg_tiles((tileconfig_t *)(_t), Ac);
     }
 }
 

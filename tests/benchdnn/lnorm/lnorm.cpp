@@ -389,12 +389,15 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
 
     const int64_t *data_dims = &p->dims[0];
 
-    SAFE(init_md(&data_d, p->ndims, data_dims, p->dt, p->tag), CRIT);
+    DNN_SAFE(dnnl_memory_desc_init_by_tag(&data_d, p->ndims, data_dims, p->dt,
+                     convert_tag(p->tag, p->ndims)),
+            WARN);
 
-    const dnnl_memory_desc_t *stat_d_ptr = nullptr;
+    const dnnl_memory_desc_t *stat_d_ptr = NULL;
     if (p->stat_tag != tag::undef) {
-        SAFE(init_md(&stat_d, p->ndims - 1, data_dims, dnnl_f32, p->stat_tag),
-                CRIT);
+        DNN_SAFE(dnnl_memory_desc_init_by_tag(&stat_d, p->ndims - 1, data_dims,
+                         dnnl_f32, convert_tag(p->stat_tag, p->ndims - 1)),
+                WARN);
         stat_d_ptr = &stat_d;
     }
 
@@ -416,7 +419,7 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
                 WARN);
     }
 
-    dnnl_primitive_desc_t hint_fwd_pd = nullptr;
+    dnnl_primitive_desc_t hint_fwd_pd = NULL;
     if (p->dir & FLAG_BWD) {
         dnnl_layer_normalization_desc_t ld_fwd;
         DNN_SAFE(dnnl_layer_normalization_forward_desc_init(&ld_fwd,
@@ -424,14 +427,14 @@ static int init_pd(dnnl_engine_t engine, const prb_t *p,
                          flags),
                 WARN);
         dnnl_status_t init_fwd_status = dnnl_primitive_desc_create(
-                &hint_fwd_pd, &ld_fwd, nullptr, engine, nullptr);
+                &hint_fwd_pd, &ld_fwd, NULL, engine, NULL);
         if (init_fwd_status == dnnl_unimplemented)
             return r->state = UNIMPLEMENTED, OK;
         else
             SAFE(init_fwd_status, WARN);
     }
 
-    auto dnnl_attr = create_dnnl_attr(p->attr, attr_args_t());
+    auto dnnl_attr = create_dnnl_attr(attr_t());
 
     dnnl_status_t init_status = dnnl_primitive_desc_create(
             &lpd, &ld, dnnl_attr, engine, hint_fwd_pd);
@@ -500,7 +503,7 @@ int doit(const prb_t *p, res_t *r) {
     const auto &scratchpad_md = q(DNNL_ARG_SCRATCHPAD);
 
     const auto fp = dnnl_f32;
-    const auto tag = tag::abx;
+    const auto tag = get_abx_tag(p->ndims);
 
     const auto &test_engine = get_test_engine();
 
@@ -515,16 +518,16 @@ int doit(const prb_t *p, res_t *r) {
     // On inference w/o global stats the layer norm doesn't require stat
     // memories. Hence, we need to prepare the mean_fp and var_fp ourselves.
     const auto stat_ndims = p->ndims - 1;
-    const auto stat_tag = tag::abx;
+    const auto stat_tag = get_abx_tag(stat_ndims);
     dnn_mem_t mean_fp(stat_ndims, data_md.dims, fp, stat_tag, test_engine);
     dnn_mem_t mean_dt(mean_md, test_engine);
 
     dnn_mem_t var_fp(stat_ndims, data_md.dims, fp, stat_tag, test_engine);
     dnn_mem_t var_dt(var_md, test_engine);
 
-    dnn_mem_t ss_fp(ss_md, fp, tag::abx, test_engine);
+    dnn_mem_t ss_fp(ss_md, fp, get_abx_tag(ss_md.ndims), test_engine);
     dnn_mem_t ss_dt(ss_md, test_engine);
-    dnn_mem_t d_ss_fp(ss_md, fp, tag::abx, test_engine);
+    dnn_mem_t d_ss_fp(ss_md, fp, get_abx_tag(ss_md.ndims), test_engine);
     dnn_mem_t d_ss_dt(ss_md, test_engine);
 
     dnn_mem_t scratchpad_dt(scratchpad_md, test_engine);

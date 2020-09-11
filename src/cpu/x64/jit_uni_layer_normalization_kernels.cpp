@@ -162,15 +162,13 @@ void jit_transfer_t<bf16>::store<bf16>(
 }
 
 template <data_type_t data_type>
-struct jit_statistics_kernel_t : statistics_kernel_t<data_type>,
-                                 public jit_generator {
+struct jit_statistics_kernel_t : statistics_kernel_t<data_type>, jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(lnorm_utils::jit_statistics_kernel_t);
 
     jit_statistics_kernel_t(const layer_normalization_pd_t *pd);
 
     using data_t = typename prec_traits<data_type>::type;
     void operator()(const data_t *src, float *mean, float *var) const override;
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
 
 private:
     jit_transfer_t<data_type> jit_transfer_;
@@ -185,7 +183,9 @@ private:
         float *mean;
         float *var;
     };
-    void generate() override;
+    void (*ker_)(const ker_args_t *args) = nullptr;
+
+    void generate();
 
     template <typename F>
     void compute(F op);
@@ -208,16 +208,18 @@ jit_statistics_kernel_t<data_type>::jit_statistics_kernel_t(
         const layer_normalization_pd_t *pd)
     : statistics_kernel_t<data_type>(pd), jit_transfer_ {*this} {
     assert(data_type == bf16 ? mayiuse(avx512_core) : mayiuse(avx2));
+    generate();
 }
 
 template <data_type_t data_type>
 void jit_statistics_kernel_t<data_type>::operator()(
         const data_t *src, float *mean, float *var) const {
+    assert(ker_);
     ker_args_t args;
     args.src = src;
     args.mean = mean;
     args.var = var;
-    jit_generator::operator()(&args);
+    ker_(&args);
 }
 
 template <data_type_t data_type>
@@ -244,6 +246,8 @@ void jit_statistics_kernel_t<data_type>::generate() {
     vmovss(ptr[reg_var], Xmm(0));
 
     postamble();
+
+    ker_ = getCode<decltype(ker_)>();
 }
 
 template <data_type_t data_type>
@@ -321,7 +325,7 @@ void jit_statistics_kernel_t<f32>::reduce() {
 }
 
 template <data_type_t data_type>
-struct jit_data_kernel_t : data_kernel_t<data_type>, public jit_generator {
+struct jit_data_kernel_t : data_kernel_t<data_type>, jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(lnorm_utils::jit_data_kernel_t);
 
     jit_data_kernel_t(const layer_normalization_pd_t *pd);
@@ -329,8 +333,6 @@ struct jit_data_kernel_t : data_kernel_t<data_type>, public jit_generator {
     using data_t = typename prec_traits<data_type>::type;
     void operator()(const data_t *src, data_t *dst, const float *ss,
             const float *mean, const float *var) const override;
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
 
 private:
     jit_transfer_t<data_type> jit_transfer_;
@@ -348,8 +350,9 @@ private:
         const float *mean;
         const float *inv_sqrtvar;
     };
+    void (*ker_)(const ker_args_t *args) = nullptr;
 
-    void generate() override;
+    void generate();
 
     Xbyak::Reg64 reg_param = abi_param1;
     Xbyak::Reg64 reg_src = rdx;
@@ -370,11 +373,13 @@ jit_data_kernel_t<data_type>::jit_data_kernel_t(
         const layer_normalization_pd_t *pd)
     : data_kernel_t<data_type>(pd), jit_transfer_ {*this} {
     assert(data_type == bf16 ? mayiuse(avx512_core) : mayiuse(avx2));
+    generate();
 }
 
 template <data_type_t data_type>
 void jit_data_kernel_t<data_type>::operator()(const data_t *src, data_t *dst,
         const float *ss, const float *mean, const float *var) const {
+    assert(ker_);
     ker_args_t args;
     args.src = src;
     args.dst = dst;
@@ -389,7 +394,7 @@ void jit_data_kernel_t<data_type>::operator()(const data_t *src, data_t *dst,
 #endif
     const float inv_sqrtvar = 1.f / denom;
     args.inv_sqrtvar = &inv_sqrtvar;
-    jit_generator::operator()(&args);
+    ker_(&args);
 }
 
 template <data_type_t data_type>
@@ -434,11 +439,12 @@ void jit_data_kernel_t<data_type>::generate() {
         op(1, i);
 
     postamble();
+
+    ker_ = getCode<decltype(ker_)>();
 }
 
 template <data_type_t data_type>
-struct jit_diff_ss_kernel_t : diff_ss_kernel_t<data_type>,
-                              public jit_generator {
+struct jit_diff_ss_kernel_t : diff_ss_kernel_t<data_type>, jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(lnorm_utils::jit_diff_ss_kernel_t);
 
     jit_diff_ss_kernel_t(const layer_normalization_pd_t *pd);
@@ -447,8 +453,6 @@ struct jit_diff_ss_kernel_t : diff_ss_kernel_t<data_type>,
     void operator()(const data_t *src, const data_t *diff_dst,
             float *diff_gamma, float *diff_beta, const float *mean,
             const float *var) const override;
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
 
 private:
     jit_transfer_t<data_type> jit_transfer_;
@@ -466,8 +470,9 @@ private:
         const float *mean;
         const float *inv_sqrtvar;
     };
+    void (*ker_)(const ker_args_t *args) = nullptr;
 
-    void generate() override;
+    void generate();
 
     Xbyak::Reg64 reg_param = abi_param1;
     Xbyak::Reg64 reg_src = rdx;
@@ -491,12 +496,14 @@ jit_diff_ss_kernel_t<data_type>::jit_diff_ss_kernel_t(
         const layer_normalization_pd_t *pd)
     : diff_ss_kernel_t<data_type>(pd), jit_transfer_ {*this} {
     assert(data_type == bf16 ? mayiuse(avx512_core) : mayiuse(avx2));
+    generate();
 }
 
 template <data_type_t data_type>
 void jit_diff_ss_kernel_t<data_type>::operator()(const data_t *src,
         const data_t *diff_dst, float *diff_gamma, float *diff_beta,
         const float *mean, const float *var) const {
+    assert(ker_);
     ker_args_t args;
     args.src = src;
     args.diff_dst = diff_dst;
@@ -512,7 +519,7 @@ void jit_diff_ss_kernel_t<data_type>::operator()(const data_t *src,
 #endif
     const float inv_sqrtvar = 1.f / denom;
     args.inv_sqrtvar = &inv_sqrtvar;
-    jit_generator::operator()(&args);
+    ker_(&args);
 }
 
 template <data_type_t data_type>
@@ -560,11 +567,12 @@ void jit_diff_ss_kernel_t<data_type>::generate() {
         op(1, i);
 
     postamble();
+
+    ker_ = getCode<decltype(ker_)>();
 }
 
 template <data_type_t data_type>
-struct jit_diff_data_kernel_t : diff_data_kernel_t<data_type>,
-                                public jit_generator {
+struct jit_diff_data_kernel_t : diff_data_kernel_t<data_type>, jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(lnorm_utils::jit_diff_data_kernel_t);
 
     jit_diff_data_kernel_t(const layer_normalization_pd_t *pd);
@@ -573,8 +581,6 @@ struct jit_diff_data_kernel_t : diff_data_kernel_t<data_type>,
     void operator()(const data_t *src, const data_t *diff_dst, data_t *diff_src,
             const float *ss, const float *mean,
             const float *var) const override;
-
-    status_t create_kernel() override { return jit_generator::create_kernel(); }
 
 private:
     jit_transfer_t<data_type> jit_transfer_;
@@ -594,7 +600,9 @@ private:
         const float *mean;
         const float *inv_sqrtvar;
     };
-    void generate() override;
+    void (*ker_)(const ker_args_t *args) = nullptr;
+
+    void generate();
 
     void reduce(Vmm vmm_vec);
 
@@ -624,12 +632,14 @@ jit_diff_data_kernel_t<data_type>::jit_diff_data_kernel_t(
         const layer_normalization_pd_t *pd)
     : diff_data_kernel_t<data_type>(pd), jit_transfer_ {*this} {
     assert(data_type == bf16 ? mayiuse(avx512_core) : mayiuse(avx2));
+    generate();
 }
 
 template <data_type_t data_type>
 void jit_diff_data_kernel_t<data_type>::operator()(const data_t *src,
         const data_t *diff_dst, data_t *diff_src, const float *ss,
         const float *mean, const float *var) const {
+    assert(ker_);
     ker_args_t args;
     args.src = src;
     args.diff_dst = diff_dst;
@@ -645,7 +655,7 @@ void jit_diff_data_kernel_t<data_type>::operator()(const data_t *src,
 #endif
     const float inv_sqrtvar = 1.f / denom;
     args.inv_sqrtvar = &inv_sqrtvar;
-    jit_generator::operator()(&args);
+    ker_(&args);
 }
 
 template <data_type_t data_type>
@@ -740,6 +750,8 @@ void jit_diff_data_kernel_t<data_type>::generate() {
         compute_diff_src(1, i);
 
     postamble();
+
+    ker_ = getCode<decltype(ker_)>();
 }
 
 template <>

@@ -42,7 +42,7 @@ namespace {
 using namespace dnnl::impl::data_type;
 
 // clang-format off
-const pd_create_f impl_list[] = {
+static const pd_create_f impl_list[] = {
         /* fp */
         CPU_INSTANCE_X64(jit_uni_batch_normalization_fwd_t<avx512_common>)
         CPU_INSTANCE_X64(jit_uni_batch_normalization_bwd_t<avx512_common>)
@@ -75,7 +75,6 @@ const pd_create_f impl_list[] = {
         /* int */
         CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<avx512_core>)
         CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<avx2>)
-        CPU_INSTANCE_X64(jit_uni_batch_normalization_s8_fwd_t<sse41>)
         CPU_INSTANCE(ref_batch_normalization_fwd_t<s8>)
         /* eol */
         nullptr,

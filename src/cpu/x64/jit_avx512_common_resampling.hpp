@@ -53,8 +53,6 @@ struct jit_avx512_common_resampling_fwd_t : public primitive_t {
 
     typedef typename prec_traits<d_type>::type data_t;
 
-    status_t init(engine_t *engine) override;
-
     status_t execute(const exec_ctx_t &ctx) const override;
 
 private:
@@ -83,8 +81,6 @@ struct jit_avx512_common_resampling_bwd_t : public primitive_t {
     virtual ~jit_avx512_common_resampling_bwd_t();
 
     typedef typename prec_traits<d_type>::type data_t;
-
-    status_t init(engine_t *engine) override;
 
     status_t execute(const exec_ctx_t &ctx) const override;
 

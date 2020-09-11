@@ -35,14 +35,6 @@ status_t ocl_gpu_engine_t::init() {
     CHECK(compute_engine_t::init());
 
     cl_int err = CL_SUCCESS;
-    err = clRetainDevice(device_);
-    if (err != CL_SUCCESS) {
-        device_ = nullptr;
-        context_ = nullptr;
-    }
-
-    OCL_CHECK(err);
-
     if (is_user_context_) {
         err = clRetainContext(context_);
         if (err != CL_SUCCESS) context_ = nullptr;
@@ -163,7 +155,7 @@ status_t ocl_gpu_engine_t::create_kernels_from_ocl_source(
 
         std::vector<char> log_buf(log_length);
         err = clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG,
-                log_length, log_buf.data(), nullptr);
+                log_length, log_buf.data(), 0);
         assert(err == CL_SUCCESS);
         printf("Error during the build of OpenCL program.\nBuild "
                "log:\n%s\n",

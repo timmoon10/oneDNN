@@ -30,7 +30,6 @@ class i_lrn_executor_t {
 public:
     virtual status_t execute(const exec_ctx_t &ctx) const = 0;
     virtual ~i_lrn_executor_t() = default;
-    virtual status_t create_kernel() = 0;
 };
 
 } // namespace lrn
