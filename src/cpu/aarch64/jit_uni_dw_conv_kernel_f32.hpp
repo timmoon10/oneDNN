@@ -22,9 +22,7 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
-#if 0
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
-#endif
 
 namespace dnnl {
 namespace impl {
@@ -36,24 +34,16 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_fwd_kernel_f32)
 
     jit_uni_dw_conv_fwd_kernel_f32(jit_conv_conf_t ajcp)
-#if 1
-        : jcp(ajcp) {
-#else
         : jcp(ajcp), eltwise_injector_(nullptr) {
-#endif
-#if 0
         if (jcp.with_eltwise)
             eltwise_injector_
-                    = new jit_uni_eltwise_injector_f32<isa>(this, jcp.eltwise);
-#endif
+                    = new jit_uni_eltwise_injector_f32<avx512_common>(this, jcp.eltwise);
         this->generate();
         jit_ker = (void (*)(jit_conv_call_s *))this->getCode32();
     }
 
     ~jit_uni_dw_conv_fwd_kernel_f32() { 
-#if 0
         delete eltwise_injector_;
-#endif
     }
 
     jit_conv_conf_t jcp;
@@ -145,9 +135,7 @@ private:
         return utils::one_of(jcp.dst_tag, format_tag::ndhwc, format_tag::nhwc,
                 format_tag::nwc);
     }
-#if 0
-    jit_uni_eltwise_injector_f32<isa> *eltwise_injector_;
-#endif
+    jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
     void generate();
 };
 
