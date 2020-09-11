@@ -314,6 +314,7 @@ struct jit_softmax_t<avx512_common> : public jit_softmax_base_t<avx512_common> {
         const int mask_f32 = (1 << axis_simd_tail_) - 1;
         Reg32 regw_tmp = reg_tmp.cvt32();
         mov(regw_tmp, mask_f32);
+        // The kmovw instrucion here can be translated correctly by translator
         kmovw(tail_opmask, regw_tmp);
     }
 
