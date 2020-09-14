@@ -22,9 +22,7 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
-#if 0
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
-#endif
 
 #define PRFMMIN  (-256)
 #define PRFWMAX    31
@@ -45,27 +43,18 @@ namespace aarch64 {
 struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
     jit_aarch64_sve_512_1x1_conv_kernel(
             const jit_1x1_conv_conf_t &ajcp, const primitive_attr_t &attr)
-#if 1
-        : jcp(ajcp), attr_(attr) {
-#else
         : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
-#endif        
+
         if (jcp.with_eltwise){
-#if 1
-            assert(NULL);
-#else
-            eltwise_injector_ = new jit_uni_eltwise_injector_f32<sve>(
+            eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
-#endif
         }
         this->generate();
         jit_ker = (void (*)(jit_1x1_conv_call_s *))this->getCode32();
     }
 
     ~jit_aarch64_sve_512_1x1_conv_kernel() { 
-#if 0
         delete eltwise_injector_; 
-#endif
     }
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_1x1_conv_kernel)
@@ -163,10 +152,7 @@ struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
       }
     }
 
-//TODO:
-#if 0
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
-#endif
 
     int stack_space_needed = 16;
     int bcast_loop_work_offt = 0;

@@ -22,6 +22,10 @@
 #include "cpu/x64/jit_uni_eltwise.hpp"
 #include "cpu/x64/jit_uni_eltwise_int.hpp"
 using namespace dnnl::impl::cpu::x64;
+#elif DNNL_AARCH64
+#include "cpu/aarch64/jit_uni_eltwise.hpp"
+#include "cpu/aarch64/jit_uni_eltwise_int.hpp"
+using namespace dnnl::impl::cpu::aarch64;
 #endif
 
 namespace dnnl {
@@ -52,6 +56,11 @@ static const pd_create_f impl_list[] = {
         CPU_INSTANCE_X64(jit_uni_eltwise_int_fwd_t<sse41, s32>)
         CPU_INSTANCE_X64(jit_uni_eltwise_int_fwd_t<sse41, s8>)
         CPU_INSTANCE_X64(jit_uni_eltwise_int_fwd_t<sse41, u8>)
+        CPU_INSTANCE_AARCH64(jit_uni_eltwise_fwd_t<avx512_common, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_eltwise_bwd_t<avx512_common, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_eltwise_int_fwd_t<avx512_common, s32>)
+        CPU_INSTANCE_AARCH64(jit_uni_eltwise_int_fwd_t<avx512_common, s8>)
+        CPU_INSTANCE_AARCH64(jit_uni_eltwise_int_fwd_t<avx512_common, u8>)
         CPU_INSTANCE(ref_eltwise_fwd_t<f32>)
         CPU_INSTANCE(ref_eltwise_bwd_t<f32>)
         CPU_INSTANCE(ref_eltwise_fwd_t<bf16>)

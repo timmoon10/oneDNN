@@ -157,12 +157,8 @@ template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_activation(
         int ur_ch_blocks, int ur_w) {
     if (this->jcp.with_eltwise) {
-#if 1
-        assert(NULL);
-#else
         eltwise_injector_->compute_vector_range(
                 4, ur_w * ur_ch_blocks + 4);
-#endif
     }
 }
 template <cpu_isa_t isa>
@@ -395,9 +391,12 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     }
 
     this->postamble();
-#if 0
-    if (jcp.with_eltwise) eltwise_injector_->prepare_table();
+    if (jcp.with_eltwise) {
+      eltwise_injector_->prepare_table();
+#ifdef DNNL_INDIRECT_JIT_AARCH64
+      binCommit();
 #endif
+    }
 }
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve>;

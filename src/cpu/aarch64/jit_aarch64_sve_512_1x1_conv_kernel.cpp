@@ -398,13 +398,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         CGA64::L_aarch64(store_noadd);
         if (jcp.with_eltwise) {
-            assert(NULL);
             xa::LabelAArch64 store_noeltwise;
             CGA64::tst(reg_reduce_pos_flag, FLAG_REDUCE_LAST);
             CGA64::b(xa::EQ, store_noeltwise);
-#if 0
             eltwise_injector_->compute_vector_range(0, ur * load_loop_blk);
-#endif
             CGA64::L_aarch64(store_noeltwise);
         }
 
@@ -748,9 +745,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
     CGA64::L_aarch64(load_loop_blk[num_ur_cases]);
     
     postamble();
-#if 0
-    if (jcp.with_eltwise) eltwise_injector_->prepare_table();
-#endif
+    if (jcp.with_eltwise) {
+      eltwise_injector_->prepare_table();
+      binCommit();
+    }
 }
 
 bool jit_aarch64_sve_512_1x1_conv_kernel::post_ops_ok(
@@ -846,12 +844,8 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jit_1x1_conv_conf_t &jcp
     const int eltwise_ind = p.find(primitive_kind::eltwise, 0, dw_conv_ind);
     jcp.with_eltwise = eltwise_ind != -1;
     if (jcp.with_eltwise) {
-#if 1
-        return status::unimplemented;
-#else
         jcp.eltwise = p.entry_[eltwise_ind].eltwise;
         if (dst_d.data_type() == data_type::s32) return status::unimplemented;
-#endif
     }
     /* Data format check */
     const auto dat_tag_nxc = pick(ndims - 3, nwc, nhwc, ndhwc);
