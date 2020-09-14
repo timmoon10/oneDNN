@@ -318,11 +318,10 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
     }
 #else
 //[info]v0.21‚Æ“¯ˆêcode‚ğ“WŠJ
-#if 0
 //[info]eltwiseˆ—‚ğˆê“I‚Éíœ
     if (jcp.with_eltwise) {
-        CGA64::cmp(reg_channel, jcp.nb_ic - 1);
-        CGA64::b(xa::LT, store_label);
+        CGA64::tst(reg_channel, FLAG_IC_LAST);
+        CGA64::b(xa::EQ, store_label);
 
         {
             if (ur_w == jcp.ur_w) {
@@ -335,7 +334,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             }
         }
     }
-#endif
     auto out_str = [=](int j, int k, int aux_output_offset){
         int ofs = aux_output_offset;
 
@@ -1603,10 +1601,11 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     }
     postamble();
 
-#if 0
 //[info]eltwiseˆ—‚ğˆê“I‚Éíœ
-    if (jcp.with_eltwise) eltwise_injector_->prepare_table();
-#endif
+    if (jcp.with_eltwise){
+        eltwise_injector_->prepare_table();
+        binCommit();
+    }
 }
 
 bool jit_aarch64_sve_512_conv_fwd_kernel::post_ops_ok(

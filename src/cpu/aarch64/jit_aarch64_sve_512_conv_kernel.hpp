@@ -39,10 +39,8 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
-#if 0
 //[info]取り敢えずコメント化。
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
-#endif
 
 #if 1
 //[info]v0.21変更をそのまま追加
@@ -72,28 +70,16 @@ struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
 
     _jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t &ajcp, const primitive_attr_t &attr)
-#if 0
         : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
-#else
-        : jcp(ajcp), attr_(attr) {
-#endif
         if (jcp.with_eltwise)
-#if 0
-            eltwise_injector_ = new jit_uni_eltwise_injector_f32<sve>(
+            eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
-#else
-            assert(NULL);
-#endif
 
         generate();
         jit_ker_ = (void (*)(jit_conv_call_s *))getCode32();
     }
 
-#if 0
     ~_jit_aarch64_sve_512_conv_fwd_kernel() { delete eltwise_injector_; }
-#else
-    ~_jit_aarch64_sve_512_conv_fwd_kernel() { }
-#endif
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_fwd_kernel)
 
@@ -162,7 +148,7 @@ private:
 #if 1
 //[info]レジスタの割り当ては適当
     reg64_t aux_reg_ker_d_org   = x20;
-    reg64_t reg_inp_org         = x21;
+    reg64_t reg_inp_org         = x23;
     reg64_t reg_ker_org         = x22;
 
     reg64_t reg_tmp = x5;
@@ -214,9 +200,7 @@ private:
     }
 #endif
 
-#if 0
-    jit_uni_eltwise_injector_f32<sve> *eltwise_injector_;
-#endif
+    jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
