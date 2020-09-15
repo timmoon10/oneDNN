@@ -4600,10 +4600,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_unroll_ow
                     * jcp.iw * ic_block;
             CGA64::sub_imm(reg_input, reg_input, input_offset, reg_tmp_imm);
             CGA64::add_imm(reg_input, reg_input, input_shift, reg_tmp_imm);
-#if 0
-        } else if (jcp.ver != ver_4fma) {
+        } else {
             CGA64::add_imm(reg_input, reg_input, input_shift - jcp.typesize_in * jcp.ic_block, reg_tmp_imm);
-#endif
         }
 
         if (!(generate_icb_loop || ic_tail))
@@ -4821,10 +4819,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
                     * jcp.iw * ic_block;
             CGA64::sub_imm(reg_input, reg_input, input_offset, reg_tmp_imm);
             CGA64::add_imm(reg_input, reg_input, input_shift, reg_tmp_imm);
-#if 0
-        } else if (jcp.ver != ver_4fma && !jcp.is_hw_transp) {
-            add(reg_input, input_shift - jcp.typesize_in * ic_block);
-#endif
+        } else if (!jcp.is_hw_transp) {
+            CGA64::add_imm(reg_input, reg_input, input_shift - jcp.typesize_in * ic_block, reg_tmp_imm);
         }
         if (!jcp.is_hw_transp && !(generate_icb_loop || ic_tail))
             CGA64::add_imm(reg_kernel, reg_kernel,
@@ -4924,7 +4920,12 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
         }
 
         CGA64::add_imm(reg_tmp, reg_tmp, jcp.ic_block * jcp.oc_block * jcp.typesize_out, reg_tmp_imm);
-        CGA64::cmp(reg_tmp, kernel_block_bytes);
+        if(kernel_block_bytes > ADDMAX){
+            CGA64::mov_imm(reg_tmp_imm, kernel_block_bytes);
+            CGA64::cmp(reg_tmp, reg_tmp_imm);
+        }else{
+            CGA64::cmp(reg_tmp, kernel_block_bytes);
+        }
         CGA64::b(xa::NE, zeroing_loop);
     }
     if (generate_icb_loop) {
