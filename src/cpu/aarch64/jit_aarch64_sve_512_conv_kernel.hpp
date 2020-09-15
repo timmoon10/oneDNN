@@ -50,20 +50,14 @@
 #define ADDMAX   4095
 #define PRFMMAX 32760
 #define MOVMAX  65535
+/* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
+#define VL_OFS(ofs) ((ofs)>>6)
 #endif
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
-
-#if 1
-//[info]v0.21•ÏX‚ð‚»‚Ì‚Ü‚Ü’Ç‰Á
-#define CGA64 CodeGeneratorAArch64
-namespace xa = Xbyak::Xbyak_aarch64;
-/* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
-#define VL_OFS(ofs) ((ofs)>>6)
-#endif
 
 template <typename Vmm>
 struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
@@ -269,36 +263,20 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
     jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t ajcp, const primitive_attr_t &attr)
         : jit_ker(nullptr)
-        , zmm_kernel_(nullptr)
-        , ymm_kernel_(nullptr)
-        , xmm_kernel_(nullptr) {
+        , sve_512_kernel_(nullptr) {
         switch (ajcp.oc_block) {
             case 16:
-                zmm_kernel_
-                        = new _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Zmm>(
+                sve_512_kernel_
+                        = new _jit_aarch64_sve_512_conv_fwd_kernel<xa::ZReg>(
                                 ajcp, attr);
-                jit_ker = zmm_kernel_->jit_ker_;
-                return;
-            case 8:
-                ymm_kernel_
-                        = new _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Ymm>(
-                                ajcp, attr);
-                jit_ker = ymm_kernel_->jit_ker_;
-                return;
-            case 4:
-                xmm_kernel_
-                        = new _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Xmm>(
-                                ajcp, attr);
-                jit_ker = xmm_kernel_->jit_ker_;
+                jit_ker = sve_512_kernel_->jit_ker_;
                 return;
             default: assert(!"invalid channel blocking");
         }
     }
 
     ~jit_aarch64_sve_512_conv_fwd_kernel() {
-        delete zmm_kernel_;
-        delete ymm_kernel_;
-        delete xmm_kernel_;
+        delete sve_512_kernel_;
     }
 
     enum { typesize = sizeof(float) };
@@ -312,9 +290,7 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
             const jit_conv_conf_t &jcp);
 
     void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Zmm> *zmm_kernel_;
-    _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Ymm> *ymm_kernel_;
-    _jit_aarch64_sve_512_conv_fwd_kernel<Xbyak::Xmm> *xmm_kernel_;
+    _jit_aarch64_sve_512_conv_fwd_kernel<xa::ZReg> *sve_512_kernel_;
 
 private:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_fwd_kernel);
@@ -505,33 +481,19 @@ struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
 
     jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
         : jit_ker(nullptr)
-        , zmm_kernel_(nullptr)
-        , ymm_kernel_(nullptr)
-        , xmm_kernel_(nullptr) {
+        , sve_512_kernel_(nullptr) {
         switch (ajcp.ic_block) {
             case 16:
-                zmm_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
-                        Xbyak::Zmm>(ajcp);
-                jit_ker = zmm_kernel_->jit_ker_;
-                return;
-            case 8:
-                ymm_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
-                        Xbyak::Ymm>(ajcp);
-                jit_ker = ymm_kernel_->jit_ker_;
-                return;
-            case 4:
-                xmm_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
-                        Xbyak::Xmm>(ajcp);
-                jit_ker = xmm_kernel_->jit_ker_;
+                sve_512_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
+                        xa::ZReg>(ajcp);
+                jit_ker = sve_512_kernel_->jit_ker_;
                 return;
             default: assert(!"invalid channel blocking");
         }
     }
 
     ~jit_aarch64_sve_512_conv_bwd_data_kernel_f32() {
-        delete zmm_kernel_;
-        delete ymm_kernel_;
-        delete xmm_kernel_;
+        delete sve_512_kernel_;
     }
 
     enum { typesize = sizeof(float) };
@@ -543,9 +505,7 @@ struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
             const jit_conv_conf_t &jcp);
 
     void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xbyak::Zmm> *zmm_kernel_;
-    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xbyak::Ymm> *ymm_kernel_;
-    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xbyak::Xmm> *xmm_kernel_;
+    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<xa::ZReg> *sve_512_kernel_;
 
 private:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_bwd_data_kernel_f32);

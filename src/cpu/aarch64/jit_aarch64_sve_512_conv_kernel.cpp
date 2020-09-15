@@ -36,9 +36,9 @@
 #include "common/utils.hpp"
 
 #include "cpu/platform.hpp"
+#include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 #include "cpu/aarch64/cpu_barrier.hpp"
 
-#include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 
 #define GET_OFF(field) static_cast<int32_t>(offsetof(jit_conv_call_s, field))
 #define KNx_L2_EFFECTIVE_CAPACITY ((512 - 64) * 1024)
@@ -56,9 +56,6 @@ using namespace dnnl::impl::format_tag;
 using namespace dnnl::impl::memory_tracking::names;
 using namespace dnnl::impl::utils;
 using namespace Xbyak;
-
-#define CGA64 CodeGeneratorAArch64
-namespace xa = Xbyak::Xbyak_aarch64;
 
 namespace {
 
@@ -199,7 +196,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
 
     if (jcp.with_bias) { CGA64::ldr(reg_bias, xa::ptr(abi_param1_aarch64, GET_OFF(bias))); }
 
-    const int oc_tail = jcp.oc_tail;
 
     if (!jcp.with_sum) {
         auto _jmp = [&](const xa::LabelAArch64 &l) {
@@ -220,6 +216,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
     for (int k = 0; k < jcp.nb_oc_blocking; k++)
         for (int j = 0; j < ur_w; j++) {
 #if 0
+            const int oc_tail = jcp.oc_tail;
             Vmm vmm = vmm_out(j, k);
             // mask only needed for last oc_block
             if (oc_tail && k + 1 == jcp.nb_oc_blocking)
@@ -1385,9 +1382,9 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     CGA64::ldr(reg_ker_prf, xa::ptr(abi_param1_aarch64, GET_OFF(filt_prf)));
     CGA64::ldr(reg_kh,      xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
 
-    const int oc_tail = jcp.oc_tail;
 //[info]取り敢えずコメント化。
 #if 0
+    const int oc_tail = jcp.oc_tail;
     if (oc_tail) {
         Label done;
         // dummy mask all 1's
@@ -2167,22 +2164,9 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     }
 #else
     if (jcp.ver == ver_fma && mayiuse(sve)) {
+#if 0
         int try_nb_oc_blocking = 2;
-        unsigned int ker_inp_size = typesize * div_up(jcp.iw, jcp.stride_w)
-                * jcp.ic_block * jcp.kh * jcp.kd;
-        unsigned int ker_out_size
-                = typesize * jcp.ow * jcp.oc_block * try_nb_oc_blocking;
-        unsigned int ker_wei_size = typesize * jcp.kh * jcp.kw * jcp.ic_block
-                * jcp.oc_block * try_nb_oc_blocking * jcp.kd;
-        unsigned int ker_total_size
-                = ker_inp_size + ker_out_size + ker_wei_size;
-
-        bool embd_bcast_condition_base = true
-                && (jcp.kw == 3 && jcp.ow <= 28
-                        && ker_total_size < L1_cache_size)
-                && !(jcp.kw == 3 && jcp.ow == 13 && jcp.ic >= 192)
-                && !(jcp.kw == 3 && jcp.ow == 28 && jcp.ic >= 512);
-
+#endif
         // These conditions define a set of shapes with 'ow = 1' which
         // have a very limited optimization space for performance. Try
         // to optimize by using a larger 'nb_oc_blocking' size.
@@ -2193,18 +2177,6 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
                 && everyone_is(0, jcp.l_pad, jcp.r_pad, jcp.dilate_w, jcp.f_pad,
                         jcp.back_pad, jcp.dilate_d)
                 && jcp.oh >= 60 && jcp.kh >= 3;
-
-        bool embd_bcast_condition = !expl_bcast_condition
-                && (jcp.kw > 3
-                        || (jcp.stride_w == 1 && jcp.stride_h == 1
-                                && embd_bcast_condition_base)
-                        || ((jcp.stride_w != 1 || jcp.stride_h != 1)
-                                && ((jcp.mb <= 16
-                                        && (jcp.oc <= 192 || jcp.oh <= 10)
-                                        && embd_bcast_condition_base)))
-                        || (jcp.mb == 1
-                                && (jcp.ur_w >= jcp.ow || jcp.is_1stconv
-                                        || (jcp.ow <= 147 && jcp.oc <= 96))));
 
         if (jcp.mb == 1) {
             unsigned int inp_size = jcp.mb * div_up(jcp.ih, jcp.stride_h)
@@ -2245,6 +2217,15 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
 
         const int max_nb_oc = 5;
 #if 0
+        unsigned int ker_inp_size = typesize * div_up(jcp.iw, jcp.stride_w)
+                * jcp.ic_block * jcp.kh * jcp.kd;
+        unsigned int ker_out_size
+                = typesize * jcp.ow * jcp.oc_block * try_nb_oc_blocking;
+        unsigned int ker_wei_size = typesize * jcp.kh * jcp.kw * jcp.ic_block
+                * jcp.oc_block * try_nb_oc_blocking * jcp.kd;
+        unsigned int ker_total_size
+                = ker_inp_size + ker_out_size + ker_wei_size;
+
         if (embd_bcast_condition) {
             jcp.kernel_kind = embd_bcast;
             jcp.ur_w = nstl::min(jcp.ow, regs);
@@ -4316,7 +4297,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
 #endif
                 assert((i_kw * ic_block_step + i_ic) < 31);
                 assert((kw * ic_block_step + (i_ur % 4)) < 31);
-                assert(i_offset < (1<<31));
+                assert(i_offset < (1LL<<31));
                 CGA64::add_imm(reg_add_tmp, reg_input, i_offset, reg_tmp_imm);
                 ld1rw(zreg_idata, reg_p_all_ones, xa::ptr(reg_add_tmp));
                 CGA64::fmla(xa::ZRegS(i_kw * ic_block_step + i_ic), reg_p_all_ones,
@@ -4943,7 +4924,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
     assert(jcp.ndims == 4); // only supports 2d
     xa::LabelAArch64 skip_bias, bias_loop;
-    const int oc_tail = jcp.oc_tail;
 
     CGA64::ldr(reg_tmp, xa::ptr(param, GET_OFF(flags)));
     CGA64::ldr(reg_bias, xa::ptr(param, GET_OFF(bias)));
@@ -4957,6 +4937,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
     CGA64::L_aarch64(bias_loop);
     {
 #if 0
+        const int oc_tail = jcp.oc_tail;
         auto zmm_out = Zmm(1);
         if (oc_tail) zmm_out = zmm_out | k_oc_mask | T_z;
         vmovups(zmm_out, ptr[reg_output + reg_tmp]);
@@ -4981,7 +4962,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
     assert(jcp.ndims == 5); // only supports 3d
     xa::LabelAArch64 skip_bias, bias_loop, skip_load_bias;
-    const bool oc_tail = jcp.oc_tail;
 
     CGA64::ldr(reg_tmp, xa::ptr(param, GET_OFF(flags)));
     CGA64::tst(reg_tmp, reg_tmp);
@@ -5013,6 +4993,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
     CGA64::L_aarch64(bias_loop);
     {
 #if 0
+        const bool oc_tail = jcp.oc_tail;
         auto zmm_out = Zmm(0);
         if (oc_tail) zmm_out = zmm_out | k_oc_mask | T_z;
         vmovups(zmm_out, ptr[reg_output + reg_tmp]);
@@ -6005,21 +5986,22 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
                         (one_of(jcp.ic, 1, 2, 3) && jcp.ngroups == 1));
         if (!src_ok) return status::unimplemented;
 
-        const int tr_ld = rnd_up(
-                div_up(jcp.iw + jcp.l_pad + jcp.r_pad, jcp.stride_w), 16);
-        const int kh_step = nstl::max((28 - jcp.with_bias) / jcp.kw, 1);
-        const int kh_step_rem = jcp.kh % kh_step;
+
+#if 0
+//[info]取り敢えずコメント化。
 
         const auto wei_4fma_tag = with_groups
                 ? pick(ndims - 3, gOiw16o, gOihw16o, gOidhw16o)
                 : pick(ndims - 3, Oiw16o, Oihw16o, Oidhw16o);
-
+        const int tr_ld = rnd_up(
+                div_up(jcp.iw + jcp.l_pad + jcp.r_pad, jcp.stride_w), 16); 
+        const int kh_step = nstl::max((28 - jcp.with_bias) / jcp.kw, 1);
+        const int kh_step_rem = jcp.kh % kh_step;
         auto current_wei_tag = format_tag::undef;
         if (diff_weights_d.format_kind() != format_kind::any)
             current_wei_tag = diff_weights_d.matches_one_of_tag(wei_4fma_tag);
 
-#if 0
-//[info]取り敢えずコメント化。
+
         const bool use_4fma = true && !is_data_layout_nxc && one_of(ndims, 3, 4)
                 && mayiuse(avx512_mic_4ops) && dnnl_thr_syncable()
                 && everyone_is(0, jcp.dilate_d, jcp.dilate_h, jcp.dilate_w)
@@ -6442,12 +6424,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::balance(
     assert(nthr_ <= nthreads);
 }
 
-template struct _jit_aarch64_sve_512_conv_fwd_kernel<Zmm>;
-template struct _jit_aarch64_sve_512_conv_fwd_kernel<Ymm>;
-template struct _jit_aarch64_sve_512_conv_fwd_kernel<Xmm>;
-template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Zmm>;
-template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Ymm>;
-template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Xmm>;
+template struct _jit_aarch64_sve_512_conv_fwd_kernel<xa::ZReg>;
+template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<xa::ZReg>;
 
 } // namespace aarch64
 } // namespace cpu

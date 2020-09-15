@@ -1404,14 +1404,10 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     diff_weights_data_t *diff_wei = ti->ithr_mb == 0
             ? (diff_weights_data_t *)ti->diff_weights
             : ti->wei_bia_reduction + (ti->ithr_mb - 1) * wei_size;
-    diff_weights_data_t *diff_bia = ti->ithr_mb == 0
-            ? (diff_weights_data_t *)ti->diff_bias
-            : ti->wei_bia_reduction + (nthr_mb_ - 1) * wei_size
-                    + (ti->ithr_mb - 1) * jcp.ngroups * padded_oc;
-
     const bool is_src_layout_nxc = utils::one_of(
             jcp.src_tag, format_tag::nwc, format_tag::nhwc, format_tag::ndhwc);
     // TODO: use memory descriptor with the same fmt as src (or use a macro :))
+#if 0
     auto tr_src_off = [&](int ithr_mb, int ic, int ij) {
         assert(!is_src_layout_nxc);
         const size_t tr_row_size = jcp.tr_iw * jcp.ic_block;
@@ -1493,8 +1489,14 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
          }
 #endif
     };
+#endif
 
 #if 0
+    diff_weights_data_t *diff_bia = ti->ithr_mb == 0
+            ? (diff_weights_data_t *)ti->diff_bias
+            : ti->wei_bia_reduction + (nthr_mb_ - 1) * wei_size
+                    + (ti->ithr_mb - 1) * jcp.ngroups * padded_oc;
+
     if (jcp.is_1stconv && jcp.ver == ver_4fma) {
         assert(!is_src_layout_nxc);
         /* prepare contexts */
@@ -1910,9 +1912,11 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     const int padded_oc = rnd_up(jcp.oc, jcp.oc_block);
     const int wei_size = jcp.ngroups * padded_oc * rnd_up(jcp.ic, jcp.ic_block)
             * jcp.kh * jcp.kw;
+#if 0
     const int bia_size = jcp.ngroups * padded_oc;
     const diff_weights_data_t *diff_bias_ws
             = ti->wei_bia_reduction + (nthr_mb_ - 1) * wei_size;
+#endif
 
     /* diff_weights[:] += sum(wei_reduction_[thr_mb][:]) */
     if (dnnl_thr_syncable())
@@ -2108,10 +2112,10 @@ template <data_type_t src_type, data_type_t diff_dst_type,
 void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         diff_weights_type>::prepare_scratchpad_data(const exec_ctx_t &ctx)
         const {
-    const auto &j = pd()->jcp_;
     auto scratchpad = ctx.get_scratchpad_grantor();
 
 #if 0
+    const auto &j = pd()->jcp_;
     if (j.ver == ver_4fma) {
         if (!j.is_1stconv) {
             // XXX: See the comment about tr_iw and guarding elements in
