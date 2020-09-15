@@ -41,7 +41,7 @@
     const char *name() const override { return STRINGIFY(jit_name); } \
     const char *source_file() const override { return __FILE__; }
 
-#define CGA64 CodeGeneratorAArch64
+typedef Xbyak::CodeGenerator::CodeGeneratorAArch64 CGA64;
 namespace xa = Xbyak::Xbyak_aarch64;
 
 namespace dnnl {

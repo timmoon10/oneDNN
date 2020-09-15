@@ -1245,7 +1245,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                     }
                 }
             }
-            CGA64:L_aarch64(ic_tail_jmp[ki]);
+            CGA64::L_aarch64(ic_tail_jmp[ki]);
         }
 #endif
         CGA64::add_imm(aux_reg_ker, aux_reg_ker, shift_kernel_ptr, reg_tmp_imm);
@@ -1340,7 +1340,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop(
     if (generate_icb_loop) {
         assert(is_src_layout_nxc());
         const int inp_shift = jcp.ic_block * jcp.typesize_in;
-        CGA64:add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
+        CGA64::add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
         const int ker_shift = jcp.kd * jcp.kh * jcp.kw * jcp.ic_block
                 * jcp.oc_block * jcp.typesize_in;
         CGA64::add_imm(reg_ker, reg_ker, ker_shift, reg_tmp_imm);
