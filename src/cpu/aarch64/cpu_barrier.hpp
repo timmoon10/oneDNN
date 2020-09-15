@@ -29,9 +29,6 @@ namespace aarch64 {
 
 namespace simple_barrier {
 
-#define CGA64 CodeGeneratorAArch64
-namespace xa = Xbyak::Xbyak_aarch64;
-
 #ifdef _WIN32
 #define CTX_ALIGNMENT 64
 #else

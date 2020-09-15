@@ -27,8 +27,6 @@
 
 #include "cpu/aarch64/cpu_isa_traits.hpp"
 
-#define CGA64 CodeGeneratorAArch64
-
 #if defined(_WIN32) && !defined(__GNUC__)
 #define STRUCT_ALIGN(al, ...) __declspec(align(al)) __VA_ARGS__
 #else
@@ -43,13 +41,14 @@
     const char *name() const override { return STRINGIFY(jit_name); } \
     const char *source_file() const override { return __FILE__; }
 
+typedef Xbyak::CodeGenerator::CodeGeneratorAArch64 CGA64;
+namespace xa = Xbyak::Xbyak_aarch64;
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
 
-#define CGA64 CodeGeneratorAArch64
-namespace xa = Xbyak::Xbyak_aarch64;
 // TODO: move this to jit_generator class?
 namespace {
 
@@ -1190,7 +1189,7 @@ public:
 
     const uint32_t *getCode32() {
         this->ready();
-        const uint32_t *code = CodeGeneratorAArch64::getCode32();
+        const uint32_t *code = CGA64::getCode32();
       
         if( get_jit_dump() ) dump_code32(code);
 
