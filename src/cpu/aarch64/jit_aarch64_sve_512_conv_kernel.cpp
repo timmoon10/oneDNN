@@ -3539,6 +3539,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
             * (is_dsrc_layout_nxc() ? jcp.ngroups * jcp.ic : ic_block);
 
     preamble();
+    CGA64::ptrue( reg_p_all_ones.b );
 
     CGA64::ldr(reg_src, xa::ptr(param, GET_OFF(src)));
     CGA64::ldr(reg_dst, xa::ptr(param, GET_OFF(dst)));

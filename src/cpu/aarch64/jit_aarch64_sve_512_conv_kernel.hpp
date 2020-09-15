@@ -351,7 +351,7 @@ private:
     reg64_t reg_dst_prf         = x23;
     reg64_t reg_ker_prf         = x5;
     reg64_t reg_src_prf         = x6;
-    reg64_t reg_iwb             = x7;
+    reg64_t reg_iwb             = x24;
 
     reg64_t aux_reg_dst         = x7;
     reg64_t aux_reg_ker         = x8;
@@ -381,13 +381,13 @@ private:
 
     reg64_t reg_src_prf_org     = x19;
     reg64_t reg_src_org         = x20;
-    reg64_t reg_oi_org          = x21;
+    reg64_t reg_oi_org          = x25;
 #if 1
 //[info]レジスタ割り当ては適当
     reg64_t reg_dst_org         = x22;
-    reg64_t reg_ker_org         = x23;
+    reg64_t reg_ker_org         = x26;
     reg64_t reg_input_org       = x22;
-    reg64_t reg_kernel_org      = x23;
+    reg64_t reg_kernel_org      = x26;
 #endif
 
     const xa::PReg reg_p_all_ones  = p2;
@@ -628,7 +628,7 @@ private:
     reg64_t reg_output_d_org = x18;
     reg64_t reg_d_index_org  = x19;
 
-    reg64_t reg_input_org    = x21;
+    reg64_t reg_input_org    = x24;
     reg64_t reg_kernel_org   = x22;
     reg64_t reg_output_org   = x23;
 
