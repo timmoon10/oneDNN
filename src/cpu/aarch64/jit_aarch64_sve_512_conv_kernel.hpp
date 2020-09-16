@@ -188,10 +188,7 @@ private:
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
-//    inline void compute_loop_fma(int ur_w, int pad_l, int pad_r);
     inline void compute_loop_fma_core(int ur_w, int pad_l, int pad_r);
-//    inline void compute_loop_4fma(int ur_w, int pad_l, int pad_r);
-//    inline void compute_loop_4fma_1st(int ur_w, int pad_l, int pad_r);
     inline void compute_loop(int ur_w, int pad_l, int pad_r);
 
     void generate();
@@ -306,7 +303,6 @@ private:
         ker_reg_base_idx = 28,
     };
 
-#if 1
 //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
 //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
     reg64_t param               = abi_param1_aarch64;
@@ -348,13 +344,11 @@ private:
     reg64_t reg_src_prf_org     = x19;
     reg64_t reg_src_org         = x20;
     reg64_t reg_oi_org          = x25;
-#if 1
 //[info]レジスタ割り当ては適当
     reg64_t reg_dst_org         = x22;
     reg64_t reg_ker_org         = x26;
     reg64_t reg_input_org       = x22;
     reg64_t reg_kernel_org      = x26;
-#endif
 
     const xa::PReg reg_p_all_ones  = p2;
 
@@ -403,13 +397,10 @@ private:
         }
     }
 
-#endif
-
     xa::ZReg reg_wei = xa::ZReg(31);
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
-//    inline void compute_loop_4fma(int ur_w, int l_overflow, int r_overflow);
     inline void compute_loop_fma(int ur_w, int l_overflow, int r_overflow);
     inline void compute_loop_fma_core(
             int ur_w, int l_overflow, int r_overflow, int k_offset);
