@@ -531,7 +531,6 @@ private:
     static const int max_ur_w;
     static const int min_oh_reduce;
 
-#if 1
 //[info]v0.21のcodeを追加。v1.6追加codeは要確認。
     reg64_t param          = abi_param1_aarch64;
     reg64_t reg_input      = x1;
@@ -621,9 +620,6 @@ private:
             }
         }
     }
-#endif
-
-//    Xbyak::Opmask k_oc_mask = Xbyak::Opmask(2);
 
     inline void bias_kernel_2d();
     inline void bias_kernel_3d();
@@ -636,17 +632,6 @@ private:
     inline void compute_ic_block_step(int ur_w, int pad_l, int pad_r,
             int ic_block_step, int input_offset, int kernel_offset,
             int output_offset, bool input_wraparound = false);
-#if 0
-    inline void compute_ic_block_step_fma(int ur_w, int pad_l, int pad_r,
-            int ic_block_step, int input_offset, int kernel_offset,
-            int output_offset, bool input_wraparound);
-    inline void compute_ic_block_step_fma_expl(int ur_w, int pad_l, int pad_r,
-            int ic_block_step, int input_offset, int kernel_offset,
-            int output_offset, bool input_wraparound);
-    inline void compute_ic_block_step_4fma(int ur_w, int pad_l, int pad_r,
-            int ic_block_step, int input_offset, int kernel_offset,
-            int output_offset, bool input_wraparound);
-#endif
     inline void compute_oh_step_common(int ic_block_step, int max_ur_w);
     inline void compute_oh_step_disp();
     inline void compute_oh_loop_common();
@@ -671,23 +656,12 @@ private:
         const bool is_nxc_layout = is_src_layout_nxc();
         const size_t w_shift_st
                 = (jcp.is_hw_transp ? jcp.iw : 1) * jcp.ic_block;
-#if 0
-        ptrdiff_t w_shift = is_nxc_layout
-                ? jcp.ngroups * jcp.ic
-                : (jcp.ver == ver_4fma || jcp.is_1stconv ? 1 : w_shift_st);
-        ptrdiff_t ic_shift = jcp.ver == ver_4fma
-                ? jcp.tr_iw
-                : (jcp.is_1stconv && !is_nxc_layout
-                                ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
-                                : 1);
-#else
         ptrdiff_t w_shift = is_nxc_layout
                 ? jcp.ngroups * jcp.ic
                 : (jcp.is_1stconv ? 1 : w_shift_st);
         ptrdiff_t ic_shift = (jcp.is_1stconv && !is_nxc_layout
                                 ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
                                 : 1);
-#endif
 
         ptrdiff_t local_input_offset = i_iw * w_shift + i_ic * ic_shift;
         return input_offset + typesize * local_input_offset;
