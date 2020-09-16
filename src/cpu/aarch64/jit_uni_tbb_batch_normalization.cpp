@@ -80,7 +80,6 @@ struct jit_bnorm_process_tail_t {
 
         Reg32 regw_tmp = reg_tmp_.cvt32();
         h->mov(regw_tmp, mask);
-        // The kmovw instrucion here can be translated correctly by translator
         h->kmovw(ktail_mask_, regw_tmp);
     }
 
@@ -768,8 +767,7 @@ struct jit_bnorm_fwd_t : jit_generator {
         jit_tail_.prepare_tail();
 
         Label normal_store, end_store;
-        CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_ptr_dst.getIdx()), vlen - 1);
-        CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_ptr_dst.getIdx()), 0);
+        test(reg_ptr_dst, vlen - 1);
         jnz(normal_store, T_NEAR);
         compute(!is_bf16);
         jmp(end_store, T_NEAR);
@@ -1012,8 +1010,7 @@ struct jit_bnorm_bwd_t : public jit_generator {
         jit_tail_.prepare_tail();
 
         Label normal_store, end_store;
-        CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_ptr_diff_src.getIdx()), vlen - 1);
-        CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_ptr_diff_src.getIdx()), 0);
+        test(reg_ptr_diff_src, vlen - 1);
         jnz(normal_store, T_NEAR);
         compute(!is_bf16);
         jmp(end_store, T_NEAR);
