@@ -985,27 +985,6 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
 
     const int full_simd_w = cpu_isa_traits<sve>::vlen / typesize;
     jcp.simd_w = full_simd_w;
-#if 1
-//[info]v1.6にて変更。内容不明なので取り敢えずコメント化
-    bool ok_to_try_lower_sve = true
-            && IMPLICATION(is_data_layout_nxc,
-                    jcp.oc < full_simd_w && jcp.ic < full_simd_w
-                            && jcp.ngroups > 1)
-            && mayiuse(sve) && src_d.data_type() == data_type::f32
-            && !jcp.is_1stconv && !ok_to_pad_channels
-            && (jcp.ic % jcp.simd_w != 0 || jcp.oc % jcp.simd_w != 0);
-
-    if (ok_to_try_lower_sve) {
-        for (auto simd : {8, 4}) {
-            if (jcp.ic % simd == 0 && jcp.oc % simd == 0) {
-                jcp.simd_w = simd;
-                break;
-            }
-        }
-    }
-    if (jcp.simd_w != 16) return status::unimplemented;
-#endif
-
     jcp.oc_block = jcp.simd_w;
     jcp.ic_block = jcp.is_1stconv ? jcp.ic : jcp.simd_w;
 
@@ -1294,7 +1273,7 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
         {
             jcp.kernel_kind = expl_bcast;
             jcp.nb_ic_blocking = 1;
-            if (IMPLICATION(jcp.is_1stconv, jcp.mb > 1)
+            if (IMPLICATION(jcp.is_1stconv, jcp.mb >= 1)
                     || expl_bcast_condition) {
                 float best_thr_eff = 0.f;
                 int best_nb_oc_blocking = 1;
@@ -1315,8 +1294,8 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
                     }
                 }
                 jcp.nb_oc_blocking = best_nb_oc_blocking;
+                jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
             }
-            jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
         }
     }
 
