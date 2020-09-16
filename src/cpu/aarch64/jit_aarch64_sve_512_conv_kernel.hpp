@@ -42,7 +42,6 @@
 //[info]取り敢えずコメント化。
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-#if 1
 //[info]v0.21変更をそのまま追加
 #define PRFWMAX    31
 #define LDRMAX    255
@@ -52,7 +51,6 @@
 #define MOVMAX  65535
 /* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
 #define VL_OFS(ofs) ((ofs)>>6)
-#endif
 
 namespace dnnl {
 namespace impl {
@@ -89,7 +87,6 @@ private:
         ker_reg_base_idx = 28,
     };
 
-#if 1
 //[info]v0.21のcodeを少し修正
     const xa::PReg reg_p_all_ones  = p2;
 
@@ -126,10 +123,6 @@ private:
     reg64_t reg_tail = aux_reg_ker;
     reg64_t reg_load_work = reg_tail;
 
-#if 0
-//[info]v1.6での追加コード。変更必要？
-    Xbyak::Opmask k_oc_tail_mask = Xbyak::Opmask(2);
-#endif
 
     /* Temporary registers for ARM insts */
     reg64_t reg_tmp_addr        = x14;
@@ -139,14 +132,12 @@ private:
 
     reg64_t reg_out_org         = x18;
     reg64_t reg_oi_org          = x19;
-#if 1
 //[info]レジスタの割り当ては適当
     reg64_t aux_reg_ker_d_org   = x20;
     reg64_t reg_inp_org         = x23;
     reg64_t reg_ker_org         = x22;
 
     reg64_t reg_tmp = x5;
-#endif
 
     void prefetch(const std::string prfop, int level, reg64_t in, long long int ofs) {
         bool for_load;
@@ -192,7 +183,6 @@ private:
             }
         }
     }
-#endif
 
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
 
