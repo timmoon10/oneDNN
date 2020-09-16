@@ -911,7 +911,6 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     const memory_desc_wrapper dst_d(&dst_md);
     const memory_desc_wrapper bias_d(&bias_md);
 
-    const int unroll_4fma = 4;
     const int regs = 28;
     const bool with_groups = weights_d.ndims() == src_d.ndims() + 1;
     int ndims = src_d.ndims();
@@ -1067,18 +1066,8 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
              *  `l_pad > 0 || r_pad > 0`; when `kw > 1`
              * from incorrect 'get_ow_start' and 'get_ow_end' calculation, so
              * disable for now. */
-            bool not_for_4fma = jcp.l_pad > 0 // needed in case jcp.r_pad < 0
-                    || (rnd_up(jcp.kw, unroll_4fma)
-                                    + (jcp.ow - 1) * jcp.stride_w
-                            > jcp.iw);
-            bool is_dilated
-                    = !everyone_is(0, jcp.dilate_d, jcp.dilate_h, jcp.dilate_w);
-            if (one_of(true, not_for_4fma, is_dilated)) jcp.ver = ver_fma;
-            wei_tag = with_groups
-                    ? ((jcp.simd_w == 4) ? pick(
-                               ndims - 3, gOwi4o, gOhwi4o, gOdhwi4o)
-                                         : pick(ndims - 3, gOwi16o,
-                                                 gOhwi16o, gOdhwi16o))
+            wei_tag = with_groups ?
+                    pick(ndims - 3, gOwi16o, gOhwi16o, gOdhwi16o)
                     : pick(ndims - 3, Owi16o, Ohwi16o, Odhwi16o);
         }
     } else {
@@ -1140,57 +1129,10 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
         return thr_eff;
     };
 
-#if 0
-    auto is_ow_threading_applicable = [=]() {
-        return (true && !jcp.is_1stconv && one_of(jcp.ndims, 3, 4)
-                 && IMPLICATION(mayiuse(avx512_mic),
-                 jcp.ver == ver_4fma && IMPLICATION(jcp.mb != 1, jcp.ih == 1 && jcp.kh == 1)));
-    };
-#else
-    auto is_ow_threading_applicable = [=]() {
-        return (false);
-    };
-#endif
-
     auto get_ow_block = [=](int nb_oc_blocking, int ur_w, float &eff) {
         int res_ow_block = jcp.ow;
         eff = get_thr_eff(nb_oc_blocking, res_ow_block);
-        if (!is_ow_threading_applicable()) return res_ow_block;
 
-        int L2_part = (platform::get_per_core_cache_size(2) * 7 / 8) / typesize;
-//        if (jcp.ver == ver_4fma) L2_part /= 2;
-        int size_src_chunk = jcp.ic_block * ur_w * jcp.kh;
-        int size_dst_chunk = jcp.oc_block * nb_oc_blocking * ur_w;
-        int size_wei_chunk = jcp.oc_block * nb_oc_blocking * jcp.ic_block
-                * jcp.kw * jcp.kh;
-        int nurw_cache = (L2_part - 2 * size_wei_chunk)
-                / (2 * size_dst_chunk + 2 * size_src_chunk);
-        // current design of generate() requires ow_block >= 2 * ur_w
-        int ow_block_cache = ur_w * nstl::max(2, nurw_cache);
-
-        int ow_block_thr = ow_block_cache;
-        eff = get_thr_eff(nb_oc_blocking, ow_block_thr);
-
-        int max_nb_ow = div_up(jcp.ow, 2 * ur_w);
-        int start_nb_ow = div_up(jcp.ow, ow_block_thr);
-        for (int nb_ow = start_nb_ow; nb_ow <= max_nb_ow; nb_ow++) {
-            int ow_block
-                    = nstl::min(rnd_up(div_up(jcp.ow, nb_ow), ur_w), jcp.ow);
-            float eff_threshold = 0.9f;
-            if (ow_block < nb_oc_blocking * jcp.oc_block && eff > eff_threshold)
-                break;
-            if (div_up(jcp.ow, ow_block) != nb_ow) continue;
-            float thr_eff = get_thr_eff(nb_oc_blocking, ow_block);
-            float eff_step = 1.f;
-            if (ow_block >= 2 * ur_w && thr_eff > eff_step * eff) {
-                ow_block_thr = ow_block;
-                eff = thr_eff;
-            }
-            eff_threshold = 0.98f;
-            if (eff > eff_threshold) break;
-        }
-        res_ow_block = nstl::min(jcp.ow, nstl::max(2 * ur_w, ow_block_thr));
-        eff = get_thr_eff(nb_oc_blocking, res_ow_block);
         return res_ow_block;
     };
 
@@ -1247,29 +1189,6 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
         }
 
         const int max_nb_oc = 5;
-#if 0
-        unsigned int ker_inp_size = typesize * div_up(jcp.iw, jcp.stride_w)
-                * jcp.ic_block * jcp.kh * jcp.kd;
-        unsigned int ker_out_size
-                = typesize * jcp.ow * jcp.oc_block * try_nb_oc_blocking;
-        unsigned int ker_wei_size = typesize * jcp.kh * jcp.kw * jcp.ic_block
-                * jcp.oc_block * try_nb_oc_blocking * jcp.kd;
-        unsigned int ker_total_size
-                = ker_inp_size + ker_out_size + ker_wei_size;
-
-        if (embd_bcast_condition) {
-            jcp.kernel_kind = embd_bcast;
-            jcp.ur_w = nstl::min(jcp.ow, regs);
-            jcp.nb_ic_blocking = jcp.nb_oc_blocking = 1;
-            if (ker_total_size < L1_cache_size && jcp.ow <= 8 && jcp.kh <= 3
-                    && jcp.kw <= 3 && jcp.nb_oc % try_nb_oc_blocking == 0
-                    && IMPLICATION(jcp.is_1stconv, jcp.mb == 1)
-                    && IMPLICATION(jcp.mb == 1, jcp.ur_w < jcp.ow)) {
-                jcp.nb_oc_blocking = try_nb_oc_blocking;
-                jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
-            }
-        } else {
-#endif
         {
             jcp.kernel_kind = expl_bcast;
             jcp.nb_ic_blocking = 1;
