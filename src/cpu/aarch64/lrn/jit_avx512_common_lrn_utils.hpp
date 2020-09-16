@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_COMMON_UTILS_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_COMMON_UTILS_HPP
+#ifndef CPU_AARCH64_LRN_JIT_AVX512_COMMON_UTILS_HPP
+#define CPU_AARCH64_LRN_JIT_AVX512_COMMON_UTILS_HPP
 
 namespace dnnl {
 namespace impl {

@@ -15,7 +15,7 @@
 *******************************************************************************/
 
 #include <numeric>
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_bwd_base.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_bwd_base.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -28,13 +28,13 @@ static constexpr int acc_bf_16_size = sizeof(acc_data_bf16_t);
 
 template <data_type_t d_type>
 const int32_t
-        jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::jit_args_bwd_t::mask[48]
+        jit_avx512_common_lrn_kernel_bwd_t<d_type>::jit_args_bwd_t::mask[48]
         = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 17, 18, 19, 20,
                 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::jit_args_bwd_t::jit_args_bwd_t()
+jit_avx512_common_lrn_kernel_bwd_t<d_type>::jit_args_bwd_t::jit_args_bwd_t()
     : src(nullptr)
     , diff_dst(nullptr)
     , ws0(nullptr)
@@ -43,13 +43,13 @@ jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::jit_args_bwd_t::jit_args_bw
     , mask_ptr(&mask[16]) {}
 
 template <>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<f32>::load_data(
+void jit_avx512_common_lrn_kernel_bwd_t<f32>::load_data(
         Xmm reg, const Address p, bool from_stack) {
     this->vmovups(reg, p);
 }
 
 template <>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>::load_data(
+void jit_avx512_common_lrn_kernel_bwd_t<bf16>::load_data(
         Xmm reg, const Address p, bool from_stack) {
     if (!from_stack) {
         this->vpmovzxwd(reg, p);
@@ -59,7 +59,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>::load_data(
 }
 
 template <>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>::store_data(
+void jit_avx512_common_lrn_kernel_bwd_t<bf16>::store_data(
         bool nt, const Address addr, Zmm zr) {
     const Ymm yr = Ymm(zr.getIdx());
     if (mayiuse(avx512_core_bf16))
@@ -70,7 +70,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>::store_data(
 }
 
 template <>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<f32>::store_data(
+void jit_avx512_common_lrn_kernel_bwd_t<f32>::store_data(
         bool non_temp_hint, const Address addr, Zmm zr) {
     if (non_temp_hint)
         uni_vmovntps(addr, zr);
@@ -79,7 +79,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<f32>::store_data(
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::load_tail(int tail_value,
+void jit_avx512_common_lrn_kernel_bwd_t<d_type>::load_tail(int tail_value,
         Reg64 src, int src_mem_offset, int dst_stack_offset,
         int tmp_load_to_stack_idx_tail) {
 
@@ -119,7 +119,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::load_tail(int tail_val
 }
 
 template <>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<f32>::store_tail(int tail_value,
+void jit_avx512_common_lrn_kernel_bwd_t<f32>::store_tail(int tail_value,
         Zmm src, Reg64 dst, int dst_mem_offset, int tmp_stack_offset,
         int tmp_idx) {
 
@@ -147,7 +147,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<f32>::store_tail(int tail_value
 }
 
 template <>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>::store_tail(int tail_value,
+void jit_avx512_common_lrn_kernel_bwd_t<bf16>::store_tail(int tail_value,
         Zmm src, Reg64 dst, int dst_mem_offset, int tmp_stack_offset,
         int tmp_idx) {
 
@@ -169,7 +169,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>::store_tail(int tail_valu
 }
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::jit_aarch64_sve_512_common_lrn_kernel_bwd_t(
+jit_avx512_common_lrn_kernel_bwd_t<d_type>::jit_avx512_common_lrn_kernel_bwd_t(
         float alpha, float beta, int local_size, void *code_ptr,
         size_t code_size)
     : jit_generator(code_ptr, code_size)
@@ -202,22 +202,22 @@ jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::jit_aarch64_sve_512_common_
 }
 
 template <data_type_t d_type>
-Zmm jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::zreg(int irb, int i) const {
+Zmm jit_avx512_common_lrn_kernel_bwd_t<d_type>::zreg(int irb, int i) const {
     return Zmm(irb * regs_used_per_block_ + i);
 }
 
 template <data_type_t d_type>
-Ymm jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::yreg(int irb, int i) const {
+Ymm jit_avx512_common_lrn_kernel_bwd_t<d_type>::yreg(int irb, int i) const {
     return Ymm(irb * regs_used_per_block_ + i);
 }
 
 template <data_type_t d_type>
-Xmm jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>::xreg(int irb, int i) const {
+Xmm jit_avx512_common_lrn_kernel_bwd_t<d_type>::xreg(int irb, int i) const {
     return Xmm(irb * regs_used_per_block_ + i);
 }
 
-template class jit_aarch64_sve_512_common_lrn_kernel_bwd_t<f32>;
-template class jit_aarch64_sve_512_common_lrn_kernel_bwd_t<bf16>;
+template class jit_avx512_common_lrn_kernel_bwd_t<f32>;
+template class jit_avx512_common_lrn_kernel_bwd_t<bf16>;
 
 } // namespace lrn
 } // namespace aarch64

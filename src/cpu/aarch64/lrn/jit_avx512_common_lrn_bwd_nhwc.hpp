@@ -14,11 +14,11 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_BWD_NHWC_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_BWD_NHWC_HPP
+#ifndef CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_BWD_NHWC_HPP
+#define CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_BWD_NHWC_HPP
 
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_bwd_base.hpp"
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_utils.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_bwd_base.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_utils.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -33,14 +33,14 @@ using namespace Xbyak;
 using namespace Xbyak::util;
 
 template <data_type_t d_type>
-class jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t
-    : public jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type> {
+class jit_avx512_common_lrn_kernel_bwd_nhwc_t
+    : public jit_avx512_common_lrn_kernel_bwd_t<d_type> {
 public:
-    jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t(unsigned C, float alpha, float beta,
+    jit_avx512_common_lrn_kernel_bwd_nhwc_t(unsigned C, float alpha, float beta,
             int local_size, void *code_ptr = nullptr,
             size_t code_size = 1 * Xbyak::DEFAULT_MAX_CODE_SIZE);
 
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t)
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_common_lrn_kernel_bwd_nhwc_t)
 
 private:
     void set_up_ker_params();

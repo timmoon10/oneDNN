@@ -23,6 +23,10 @@ option(DNNL_NATIVE_JIT_AARCH64 "enables native JIT for AArch64." ON)
 file(GLOB SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/*.[ch]
     ${CMAKE_CURRENT_SOURCE_DIR}/*.[ch]pp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lrn/*.[ch]
+    ${CMAKE_CURRENT_SOURCE_DIR}/lrn/*.[ch]pp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rrn/*.[ch]
+    ${CMAKE_CURRENT_SOURCE_DIR}/rrn/*.[ch]pp
     )
 
 if(NOT DNNL_ENABLE_JIT_PROFILING)

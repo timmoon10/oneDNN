@@ -19,7 +19,7 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn.hpp"
 #include "cpu/aarch64/lrn/lrn_executor_factory.hpp"
 
 namespace dnnl {
@@ -34,7 +34,7 @@ using namespace dnnl::impl::utils;
 using namespace data_type;
 
 template <data_type_t d_type>
-status_t jit_aarch64_sve_512_common_lrn_fwd_t<d_type>::pd_t::init(engine_t *engine) {
+status_t jit_avx512_common_lrn_fwd_t<d_type>::pd_t::init(engine_t *engine) {
     using namespace prop_kind;
     using namespace alg_kind;
 
@@ -66,21 +66,21 @@ status_t jit_aarch64_sve_512_common_lrn_fwd_t<d_type>::pd_t::init(engine_t *engi
 }
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_fwd_t<d_type>::jit_aarch64_sve_512_common_lrn_fwd_t(
+jit_avx512_common_lrn_fwd_t<d_type>::jit_avx512_common_lrn_fwd_t(
         const pd_t *apd)
     : primitive_t(apd)
     , lrn_executor_(lrn::lrn_executor_factory_t::create_executor<d_type,
-              typename jit_aarch64_sve_512_common_lrn_fwd_t<d_type>::pd_t>(
+              typename jit_avx512_common_lrn_fwd_t<d_type>::pd_t>(
               pd(), lrn::direction::forward)) {}
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_fwd_t<d_type>::~jit_aarch64_sve_512_common_lrn_fwd_t() = default;
+jit_avx512_common_lrn_fwd_t<d_type>::~jit_avx512_common_lrn_fwd_t() = default;
 
-template struct jit_aarch64_sve_512_common_lrn_fwd_t<f32>;
-template struct jit_aarch64_sve_512_common_lrn_fwd_t<bf16>;
+template struct jit_avx512_common_lrn_fwd_t<f32>;
+template struct jit_avx512_common_lrn_fwd_t<bf16>;
 
 template <data_type_t d_type>
-status_t jit_aarch64_sve_512_common_lrn_bwd_t<d_type>::pd_t::init(engine_t *engine) {
+status_t jit_avx512_common_lrn_bwd_t<d_type>::pd_t::init(engine_t *engine) {
     using namespace alg_kind;
 
     const memory_desc_wrapper data_d(src_md());
@@ -108,18 +108,18 @@ status_t jit_aarch64_sve_512_common_lrn_bwd_t<d_type>::pd_t::init(engine_t *engi
 }
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_bwd_t<d_type>::jit_aarch64_sve_512_common_lrn_bwd_t(
+jit_avx512_common_lrn_bwd_t<d_type>::jit_avx512_common_lrn_bwd_t(
         const pd_t *apd)
     : primitive_t(apd)
     , lrn_executor_(lrn::lrn_executor_factory_t::create_executor<d_type,
-              typename jit_aarch64_sve_512_common_lrn_bwd_t<d_type>::pd_t>(
+              typename jit_avx512_common_lrn_bwd_t<d_type>::pd_t>(
               pd(), lrn::direction::backward)) {}
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_bwd_t<d_type>::~jit_aarch64_sve_512_common_lrn_bwd_t() = default;
+jit_avx512_common_lrn_bwd_t<d_type>::~jit_avx512_common_lrn_bwd_t() = default;
 
-template struct jit_aarch64_sve_512_common_lrn_bwd_t<f32>;
-template struct jit_aarch64_sve_512_common_lrn_bwd_t<bf16>;
+template struct jit_avx512_common_lrn_bwd_t<f32>;
+template struct jit_avx512_common_lrn_bwd_t<bf16>;
 
 } // namespace aarch64
 } // namespace cpu

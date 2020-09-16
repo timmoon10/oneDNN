@@ -15,7 +15,7 @@
 *******************************************************************************/
 
 #include <numeric>
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_bwd_nhwc.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_bwd_nhwc.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -26,11 +26,11 @@ namespace lrn {
 using acc_data_t = float;
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<
-        d_type>::jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t(unsigned C,
+jit_avx512_common_lrn_kernel_bwd_nhwc_t<
+        d_type>::jit_avx512_common_lrn_kernel_bwd_nhwc_t(unsigned C,
         float alpha, float beta, int local_size, void *code_ptr,
         size_t code_size)
-    : jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>(
+    : jit_avx512_common_lrn_kernel_bwd_t<d_type>(
             alpha, beta, local_size, code_ptr, code_size)
     , tmp_mask_prev_ {[this]() {
         std::vector<int> v(this->local_size_ / 2);
@@ -62,7 +62,7 @@ jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::reserve_stack_space(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::reserve_stack_space(
         std::size_t space) {
     const unsigned maxCounter = (space / zmm_size_) - 1;
     this->sub(rsp, space);
@@ -72,13 +72,13 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::reserve_stack_spa
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::unreserve_stack_space(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::unreserve_stack_space(
         std::size_t space) {
     this->add(rsp, space);
 }
 
 template <data_type_t d_type>
-int jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::get_stack_offset(
+int jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::get_stack_offset(
         const Reg64 reg, tail_mode tail_proc) {
 
     int stack_postion = 0;
@@ -96,7 +96,7 @@ int jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::get_stack_offset(
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::load_data_to_stack(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::load_data_to_stack(
         unsigned C_tail, across_version version, tail_mode tail_proc) {
 
     if (version != across_version::Single) {
@@ -135,9 +135,9 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::load_data_to_stac
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::set_up_ker_params() {
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::set_up_ker_params() {
 #define GET_OFF(field) \
-    offsetof(typename jit_aarch64_sve_512_common_lrn_kernel_bwd_t< \
+    offsetof(typename jit_avx512_common_lrn_kernel_bwd_t< \
                      d_type>::jit_args_bwd_t, \
             field)
     this->mov(this->src_, ptr[this->param_ + GET_OFF(src)]);
@@ -155,7 +155,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::set_up_ker_params
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::execute_compute_loop(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::execute_compute_loop(
         unsigned num_full_16c_blocks, unsigned C_tail) {
 
     if ((num_full_16c_blocks == 1u && !C_tail)
@@ -218,7 +218,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::execute_compute_l
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::compute_loop(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::compute_loop(
         across_version version, tail_mode tail_proc, unsigned C_tail,
         int loop_size_param) {
 
@@ -230,7 +230,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::compute_loop(
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::compute(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::compute(
         int loop_size, tail_mode tail_proc) {
 
     IRB_LOOP(this->vaddps(this->zreg(irb, this->zdiffsrc_),
@@ -277,7 +277,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::compute(
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::increment_loop_params(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::increment_loop_params(
         std::size_t offset) {
     this->add(this->src_, offset);
     this->add(this->diffsrc_, offset);
@@ -287,7 +287,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::increment_loop_pa
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::load_compute_data(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::load_compute_data(
         across_version version, tail_mode tail_proc, int loop_size_param) {
 
     const int loop_size = loop_size_param;
@@ -402,7 +402,7 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::load_compute_data
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::store_compute_data(
+void jit_avx512_common_lrn_kernel_bwd_nhwc_t<d_type>::store_compute_data(
         int loop_size_param, tail_mode tail_proc, unsigned C_tail) {
     const int loop_size = loop_size_param;
 
@@ -427,8 +427,8 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<d_type>::store_compute_dat
     }
 }
 
-template class jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<f32>;
-template class jit_aarch64_sve_512_common_lrn_kernel_bwd_nhwc_t<bf16>;
+template class jit_avx512_common_lrn_kernel_bwd_nhwc_t<f32>;
+template class jit_avx512_common_lrn_kernel_bwd_nhwc_t<bf16>;
 
 } // namespace lrn
 } // namespace aarch64

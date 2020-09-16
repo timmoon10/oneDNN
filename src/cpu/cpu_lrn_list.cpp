@@ -22,6 +22,10 @@
 #include "cpu/x64/lrn/jit_avx512_common_lrn.hpp"
 #include "cpu/x64/lrn/jit_uni_lrn.hpp"
 using namespace dnnl::impl::cpu::x64;
+#elif DNNL_AARCH64
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn.hpp"
+#include "cpu/aarch64/lrn/jit_uni_lrn.hpp"
+using namespace dnnl::impl::cpu::aarch64;
 #endif
 
 namespace dnnl {
@@ -46,6 +50,17 @@ static const pd_create_f impl_list[] = {
         CPU_INSTANCE_X64(jit_uni_lrn_fwd_t<avx2, f32>)
         CPU_INSTANCE_X64(jit_uni_lrn_bwd_t<avx2, f32>)
         CPU_INSTANCE_X64(jit_uni_lrn_fwd_t<sse41, f32>)
+        CPU_INSTANCE_AARCH64(jit_avx512_common_lrn_fwd_t<f32>)
+        CPU_INSTANCE_AARCH64(jit_avx512_common_lrn_bwd_t<f32>)
+        CPU_INSTANCE_AARCH64(jit_avx512_common_lrn_fwd_t<bf16>)
+        CPU_INSTANCE_AARCH64(jit_avx512_common_lrn_bwd_t<bf16>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_fwd_t<avx512_common, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_bwd_t<avx512_common, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_fwd_t<avx512_common, bf16>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_bwd_t<avx512_common, bf16>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_fwd_t<avx2, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_bwd_t<avx2, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_lrn_fwd_t<sse41, f32>)
         CPU_INSTANCE(ref_lrn_fwd_t<f32>)
         CPU_INSTANCE(ref_lrn_bwd_t<f32>)
         CPU_INSTANCE(ref_lrn_fwd_t<bf16>)

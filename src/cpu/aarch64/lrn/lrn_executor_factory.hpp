@@ -14,15 +14,15 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_LRN_EXECUTOR_FACTORY_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_LRN_EXECUTOR_FACTORY_HPP
+#ifndef CPU_AARCH64_LRN_LRN_EXECUTOR_FACTORY_HPP
+#define CPU_AARCH64_LRN_LRN_EXECUTOR_FACTORY_HPP
 
 #include <memory>
 #include "common/c_types_map.hpp"
 #include "common/utils.hpp"
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_utils.hpp"
-#include "cpu/aarch64/lrn/lrn_aarch64_sve_512_blocked_executor.hpp"
-#include "cpu/aarch64/lrn/lrn_aarch64_sve_512_nhwc_executor.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_utils.hpp"
+#include "cpu/aarch64/lrn/lrn_avx512_blocked_executor.hpp"
+#include "cpu/aarch64/lrn/lrn_avx512_nhwc_executor.hpp"
 #include "cpu/aarch64/lrn/lrn_executor.hpp"
 
 namespace dnnl {
@@ -39,32 +39,32 @@ public:
         const memory_desc_wrapper data_d(pd->src_md());
 
         if (data_d.matches_tag(format_tag::nChw16c))
-            return create_jit_aarch54_sve_512_blocked_executor<d_type, PD_T>(pd, dir);
+            return create_jit_avx512_blocked_executor<d_type, PD_T>(pd, dir);
 
-        return create_jit_aarch64_sve_512_nhwc_executor<d_type, PD_T>(pd, dir);
+        return create_jit_avx512_nhwc_executor<d_type, PD_T>(pd, dir);
     }
 
 private:
     template <::dnnl::impl::data_type_t d_type, typename PD_T>
-    static std::unique_ptr<i_lrn_executor_t> create_jit_aarch64_sve_512_nhwc_executor(
+    static std::unique_ptr<i_lrn_executor_t> create_jit_avx512_nhwc_executor(
             const PD_T *pd, direction dir) {
 
         if (dir == direction::forward)
             return utils::make_unique<
-                    lrn_aarch64_sve_512_nhwc_executor_fwd_t<d_type, PD_T>>(pd);
-        return utils::make_unique<lrn_aarch64_sve_512_nhwc_executor_bwd_t<d_type, PD_T>>(
+                    lrn_avx512_nhwc_executor_fwd_t<d_type, PD_T>>(pd);
+        return utils::make_unique<lrn_avx512_nhwc_executor_bwd_t<d_type, PD_T>>(
                 pd);
     }
 
     template <::dnnl::impl::data_type_t d_type, typename PD_T>
-    static std::unique_ptr<i_lrn_executor_t> create_jit_aarch54_sve_512_blocked_executor(
+    static std::unique_ptr<i_lrn_executor_t> create_jit_avx512_blocked_executor(
             const PD_T *pd, direction dir) {
 
         if (dir == direction::forward)
             return utils::make_unique<
-                    lrn_aarch64_sve_512_blocked_executor_fwd_t<d_type, PD_T>>(pd);
+                    lrn_avx512_blocked_executor_fwd_t<d_type, PD_T>>(pd);
         return utils::make_unique<
-                lrn_aarch64_sve_512_blocked_executor_bwd_t<d_type, PD_T>>(pd);
+                lrn_avx512_blocked_executor_bwd_t<d_type, PD_T>>(pd);
     }
 };
 

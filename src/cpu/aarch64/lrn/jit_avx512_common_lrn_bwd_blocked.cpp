@@ -13,7 +13,7 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 *******************************************************************************/
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_bwd_blocked.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_bwd_blocked.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -24,12 +24,12 @@ namespace lrn {
 using acc_data_t = float;
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t<d_type>::
-        jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t(
+jit_avx512_common_lrn_kernel_bwd_blocked_t<d_type>::
+        jit_avx512_common_lrn_kernel_bwd_blocked_t(
                 const struct nChw16c_across_t &J, float alpha, float beta,
                 int local_size, int use_h_parallel, void *code_ptr,
                 size_t code_size)
-    : jit_aarch64_sve_512_common_lrn_kernel_bwd_t<d_type>(
+    : jit_avx512_common_lrn_kernel_bwd_t<d_type>(
             alpha, beta, local_size, code_ptr, code_size)
     , xmm_size_ {4 * sizeof(acc_data_t)}
     , zmm_size_ {64}
@@ -111,7 +111,7 @@ jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t<d_type>::
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t<d_type>::compute_loop(
+void jit_avx512_common_lrn_kernel_bwd_blocked_t<d_type>::compute_loop(
         int loop_size_param, int prefetchL1, int prefetchL2) {
     // loop_size - this->param_ for IRB_LOOP macro
     int loop_size = loop_size_param;
@@ -267,8 +267,8 @@ void jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t<d_type>::compute_loop(
     this->L(end_store);
 }
 
-template class jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t<f32>;
-template class jit_aarch64_sve_512_common_lrn_kernel_bwd_blocked_t<bf16>;
+template class jit_avx512_common_lrn_kernel_bwd_blocked_t<f32>;
+template class jit_avx512_common_lrn_kernel_bwd_blocked_t<bf16>;
 
 } // namespace lrn
 } // namespace aarch64

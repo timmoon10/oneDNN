@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_LRN_EXECUTOR_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_LRN_EXECUTOR_HPP
+#ifndef CPU_AARCH64_LRN_LRN_EXECUTOR_HPP
+#define CPU_AARCH64_LRN_LRN_EXECUTOR_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/primitive.hpp"

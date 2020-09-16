@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_HPP
+#ifndef CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_HPP
+#define CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_HPP
 
 #include <memory>
 #include "common/c_types_map.hpp"
@@ -31,7 +31,7 @@ namespace impl {
 namespace cpu {
 namespace aarch64 {
 template <data_type_t d_type>
-struct jit_aarch64_sve_512_common_lrn_fwd_t : public primitive_t {
+struct jit_avx512_common_lrn_fwd_t : public primitive_t {
     struct pd_t : public cpu_lrn_fwd_pd_t {
         using cpu_lrn_fwd_pd_t::cpu_lrn_fwd_pd_t;
 
@@ -42,13 +42,13 @@ struct jit_aarch64_sve_512_common_lrn_fwd_t : public primitive_t {
                                         : bf16_emulation_t::get_isa())
                                                     : avx512_common,
                         ""),
-        jit_aarch64_sve_512_common_lrn_fwd_t);
+                jit_avx512_common_lrn_fwd_t);
 
         status_t init(engine_t *engine);
     };
 
-    jit_aarch64_sve_512_common_lrn_fwd_t(const pd_t *apd);
-    ~jit_aarch64_sve_512_common_lrn_fwd_t();
+    jit_avx512_common_lrn_fwd_t(const pd_t *apd);
+    ~jit_avx512_common_lrn_fwd_t();
 
     using data_t = typename prec_traits<d_type>::type;
 
@@ -62,7 +62,7 @@ private:
 };
 
 template <data_type_t d_type>
-struct jit_aarch64_sve_512_common_lrn_bwd_t : public primitive_t {
+struct jit_avx512_common_lrn_bwd_t : public primitive_t {
     struct pd_t : public cpu_lrn_bwd_pd_t {
         using cpu_lrn_bwd_pd_t::cpu_lrn_bwd_pd_t;
 
@@ -73,13 +73,13 @@ struct jit_aarch64_sve_512_common_lrn_bwd_t : public primitive_t {
                                         : bf16_emulation_t::get_isa())
                                                     : avx512_common,
                         ""),
-                jit_aarch64_sve_512_common_lrn_bwd_t);
+                jit_avx512_common_lrn_bwd_t);
 
         status_t init(engine_t *engine);
     };
 
-    jit_aarch64_sve_512_common_lrn_bwd_t(const pd_t *apd);
-    ~jit_aarch64_sve_512_common_lrn_bwd_t();
+    jit_avx512_common_lrn_bwd_t(const pd_t *apd);
+    ~jit_avx512_common_lrn_bwd_t();
 
     using data_t = typename prec_traits<d_type>::type;
 

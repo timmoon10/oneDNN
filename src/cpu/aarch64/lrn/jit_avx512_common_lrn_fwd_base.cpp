@@ -15,12 +15,12 @@
 *******************************************************************************/
 
 #include <numeric>
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_fwd_base.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_fwd_base.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 namespace lrn {
 
 static constexpr int acc_size = sizeof(acc_data_t);
@@ -219,7 +219,7 @@ template class jit_avx512_common_lrn_kernel_fwd_t<f32>;
 template class jit_avx512_common_lrn_kernel_fwd_t<bf16>;
 
 } // namespace lrn
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

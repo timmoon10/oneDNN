@@ -14,11 +14,11 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_FWD_BLOCKED_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_FWD_BLOCKED_HPP
+#ifndef CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_FWD_BLOCKED_HPP
+#define CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_FWD_BLOCKED_HPP
 
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_fwd_base.hpp"
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_utils.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_fwd_base.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_utils.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -27,29 +27,29 @@ namespace aarch64 {
 namespace lrn {
 
 template <data_type_t d_type>
-class jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t
-    : public jit_aarch64_sve_512_common_lrn_kernel_fwd_t<d_type> {
+class jit_avx512_common_lrn_kernel_fwd_blocked_t
+    : public jit_avx512_common_lrn_kernel_fwd_t<d_type> {
 
 public:
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t)
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_common_lrn_kernel_fwd_blocked_t)
 
-    jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t(const struct nChw16c_across_t &J,
+    jit_avx512_common_lrn_kernel_fwd_blocked_t(const struct nChw16c_across_t &J,
             prop_kind_t prop_kind, int use_h_parallel, float alpha, float beta,
             float k, int local_size, void *code_ptr = nullptr,
             size_t code_size = 2 * Xbyak::DEFAULT_MAX_CODE_SIZE);
 
     void compute_loop(int loop_size_param);
     void (*ker)(
-            typename jit_aarch64_sve_512_common_lrn_kernel_fwd_t<d_type>::jit_args_fwd_t
+            typename jit_avx512_common_lrn_kernel_fwd_t<d_type>::jit_args_fwd_t
                     *);
     void operator()(
-            typename jit_aarch64_sve_512_common_lrn_kernel_fwd_t<d_type>::jit_args_fwd_t
+            typename jit_avx512_common_lrn_kernel_fwd_t<d_type>::jit_args_fwd_t
                     *arg) {
         ker(arg);
     }
 
 private:
-    using data_t = typename jit_aarch64_sve_512_common_lrn_kernel_fwd_t<d_type>::data_t;
+    using data_t = typename jit_avx512_common_lrn_kernel_fwd_t<d_type>::data_t;
 
     int xmm_size_, zmm_size_, buffer_block_, buffer_nest_offset_,
             src_prev_offset_, HW_, W_;

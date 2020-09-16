@@ -13,7 +13,7 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 *******************************************************************************/
-#include "cpu/aarch64/lrn/jit_aarch64_sve_512_common_lrn_fwd_blocked.hpp"
+#include "cpu/aarch64/lrn/jit_avx512_common_lrn_fwd_blocked.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -22,12 +22,12 @@ namespace aarch64 {
 namespace lrn {
 
 template <data_type_t d_type>
-jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<d_type>::
-        jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t(
+jit_avx512_common_lrn_kernel_fwd_blocked_t<d_type>::
+        jit_avx512_common_lrn_kernel_fwd_blocked_t(
                 const struct nChw16c_across_t &J, prop_kind_t prop_kind,
                 int use_h_parallel, float alpha, float beta, float k,
                 int local_size, void *code_ptr, size_t code_size)
-    : jit_aarch64_sve_512_common_lrn_kernel_fwd_t<d_type>(
+    : jit_avx512_common_lrn_kernel_fwd_t<d_type>(
             prop_kind, alpha, beta, k, local_size, code_ptr, code_size)
     , use_h_parallelism_(use_h_parallel) {
     // some registers needed for conversion from bf16 to f32
@@ -41,7 +41,7 @@ jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<d_type>::
     this->preamble();
 
 #define GET_OFF(field) \
-    offsetof(typename jit_aarch64_sve_512_common_lrn_kernel_fwd_t< \
+    offsetof(typename jit_avx512_common_lrn_kernel_fwd_t< \
                      d_type>::jit_args_fwd_t, \
             field)
     this->mov(this->src_, ptr[this->param_ + GET_OFF(src)]);
@@ -117,7 +117,7 @@ jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<d_type>::
 }
 
 template <data_type_t d_type>
-void jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<d_type>::compute_loop(
+void jit_avx512_common_lrn_kernel_fwd_blocked_t<d_type>::compute_loop(
         int loop_size_param) {
     // loop_size - param for IRB_LOOP macro
     int loop_size = loop_size_param;
@@ -268,8 +268,8 @@ void jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<d_type>::compute_loop(
     }
 }
 
-template class jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<f32>;
-template class jit_aarch64_sve_512_common_lrn_kernel_fwd_blocked_t<bf16>;
+template class jit_avx512_common_lrn_kernel_fwd_blocked_t<f32>;
+template class jit_avx512_common_lrn_kernel_fwd_blocked_t<bf16>;
 
 } // namespace lrn
 } // namespace aarch64

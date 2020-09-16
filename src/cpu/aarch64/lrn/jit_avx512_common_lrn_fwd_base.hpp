@@ -14,8 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
-#ifndef CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_FWD_BASE_HPP
-#define CPU_AARCH64_LRN_JIT_SVE_COMMON_LRN_FWD_BASE_HPP
+#ifndef CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_FWD_BASE_HPP
+#define CPU_AARCH64_LRN_JIT_AVX512_COMMON_LRN_FWD_BASE_HPP
 
 #include <functional>
 #include <memory>
@@ -39,9 +39,9 @@ using namespace Xbyak;
 using namespace Xbyak::util;
 
 template <data_type_t d_type>
-class jit_aarch64_sve_512_common_lrn_kernel_fwd_t : public jit_generator {
+class jit_avx512_common_lrn_kernel_fwd_t : public jit_generator {
 public:
-    jit_aarch64_sve_512_common_lrn_kernel_fwd_t(prop_kind_t prop_kind, float alpha,
+    jit_avx512_common_lrn_kernel_fwd_t(prop_kind_t prop_kind, float alpha,
             float beta, float k, int local_size, void *code_ptr,
             size_t code_size);
 
@@ -55,7 +55,7 @@ public:
         const int32_t *mask_ptr;
     };
 
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_common_lrn_kernel_fwd_t);
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_common_lrn_kernel_fwd_t);
     void (*ker)(jit_args_fwd_t *);
     void operator()(jit_args_fwd_t *arg) { ker(arg); }
 
