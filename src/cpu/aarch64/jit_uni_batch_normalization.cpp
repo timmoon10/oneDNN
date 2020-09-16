@@ -677,8 +677,7 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
-            CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), vlen - 1);
-            CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), 0);
+            test(reg_dst, vlen - 1);
             jnz(normal_store, T_NEAR);
             compute(true);
             jmp(end_store, T_NEAR);
@@ -992,8 +991,7 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
-                CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), vlen - 1);
-                CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_dst.getIdx()), 0);
+                test(reg_dst, vlen - 1);
                 jnz(normal_store, T_NEAR);
                 compute(true);
                 jmp(end_store, T_NEAR);
@@ -1351,8 +1349,7 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
-                CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), vlen - 1);
-                CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), 0);
+                test(reg_diff_src, vlen - 1);
                 jnz(normal_store, T_NEAR);
                 compute(true);
                 jmp(end_store, T_NEAR);
@@ -1457,8 +1454,7 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
-            CodeGeneratorAArch64::tst(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), vlen - 1);
-            CodeGeneratorAArch64::cmp(Xbyak::Xbyak_aarch64::XReg(reg_diff_src.getIdx()), 0);
+            test(reg_diff_src, vlen - 1);
             jnz(normal_store, T_NEAR);
             compute(true);
             jmp(end_store, T_NEAR);
