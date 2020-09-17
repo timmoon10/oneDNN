@@ -14,7 +14,6 @@
 * limitations under the License.
 *******************************************************************************/
 
-
 /*******************************************************************************
 * Copyright 2016-2020 Intel Corporation
 *
@@ -43,14 +42,14 @@
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
 //[info]v0.21変更をそのまま追加
-#define PRFWMAX    31
-#define LDRMAX    255
-#define LDRWMAX   252
-#define ADDMAX   4095
+#define PRFWMAX 31
+#define LDRMAX 255
+#define LDRWMAX 252
+#define ADDMAX 4095
 #define PRFMMAX 32760
-#define MOVMAX  65535
+#define MOVMAX 65535
 /* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
-#define VL_OFS(ofs) ((ofs)>>6)
+#define VL_OFS(ofs) ((ofs) >> 6)
 
 namespace dnnl {
 namespace impl {
@@ -87,59 +86,59 @@ private:
         ker_reg_base_idx = 28,
     };
 
-//[info]v0.21のcodeを少し修正
-    const xa::PReg reg_p_all_ones  = p2;
+    //[info]v0.21のcodeを少し修正
+    const xa::PReg reg_p_all_ones = p2;
 
-    reg64_t param               = abi_param1_aarch64;
-    reg64_t reg_inp             = x1;  
-    reg64_t reg_ker             = x2;  
-    reg64_t reg_out             = x3;  
-    reg64_t reg_inp_prf         = x20;   
-    reg64_t reg_ker_prf         = x5;  
-    reg64_t reg_owb             = x5;  
-    reg64_t reg_out_prf         = x6;  
+    reg64_t param = abi_param1_aarch64;
+    reg64_t reg_inp = x1;
+    reg64_t reg_ker = x2;
+    reg64_t reg_out = x3;
+    reg64_t reg_inp_prf = x20;
+    reg64_t reg_ker_prf = x5;
+    reg64_t reg_owb = x5;
+    reg64_t reg_out_prf = x6;
 
-    reg64_t aux_reg_inp         = x7;  
-    reg64_t aux_reg_ker         = x8;  
-    reg64_t aux_reg_inp_prf     = x9;  
-    reg64_t aux_reg_ker_prf     = x10; 
-    reg64_t reg_channel         = x9;
-    reg64_t reg_bias            = x10;
+    reg64_t aux_reg_inp = x7;
+    reg64_t aux_reg_ker = x8;
+    reg64_t aux_reg_inp_prf = x9;
+    reg64_t aux_reg_ker_prf = x10;
+    reg64_t reg_channel = x9;
+    reg64_t reg_bias = x10;
 
-    reg64_t aux_reg_ker_d       = x2;
-    reg64_t aux_reg_inp_d       = x11;
-    reg64_t aux_reg_inp_d_prf   = x6;
-    reg64_t aux_reg_ker_d_prf   = x12;
-    reg64_t reg_ki              = x3;
+    reg64_t aux_reg_ker_d = x2;
+    reg64_t aux_reg_inp_d = x11;
+    reg64_t aux_reg_inp_d_prf = x6;
+    reg64_t aux_reg_ker_d_prf = x12;
+    reg64_t reg_ki = x3;
 
-    reg64_t reg_kj              = x13; 
-    reg64_t reg_relu_ns         = x13; 
-    reg64_t reg_oi              = x11; 
-    reg64_t reg_kh              = x12; 
+    reg64_t reg_kj = x13;
+    reg64_t reg_relu_ns = x13;
+    reg64_t reg_oi = x11;
+    reg64_t reg_kh = x12;
 
-    reg64_t reg_long_offt       = x20;   
-    reg64_t reg_out_long_offt   = x7;  
+    reg64_t reg_long_offt = x20;
+    reg64_t reg_out_long_offt = x7;
 
     reg64_t reg_tail = aux_reg_ker;
     reg64_t reg_load_work = reg_tail;
 
-
     /* Temporary registers for ARM insts */
-    reg64_t reg_tmp_addr        = x14;
+    reg64_t reg_tmp_addr = x14;
     reg64_t reg_prev_bcast_addr = x15;
-    reg64_t reg_prev_wei_addr   = x16;
-    reg64_t reg_tmp_imm         = x17;
+    reg64_t reg_prev_wei_addr = x16;
+    reg64_t reg_tmp_imm = x17;
 
-    reg64_t reg_out_org         = x18;
-    reg64_t reg_oi_org          = x19;
-//[info]レジスタの割り当ては適当
-    reg64_t aux_reg_ker_d_org   = x20;
-    reg64_t reg_inp_org         = x23;
-    reg64_t reg_ker_org         = x22;
+    reg64_t reg_out_org = x18;
+    reg64_t reg_oi_org = x19;
+    //[info]レジスタの割り当ては適当
+    reg64_t aux_reg_ker_d_org = x20;
+    reg64_t reg_inp_org = x23;
+    reg64_t reg_ker_org = x22;
 
     reg64_t reg_tmp = x5;
 
-    void prefetch(const std::string prfop, int level, reg64_t in, long long int ofs) {
+    void prefetch(
+            const std::string prfop, int level, reg64_t in, long long int ofs) {
         bool for_load;
         if (prfop == "LD") {
             for_load = true;
@@ -149,35 +148,51 @@ private:
             assert(!"invalid prfop");
         }
 
-        bool cacheline_alinged = ((ofs&0xFF)==0) ? true : false;
+        bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
             xa::Prfop op = xa::PLDL1KEEP;
             switch (level) {
-            case 1: op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP; break;
-            case 2: op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP; break;
-            case 3: op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP; break;
-            default: assert(!"invalid prfop"); break;
+                case 1:
+                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    break;
+                case 2:
+                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    break;
+                case 3:
+                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    break;
+                default: assert(!"invalid prfop"); break;
             }
 
-            if((ofs <= PRFMMAX) && (ofs >= 0)) {
+            if ((ofs <= PRFMMAX) && (ofs >= 0)) {
                 CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
-            }else{
+            } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfm(op, xa::ptr(reg_tmp_addr));
             }
         } else {
             xa::PrfopSve op_sve = xa::PLDL1KEEP_SVE;
             switch (level) {
-            case 1: op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE : xa::PSTL1KEEP_SVE; break;
-            case 2: op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE : xa::PSTL2KEEP_SVE; break;
-            case 3: op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE : xa::PSTL3KEEP_SVE; break;
-            default: assert(!"invalid level"); break;
+                case 1:
+                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
+                                                : xa::PSTL1KEEP_SVE;
+                    break;
+                case 2:
+                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
+                                                : xa::PSTL2KEEP_SVE;
+                    break;
+                case 3:
+                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
+                                                : xa::PSTL3KEEP_SVE;
+                    break;
+                default: assert(!"invalid level"); break;
             }
 
-            if((VL_OFS(ofs) <= PRFWMAX) &&
-               (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
-            }else{
+            if ((VL_OFS(ofs) <= PRFWMAX)
+                    && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
+                CGA64::prfw(op_sve, reg_p_all_ones,
+                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+            } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_addr));
             }
@@ -249,8 +264,7 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
 
     jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t ajcp, const primitive_attr_t &attr)
-        : jit_ker(nullptr)
-        , sve_512_kernel_(nullptr) {
+        : jit_ker(nullptr), sve_512_kernel_(nullptr) {
         switch (ajcp.oc_block) {
             case 16:
                 sve_512_kernel_
@@ -262,9 +276,7 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
         }
     }
 
-    ~jit_aarch64_sve_512_conv_fwd_kernel() {
-        delete sve_512_kernel_;
-    }
+    ~jit_aarch64_sve_512_conv_fwd_kernel() { delete sve_512_kernel_; }
 
     enum { typesize = sizeof(float) };
 
@@ -303,56 +315,57 @@ private:
         ker_reg_base_idx = 28,
     };
 
-//[info]v0.21のcodeを追加。v1.6追加codeは未反映。
-//[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
-    reg64_t param               = abi_param1_aarch64;
-    reg64_t reg_dst             = x1;
-    reg64_t reg_ker             = x2;
-    reg64_t reg_src             = x3;
+    //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
+    //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
+    reg64_t param = abi_param1_aarch64;
+    reg64_t reg_dst = x1;
+    reg64_t reg_ker = x2;
+    reg64_t reg_src = x3;
 
-    reg64_t reg_dst_prf         = x23;
-    reg64_t reg_ker_prf         = x5;
-    reg64_t reg_src_prf         = x6;
-    reg64_t reg_iwb             = x24;
+    reg64_t reg_dst_prf = x23;
+    reg64_t reg_ker_prf = x5;
+    reg64_t reg_src_prf = x6;
+    reg64_t reg_iwb = x24;
 
-    reg64_t aux_reg_dst         = x7;
-    reg64_t aux_reg_ker         = x8;
+    reg64_t aux_reg_dst = x7;
+    reg64_t aux_reg_ker = x8;
 
-    reg64_t aux_reg_dst_prf     = x9;
-    reg64_t aux_reg_ker_prf     = x10;
+    reg64_t aux_reg_dst_prf = x9;
+    reg64_t aux_reg_ker_prf = x10;
 
-    reg64_t aux_reg_dst_d_prf   = x6;
-    reg64_t aux_reg_dst_d       = x11;
-    reg64_t aux_reg_ker_d_prf   = x12;
-    reg64_t aux_reg_ker_d       = x2;
-    reg64_t reg_ki              = x3;
+    reg64_t aux_reg_dst_d_prf = x6;
+    reg64_t aux_reg_dst_d = x11;
+    reg64_t aux_reg_ker_d_prf = x12;
+    reg64_t aux_reg_ker_d = x2;
+    reg64_t reg_ki = x3;
 
-    reg64_t reg_kj              = x13;
-    reg64_t reg_oi              = x11;
-    reg64_t reg_kh              = x12;
+    reg64_t reg_kj = x13;
+    reg64_t reg_oi = x11;
+    reg64_t reg_kh = x12;
 
-    reg64_t reg_channel         = x9;
+    reg64_t reg_channel = x9;
 
-    reg64_t reg_tmp             = x14;
-    reg64_t reg_long_offt       = x7;
+    reg64_t reg_tmp = x14;
+    reg64_t reg_long_offt = x7;
 
     /* Temporary registers for ARM insts */
-    reg64_t reg_prev_bcast_addr = x15; 
-    reg64_t reg_tmp_imm         = x16; 
-    reg64_t reg_tmp_addr        = x18; 
+    reg64_t reg_prev_bcast_addr = x15;
+    reg64_t reg_tmp_imm = x16;
+    reg64_t reg_tmp_addr = x18;
 
-    reg64_t reg_src_prf_org     = x19;
-    reg64_t reg_src_org         = x20;
-    reg64_t reg_oi_org          = x25;
-//[info]レジスタ割り当ては適当
-    reg64_t reg_dst_org         = x22;
-    reg64_t reg_ker_org         = x26;
-    reg64_t reg_input_org       = x22;
-    reg64_t reg_kernel_org      = x26;
+    reg64_t reg_src_prf_org = x19;
+    reg64_t reg_src_org = x20;
+    reg64_t reg_oi_org = x25;
+    //[info]レジスタ割り当ては適当
+    reg64_t reg_dst_org = x22;
+    reg64_t reg_ker_org = x26;
+    reg64_t reg_input_org = x22;
+    reg64_t reg_kernel_org = x26;
 
-    const xa::PReg reg_p_all_ones  = p2;
+    const xa::PReg reg_p_all_ones = p2;
 
-    void prefetch(const std::string prfop, int level, reg64_t in, long long int ofs) {
+    void prefetch(
+            const std::string prfop, int level, reg64_t in, long long int ofs) {
         bool for_load;
         if (prfop == "LD") {
             for_load = true;
@@ -362,35 +375,51 @@ private:
             assert(!"invalid prfop");
         }
 
-        bool cacheline_alinged = ((ofs&0xFF)==0) ? true : false;
+        bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
             xa::Prfop op;
             switch (level) {
-            case 1: op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP; break;
-            case 2: op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP; break;
-            case 3: op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP; break;
-            default: assert(!"invalid prfop"); break;
+                case 1:
+                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    break;
+                case 2:
+                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    break;
+                case 3:
+                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    break;
+                default: assert(!"invalid prfop"); break;
             }
 
-            if((ofs <= PRFMMAX) && (ofs >= 0)) {
-              CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
-            }else{
-              CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-              CGA64::prfm(op, xa::ptr(reg_tmp_addr));
+            if ((ofs <= PRFMMAX) && (ofs >= 0)) {
+                CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+            } else {
+                CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
+                CGA64::prfm(op, xa::ptr(reg_tmp_addr));
             }
         } else {
             xa::PrfopSve op_sve;
             switch (level) {
-            case 1: op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE : xa::PSTL1KEEP_SVE; break;
-            case 2: op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE : xa::PSTL2KEEP_SVE; break;
-            case 3: op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE : xa::PSTL3KEEP_SVE; break;
-            default: assert(!"invalid prfop"); break;
+                case 1:
+                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
+                                                : xa::PSTL1KEEP_SVE;
+                    break;
+                case 2:
+                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
+                                                : xa::PSTL2KEEP_SVE;
+                    break;
+                case 3:
+                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
+                                                : xa::PSTL3KEEP_SVE;
+                    break;
+                default: assert(!"invalid prfop"); break;
             }
 
-            if((VL_OFS(ofs) <= PRFWMAX) &&
-               (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
-            }else{
+            if ((VL_OFS(ofs) <= PRFWMAX)
+                    && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
+                CGA64::prfw(op_sve, reg_p_all_ones,
+                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+            } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_addr));
             }
@@ -461,21 +490,19 @@ private:
 struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
 
     jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
-        : jit_ker(nullptr)
-        , sve_512_kernel_(nullptr) {
+        : jit_ker(nullptr), sve_512_kernel_(nullptr) {
         switch (ajcp.ic_block) {
             case 16:
-                sve_512_kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
-                        xa::ZReg>(ajcp);
+                sve_512_kernel_
+                        = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
+                                xa::ZReg>(ajcp);
                 jit_ker = sve_512_kernel_->jit_ker_;
                 return;
             default: assert(!"invalid channel blocking");
         }
     }
 
-    ~jit_aarch64_sve_512_conv_bwd_data_kernel_f32() {
-        delete sve_512_kernel_;
-    }
+    ~jit_aarch64_sve_512_conv_bwd_data_kernel_f32() { delete sve_512_kernel_; }
 
     enum { typesize = sizeof(float) };
 
@@ -495,7 +522,7 @@ private:
 struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
 
     jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(const jit_conv_conf_t &ajcp)
-        : jit_generator(nullptr, 1024*1024), jcp(ajcp) {
+        : jit_generator(nullptr, 1024 * 1024), jcp(ajcp) {
         if (jcp.harness != harness_nxc) {
             generate();
             jit_ker = (void (*)(jit_conv_call_s *))getCode32();
@@ -505,13 +532,14 @@ struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
             jit_microker = (void (*)(float *, const float *, const float *,
                     int64_t, int64_t))getCode32();
 #else
-//[info]取り敢えずマスク
+            //[info]取り敢えずマスク
             assert(!"none microkernel");
 #endif
         }
     }
 
-    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_conv_bwd_weights_kernel_f32)
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(
+            jit_aarch64_sve_512_conv_bwd_weights_kernel_f32)
 
     static status_t init_conf(jit_conv_conf_t &jcp,
             const convolution_desc_t &cd, memory_desc_t &src_md,
@@ -531,52 +559,53 @@ private:
     static const int max_ur_w;
     static const int min_oh_reduce;
 
-//[info]v0.21のcodeを追加。v1.6追加codeは要確認。
-    reg64_t param          = abi_param1_aarch64;
-    reg64_t reg_input      = x1;
-    reg64_t reg_kernel     = x2;
-    reg64_t reg_output     = x3;
-    reg64_t b_ic           = x20;
-    reg64_t kj             = x5;
-    reg64_t reg_kh         = x6;
+    //[info]v0.21のcodeを追加。v1.6追加codeは要確認。
+    reg64_t param = abi_param1_aarch64;
+    reg64_t reg_input = x1;
+    reg64_t reg_kernel = x2;
+    reg64_t reg_output = x3;
+    reg64_t b_ic = x20;
+    reg64_t kj = x5;
+    reg64_t reg_kh = x6;
     reg64_t reg_ur_w_trips = x7;
-    reg64_t reg_oj         = x8;
-//    reg64_t reg_ih_count   = x9;
-    reg64_t reg_tmp        = x10;
-    reg64_t reg_long_offt  = x10;
-//[info]v1.6追加code
-    reg64_t reg_icb        = x9;
-//
+    reg64_t reg_oj = x8;
+    //    reg64_t reg_ih_count   = x9;
+    reg64_t reg_tmp = x10;
+    reg64_t reg_long_offt = x10;
+    //[info]v1.6追加code
+    reg64_t reg_icb = x9;
+    //
 
-    reg64_t ki             = x11;
-    reg64_t reg_kd_count   = x12;
-    reg64_t reg_oi         = x12;
-    reg64_t reg_d_index    = x13;
-    reg64_t reg_input_d    = x8;
-    reg64_t reg_output_d   = x9;
-    reg64_t aux_reg_input  = x12;
+    reg64_t ki = x11;
+    reg64_t reg_kd_count = x12;
+    reg64_t reg_oi = x12;
+    reg64_t reg_d_index = x13;
+    reg64_t reg_input_d = x8;
+    reg64_t reg_output_d = x9;
+    reg64_t aux_reg_input = x12;
     reg64_t aux_reg_kernel = x13;
-    reg64_t reg_bias       = x9;
-//[info]v1.6追加code
-    reg64_t reg_oc_tail    = x10;
-//
-    reg64_t reg_add_tmp    = x14;
-    reg64_t reg_tmp_imm    = x15;
+    reg64_t reg_bias = x9;
+    //[info]v1.6追加code
+    reg64_t reg_oc_tail = x10;
+    //
+    reg64_t reg_add_tmp = x14;
+    reg64_t reg_tmp_imm = x15;
 
     reg64_t reg_kd_count_org = x16;
-    reg64_t reg_input_d_org  = x17;
+    reg64_t reg_input_d_org = x17;
     reg64_t reg_output_d_org = x18;
-    reg64_t reg_d_index_org  = x19;
+    reg64_t reg_d_index_org = x19;
 
-    reg64_t reg_input_org    = x24;
-    reg64_t reg_kernel_org   = x22;
-    reg64_t reg_output_org   = x23;
+    reg64_t reg_input_org = x24;
+    reg64_t reg_kernel_org = x22;
+    reg64_t reg_output_org = x23;
 
-    xa::ZRegS zreg_idata   = xa::ZRegS(31);
+    xa::ZRegS zreg_idata = xa::ZRegS(31);
 
     const xa::PReg reg_p_all_ones = p2;
 
-    void prefetch(const std::string prfop, int level, reg64_t in, long long int ofs) {
+    void prefetch(
+            const std::string prfop, int level, reg64_t in, long long int ofs) {
         bool for_load;
         if (prfop == "LD") {
             for_load = true;
@@ -586,35 +615,51 @@ private:
             assert(!"invalid prfop");
         }
 
-        bool cacheline_alinged = ((ofs&0xFF)==0) ? true : false;
+        bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
             xa::Prfop op;
             switch (level) {
-            case 1: op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP; break;
-            case 2: op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP; break;
-            case 3: op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP; break;
-            default: assert(!"invalid prfop"); break;
+                case 1:
+                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    break;
+                case 2:
+                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    break;
+                case 3:
+                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    break;
+                default: assert(!"invalid prfop"); break;
             }
 
-            if((ofs <= PRFMMAX) && (ofs >= 0)) {
+            if ((ofs <= PRFMMAX) && (ofs >= 0)) {
                 CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
-            }else{
+            } else {
                 CGA64::add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
                 CGA64::prfm(op, xa::ptr(reg_add_tmp));
             }
         } else {
             xa::PrfopSve op_sve;
             switch (level) {
-            case 1: op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE : xa::PSTL1KEEP_SVE; break;
-            case 2: op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE : xa::PSTL2KEEP_SVE; break;
-            case 3: op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE : xa::PSTL3KEEP_SVE; break;
-            default: assert(!"invalid prfop"); break;
+                case 1:
+                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
+                                                : xa::PSTL1KEEP_SVE;
+                    break;
+                case 2:
+                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
+                                                : xa::PSTL2KEEP_SVE;
+                    break;
+                case 3:
+                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
+                                                : xa::PSTL3KEEP_SVE;
+                    break;
+                default: assert(!"invalid prfop"); break;
             }
 
-            if((VL_OFS(ofs) <= PRFWMAX) &&
-               (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
-            }else{
+            if ((VL_OFS(ofs) <= PRFWMAX)
+                    && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
+                CGA64::prfw(op_sve, reg_p_all_ones,
+                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+            } else {
                 CGA64::add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
                 CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_add_tmp));
             }
@@ -656,12 +701,11 @@ private:
         const bool is_nxc_layout = is_src_layout_nxc();
         const size_t w_shift_st
                 = (jcp.is_hw_transp ? jcp.iw : 1) * jcp.ic_block;
-        ptrdiff_t w_shift = is_nxc_layout
-                ? jcp.ngroups * jcp.ic
-                : (jcp.is_1stconv ? 1 : w_shift_st);
+        ptrdiff_t w_shift = is_nxc_layout ? jcp.ngroups * jcp.ic
+                                          : (jcp.is_1stconv ? 1 : w_shift_st);
         ptrdiff_t ic_shift = (jcp.is_1stconv && !is_nxc_layout
-                                ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
-                                : 1);
+                        ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
+                        : 1);
 
         ptrdiff_t local_input_offset = i_iw * w_shift + i_ic * ic_shift;
         return input_offset + typesize * local_input_offset;

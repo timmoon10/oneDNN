@@ -75,10 +75,10 @@ struct jit_t : public jit_generator {
 private:
     using reg64_t = const Xbyak::Xbyak_aarch64::XReg;
 
-    reg64_t reg_tmp     = x28;
+    reg64_t reg_tmp = x28;
     reg64_t reg_tmp_imm = x29;
     reg64_t reg_tmp_ofs = x30;
-    
+
     /** injects actual barrier implementation into another jitted code
      * @params:
      *   reg_ctx   -- read-only register with pointer to the barrier context
@@ -91,16 +91,14 @@ public:
 
     jit_t() {
         this->preamble();
-        generate( *this, abi_param1, abi_param2);
+        generate(*this, abi_param1, abi_param2);
         this->postamble();
         barrier = reinterpret_cast<decltype(barrier)>(
                 const_cast<uint32_t *>(this->getCode32()));
     }
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_t)
-
 };
-
 
 template <typename ctx_t>
 inline void ctx_init(ctx_t *ctx) {

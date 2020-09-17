@@ -357,8 +357,8 @@ struct rtus_driver_t : public jit_generator {
                 assert(!"Unsupported store_bytes");
 #else
                 store_bytes(vreg, reg, offset, store_size);
-#endif 
-           }
+#endif
+            }
         };
 
         mov(reg_ws_copy, reg_ws);

@@ -216,7 +216,7 @@ status_t set_max_cpu_isa(dnnl_cpu_isa_t isa) {
         HANDLE_CASE(avx512_mic_4ops);
         HANDLE_CASE(avx512_core);
         HANDLE_CASE(avx512_core_vnni);
-        HANDLE_CASE(avx512_core_bf16); 
+        HANDLE_CASE(avx512_core_bf16);
         HANDLE_CASE(simd);
         HANDLE_CASE(sve);
         default: return invalid_arguments;

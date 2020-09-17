@@ -62,7 +62,6 @@ static inline int float2int(float x) {
     return utils::bit_cast<int>(x);
 }
 
-
 // TODO: A GPR class that hides ABI details from the JIT kernels and allows
 // numbering registers from 0 to 14 (x86_64) / 6 (x32) (gpr0, gpr1, ...) and
 // stack register (sr).
@@ -81,13 +80,16 @@ static inline int float2int(float x) {
 // (Roma)
 
 // Callee-saved registers
-  constexpr Xbyak::Xbyak_aarch64::Operand::Code abi_save_gpr_regs_aarch64[] = { Xbyak::Xbyak_aarch64::Operand::X19,
-    Xbyak::Xbyak_aarch64::Operand::X20, Xbyak::Xbyak_aarch64::Operand::X21, Xbyak::Xbyak_aarch64::Operand::X22,
-    Xbyak::Xbyak_aarch64::Operand::X23, Xbyak::Xbyak_aarch64::Operand::X24, Xbyak::Xbyak_aarch64::Operand::X25,
-    Xbyak::Xbyak_aarch64::Operand::X26, Xbyak::Xbyak_aarch64::Operand::X27, Xbyak::Xbyak_aarch64::Operand::X28 };
+constexpr Xbyak::Xbyak_aarch64::Operand::Code abi_save_gpr_regs_aarch64[] = {
+        Xbyak::Xbyak_aarch64::Operand::X19, Xbyak::Xbyak_aarch64::Operand::X20,
+        Xbyak::Xbyak_aarch64::Operand::X21, Xbyak::Xbyak_aarch64::Operand::X22,
+        Xbyak::Xbyak_aarch64::Operand::X23, Xbyak::Xbyak_aarch64::Operand::X24,
+        Xbyak::Xbyak_aarch64::Operand::X25, Xbyak::Xbyak_aarch64::Operand::X26,
+        Xbyak::Xbyak_aarch64::Operand::X27, Xbyak::Xbyak_aarch64::Operand::X28};
 
 // See "Procedure Call Standsard for the ARM 64-bit Architecture (AArch64)"
-static const Xbyak::Xbyak_aarch64::XReg abi_param1_aarch64(Xbyak::Xbyak_aarch64::Operand::X0),
+static const Xbyak::Xbyak_aarch64::XReg abi_param1_aarch64(
+        Xbyak::Xbyak_aarch64::Operand::X0),
         abi_param2_aarch64(Xbyak::Xbyak_aarch64::Operand::X1),
         abi_param3_aarch64(Xbyak::Xbyak_aarch64::Operand::X2),
         abi_param4_aarch64(Xbyak::Xbyak_aarch64::Operand::X3),
@@ -95,34 +97,34 @@ static const Xbyak::Xbyak_aarch64::XReg abi_param1_aarch64(Xbyak::Xbyak_aarch64:
         abi_param6_aarch64(Xbyak::Xbyak_aarch64::Operand::X5),
         abi_param7_aarch64(Xbyak::Xbyak_aarch64::Operand::X6),
         abi_param8_aarch64(Xbyak::Xbyak_aarch64::Operand::X7),
-        abi_not_param1_aarch64(Xbyak::Xbyak_aarch64::Operand::X15); // Fujitsu uses X15 on A64FX as
-                                             // abi_not_param1 on x64.
+        abi_not_param1_aarch64(Xbyak::Xbyak_aarch64::Operand::
+                        X15); // Fujitsu uses X15 on A64FX as
+// abi_not_param1 on x64.
 #ifdef XBYAK64
 constexpr Xbyak::Operand::Code abi_save_gpr_regs[] = {
-    Xbyak::Operand::RBX, Xbyak::Operand::RBP, Xbyak::Operand::R12,
-    Xbyak::Operand::R13, Xbyak::Operand::R14, Xbyak::Operand::R15,
+        Xbyak::Operand::RBX,
+        Xbyak::Operand::RBP,
+        Xbyak::Operand::R12,
+        Xbyak::Operand::R13,
+        Xbyak::Operand::R14,
+        Xbyak::Operand::R15,
 #ifdef _WIN32
-    Xbyak::Operand::RDI, Xbyak::Operand::RSI,
+        Xbyak::Operand::RDI,
+        Xbyak::Operand::RSI,
 #endif
 };
 
 #ifdef _WIN32
 static const Xbyak::Reg64 abi_param1(Xbyak::Operand::RCX),
-             abi_param2(Xbyak::Operand::RDX),
-             abi_param3(Xbyak::Operand::R8),
-             abi_param4(Xbyak::Operand::R9),
-             abi_not_param1(Xbyak::Operand::RDI);
+        abi_param2(Xbyak::Operand::RDX), abi_param3(Xbyak::Operand::R8),
+        abi_param4(Xbyak::Operand::R9), abi_not_param1(Xbyak::Operand::RDI);
 #else
 static const Xbyak::Reg64 abi_param1(Xbyak::Operand::RDI),
-             abi_param2(Xbyak::Operand::RSI),
-             abi_param3(Xbyak::Operand::RDX),
-             abi_param4(Xbyak::Operand::RCX),
-             abi_param5(Xbyak::Operand::R8),
-             abi_param6(Xbyak::Operand::R9),
-             abi_not_param1(Xbyak::Operand::RCX);
+        abi_param2(Xbyak::Operand::RSI), abi_param3(Xbyak::Operand::RDX),
+        abi_param4(Xbyak::Operand::RCX), abi_param5(Xbyak::Operand::R8),
+        abi_param6(Xbyak::Operand::R9), abi_not_param1(Xbyak::Operand::RCX);
 #endif
 #endif //#ifdef XBYAK64
-
 
 } // namespace
 
@@ -139,25 +141,26 @@ private:
 
     const size_t xreg_len = 8;
     const size_t vreg_len_preserve = 8; // Only bottom 8byte must be preserved.
-    const size_t vreg_to_preserve = 8; // VREG8 - VREG15 
+    const size_t vreg_to_preserve = 8; // VREG8 - VREG15
 
     const size_t num_abi_save_gpr_regs_aarch64
-            = sizeof(abi_save_gpr_regs_aarch64) / sizeof(abi_save_gpr_regs_aarch64[0]);
+            = sizeof(abi_save_gpr_regs_aarch64)
+            / sizeof(abi_save_gpr_regs_aarch64[0]);
 
     const size_t size_of_abi_save_regs_aarch64
-            = (num_abi_save_gpr_regs_aarch64 + 2)* x0.getBit() / 8
+            = (num_abi_save_gpr_regs_aarch64 + 2) * x0.getBit() / 8
             + xmm_to_preserve * xmm_len;
-    
+
     const size_t preserved_stack_size
             = xreg_len * (2 + num_abi_save_gpr_regs_aarch64)
             + vreg_len_preserve * vreg_to_preserve;
 
     const size_t num_abi_save_gpr_regs
-        = sizeof(abi_save_gpr_regs) / sizeof(abi_save_gpr_regs[0]);
+            = sizeof(abi_save_gpr_regs) / sizeof(abi_save_gpr_regs[0]);
 
     const size_t size_of_abi_save_regs
-        = num_abi_save_gpr_regs * rax.getBit() / 8
-        + xmm_to_preserve * xmm_len;
+            = num_abi_save_gpr_regs * rax.getBit() / 8
+            + xmm_to_preserve * xmm_len;
 
 public:
     enum {
@@ -173,9 +176,8 @@ public:
     };
 
     xa::XReg param1_aarch64 = abi_param1_aarch64;
-    class XRegValue : public xa::XReg
-    {
-        public:
+    class XRegValue : public xa::XReg {
+    public:
         int64_t value_;
         explicit XRegValue(uint32_t idx, int64_t value)
             : Xbyak::Xbyak_aarch64::XReg(idx), value_(value) {}
@@ -183,42 +185,40 @@ public:
             : Xbyak::Xbyak_aarch64::XReg(idx), value_(0xFFFFFFFFFFFFFFFF) {}
     };
 
-    inline size_t get_size_of_abi_save_regs_aarch64() { 
-                    return size_of_abi_save_regs_aarch64; 
+    inline size_t get_size_of_abi_save_regs_aarch64() {
+        return size_of_abi_save_regs_aarch64;
     }
     Xbyak::Reg64 param1 = abi_param1;
     const int EVEX_max_8b_offt = 0x200;
     const Xbyak::Reg64 reg_EVEX_max_8b_offt = rbp;
 
-    inline size_t get_size_of_abi_save_regs() {
-        return size_of_abi_save_regs;
-    }
-
+    inline size_t get_size_of_abi_save_regs() { return size_of_abi_save_regs; }
 
     void preamble() {
         CGA64::stp(x29, x30, pre_ptr(CGA64::sp, -16));
         /* x29 is a frame pointer. */
         CGA64::mov(x29, CGA64::sp);
-        CGA64::sub(CGA64::sp, CGA64::sp, static_cast<int64_t>(preserved_stack_size) - 16);
+        CGA64::sub(CGA64::sp, CGA64::sp,
+                static_cast<int64_t>(preserved_stack_size) - 16);
 
         /* x9 can be used as a temporal register. */
         CGA64::mov(x9, CGA64::sp);
 
         if (vreg_to_preserve) {
-            CGA64::st4((v8.d - v11.d)[0], post_ptr(x9, vreg_len_preserve*4));
-            CGA64::st4((v12.d - v15.d)[0], post_ptr(x9, vreg_len_preserve*4));
+            CGA64::st4((v8.d - v11.d)[0], post_ptr(x9, vreg_len_preserve * 4));
+            CGA64::st4((v12.d - v15.d)[0], post_ptr(x9, vreg_len_preserve * 4));
         }
         for (size_t i = 0; i < num_abi_save_gpr_regs_aarch64; i += 2) {
             CGA64::stp(xa::XReg(abi_save_gpr_regs_aarch64[i]),
-                xa::XReg(abi_save_gpr_regs_aarch64[i + 1]),
-                post_ptr(x9, xreg_len*2));
+                    xa::XReg(abi_save_gpr_regs_aarch64[i + 1]),
+                    post_ptr(x9, xreg_len * 2));
         }
         CGA64::ptrue(P_ALL_ONE.b);
         CGA64::ptrue(P_MSB_384.b, xa::VL16);
         CGA64::ptrue(P_MSB_256.b, xa::VL32);
-        CGA64::not_(P_MSB_384.b, P_ALL_ONE/xa::T_z, P_MSB_384.b);
-        CGA64::not_(P_MSB_256.b, P_ALL_ONE/xa::T_z, P_MSB_256.b);
-        
+        CGA64::not_(P_MSB_384.b, P_ALL_ONE / xa::T_z, P_MSB_384.b);
+        CGA64::not_(P_MSB_256.b, P_ALL_ONE / xa::T_z, P_MSB_256.b);
+
         /* arg values are passed different registers between x86_64 and aarch64. */
         CGA64::mov(x7, x0); /* First arg. */
         CGA64::mov(x6, x1); /* Sedond arg. */
@@ -227,14 +227,15 @@ public:
         CGA64::mov(x8, x4);
         CGA64::mov(x9, x5); /* 6-th arg. */
         /* Note:If # of args is more than 6, 7-th, 8-th, ..., args are passed by stack. */
-        CGA64::mov(x4, CGA64::sp); /* Intel64's stack register is 4-th register. */
+        CGA64::mov(
+                x4, CGA64::sp); /* Intel64's stack register is 4-th register. */
         CGA64::sub_imm(X_TRANSLATOR_STACK, x4, xt_stack_offset, X_TMP_0);
-        CGA64::mov_imm(X_TMP_0, getTranslatorVersion()); /*get translator version info */
+        CGA64::mov_imm(X_TMP_0,
+                getTranslatorVersion()); /*get translator version info */
 
         if (mayiuse(avx512_common)) {
             mov(reg_EVEX_max_8b_offt, 2 * EVEX_max_8b_offt);
         }
- 
     }
 
 //TODO:
@@ -263,55 +264,51 @@ public:
 #endif
 
     void mic_prefetcht0(Xbyak::Address a) {
-        if (mayiuse(avx512_mic))
-            prefetcht0(a);
+        if (mayiuse(avx512_mic)) prefetcht0(a);
     }
 
     void mic_prefetcht1(Xbyak::Address a) {
-        if (mayiuse(avx512_mic))
-            prefetcht1(a);
+        if (mayiuse(avx512_mic)) prefetcht1(a);
     }
 
     void mic_prefetcht2(Xbyak::Address a) {
-        if (mayiuse(avx512_mic))
-            prefetcht2(a);
+        if (mayiuse(avx512_mic)) prefetcht2(a);
     }
 
     void uni_vzeroupper() {
-        if (mayiuse(avx) && !mayiuse(avx512_mic))
-            vzeroupper();
+        if (mayiuse(avx) && !mayiuse(avx512_mic)) vzeroupper();
     }
 
     void postamble() {
         CGA64::mov(x9, CGA64::sp);
-        CGA64::eor(P_ALL_ONE.b, P_ALL_ONE/xa::T_z, P_ALL_ONE.b, P_ALL_ONE.b);
-        CGA64::eor(P_MSB_384.b, P_MSB_384/xa::T_z, P_MSB_384.b, P_MSB_384.b);
-        CGA64::eor(P_MSB_256.b, P_MSB_256/xa::T_z, P_MSB_256.b, P_MSB_256.b);
+        CGA64::eor(P_ALL_ONE.b, P_ALL_ONE / xa::T_z, P_ALL_ONE.b, P_ALL_ONE.b);
+        CGA64::eor(P_MSB_384.b, P_MSB_384 / xa::T_z, P_MSB_384.b, P_MSB_384.b);
+        CGA64::eor(P_MSB_256.b, P_MSB_256 / xa::T_z, P_MSB_256.b, P_MSB_256.b);
 
         if (vreg_to_preserve) {
-            CGA64::ld4((v8.d - v11.d)[0], post_ptr(x9, vreg_len_preserve*4));
-            CGA64::ld4((v12.d - v15.d)[0], post_ptr(x9, vreg_len_preserve*4));
+            CGA64::ld4((v8.d - v11.d)[0], post_ptr(x9, vreg_len_preserve * 4));
+            CGA64::ld4((v12.d - v15.d)[0], post_ptr(x9, vreg_len_preserve * 4));
         }
 
         for (size_t i = 0; i < num_abi_save_gpr_regs_aarch64; i += 2) {
             CGA64::ldp(xa::XReg(abi_save_gpr_regs_aarch64[i]),
-                xa::XReg(abi_save_gpr_regs_aarch64[i + 1]),
-                post_ptr(x9, xreg_len*2));
+                    xa::XReg(abi_save_gpr_regs_aarch64[i + 1]),
+                    post_ptr(x9, xreg_len * 2));
         }
 
-        CGA64::add(CGA64::sp, CGA64::sp, static_cast<int64_t>(preserved_stack_size) - 16);
+        CGA64::add(CGA64::sp, CGA64::sp,
+                static_cast<int64_t>(preserved_stack_size) - 16);
         CGA64::ldp(x29, x30, post_ptr(CGA64::sp, 16));
         CGA64::ret();
     }
 
     template <typename T>
-    Xbyak::Address EVEX_compress_addr(Xbyak::Reg64 base,
-            T raw_offt, bool bcast = false)
-    {
-        using Xbyak::Zmm;
-        using Xbyak::Reg64;
+    Xbyak::Address EVEX_compress_addr(
+            Xbyak::Reg64 base, T raw_offt, bool bcast = false) {
         using Xbyak::Address;
+        using Xbyak::Reg64;
         using Xbyak::RegExp;
+        using Xbyak::Zmm;
 
         assert(raw_offt <= INT_MAX);
         auto offt = static_cast<int>(raw_offt);
@@ -321,23 +318,23 @@ public:
         if (EVEX_max_8b_offt <= offt && offt < 3 * EVEX_max_8b_offt) {
             offt = offt - 2 * EVEX_max_8b_offt;
             scale = 1;
-        } else if (3 * EVEX_max_8b_offt <= offt && offt < 5 * EVEX_max_8b_offt) {
+        } else if (3 * EVEX_max_8b_offt <= offt
+                && offt < 5 * EVEX_max_8b_offt) {
             offt = offt - 4 * EVEX_max_8b_offt;
             scale = 2;
         }
 
         auto re = RegExp() + base + offt;
-        if (scale)
-            re = re + reg_EVEX_max_8b_offt * scale;
+        if (scale) re = re + reg_EVEX_max_8b_offt * scale;
 
         if (bcast)
-            return zword_b [re];
+            return zword_b[re];
         else
-            return zword [re];
+            return zword[re];
     }
 
     Xbyak::Address make_safe_addr(const Xbyak::Reg64 &reg_out, size_t offt,
-        const Xbyak::Reg64 &tmp_reg, bool bcast = false) {
+            const Xbyak::Reg64 &tmp_reg, bool bcast = false) {
         if (offt > INT_MAX) {
             mov(tmp_reg, offt);
             return bcast ? ptr_b[reg_out + tmp_reg] : ptr[reg_out + tmp_reg];
@@ -347,7 +344,7 @@ public:
     }
 
     Xbyak::Address EVEX_compress_addr_safe(const Xbyak::Reg64 &base,
-        size_t raw_offt, const Xbyak::Reg64 &reg_offt, bool bcast = false) {
+            size_t raw_offt, const Xbyak::Reg64 &reg_offt, bool bcast = false) {
         if (raw_offt > INT_MAX) {
             return make_safe_addr(base, raw_offt, reg_offt, bcast);
         } else {
@@ -356,7 +353,7 @@ public:
     }
 
     void safe_add(const Xbyak::Reg64 &base, size_t raw_offt,
-        const Xbyak::Reg64 &reg_offt) {
+            const Xbyak::Reg64 &reg_offt) {
         if (raw_offt > INT_MAX) {
             mov(reg_offt, raw_offt);
             add(base, reg_offt);
@@ -366,7 +363,7 @@ public:
     }
 
     void safe_sub(const Xbyak::Reg64 &base, size_t raw_offt,
-        const Xbyak::Reg64 &reg_offt) {
+            const Xbyak::Reg64 &reg_offt) {
         if (raw_offt > INT_MAX) {
             mov(reg_offt, raw_offt);
             sub(base, reg_offt);
@@ -377,7 +374,7 @@ public:
 
     // Disallow char-based labels completely
     void L(const char *label) = delete;
-    void L(Xbyak::Label& label) { Xbyak::CodeGenerator::L(label); }
+    void L(Xbyak::Label &label) { Xbyak::CodeGenerator::L(label); }
 
     void L_aligned(Xbyak::Label &label, int alignment = 16) {
         align(alignment);
@@ -1016,8 +1013,8 @@ public:
         vpextrb(op, x, imm);
     }
 
-    void mul_by_const(const Xbyak::Reg &out,
-            const Xbyak::Reg64 &tmp, int value) {
+    void mul_by_const(
+            const Xbyak::Reg &out, const Xbyak::Reg64 &tmp, int value) {
         // Generates a shift + add sequence for multiplicating contents of the
         // out register by a known JIT-time value. Clobbers the tmp register.
         //
@@ -1102,8 +1099,6 @@ public:
             minps(vmm, vmm_ubound);
     }
 
-
-
     void dump_code32(const Xbyak::XBYAK_CODE_PTR *code) const {
         if (code) {
             static int counter = 0;
@@ -1139,9 +1134,9 @@ public:
 
             FILE *fp = fopen(fname, "w+");
 
-	    // Failure to dump code is not fatal
+            // Failure to dump code is not fatal
             if (fp) {
-                size_t unused = fwrite(code, getSize()*4, 1, fp);
+                size_t unused = fwrite(code, getSize() * 4, 1, fp);
                 UNUSED(unused);
                 fclose(fp);
             }
@@ -1149,8 +1144,8 @@ public:
 #undef MAX_FNAME_LEN
     }
 
-
-    static unsigned int get_A64FX_cache_size(int level, bool per_core = true, int nthreads = 1) {
+    static unsigned int get_A64FX_cache_size(
+            int level, bool per_core = true, int nthreads = 1) {
         unsigned int l = level - 1;
         // Currently, if XByak is not able to fetch the cache topology
         // we default to 64KiB of L1 per core, 8MiB of L2 per 1CMG.
@@ -1159,16 +1154,17 @@ public:
             const int L2_cache_per_CMG = 8388608;
             int num_cores = per_core ? 1 : nthreads;
             switch (l) {
-            case (0): return L1_cache_per_core;
-            case (1): return L2_cache_per_CMG * utils::div_up(num_cores, 12);
-            default: return 0;
+                case (0): return L1_cache_per_core;
+                case (1):
+                    return L2_cache_per_CMG * utils::div_up(num_cores, 12);
+                default: return 0;
             }
         }
         if (l < cpu.getDataCacheLevels()) {
-           return cpu.getDataCacheSize(l)
+            return cpu.getDataCacheSize(l)
                     / (per_core ? cpu.getCoresSharingDataCache(l) : 1);
         } else
-        return 0;
+            return 0;
     }
 
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_generator);
@@ -1176,8 +1172,7 @@ public:
 public:
     jit_generator(void *code_ptr = nullptr, size_t code_size = MAX_CODE_SIZE,
             bool use_autogrow = true)
-        : Xbyak::CodeGenerator(code_size,
-          code_ptr) {}
+        : Xbyak::CodeGenerator(code_size, code_ptr) {}
 #if 0
                 (code_ptr == nullptr && use_autogrow) ? Xbyak::Xbyak_aarch64::AutoGrow
                                                       : code_ptr) {}
@@ -1190,8 +1185,8 @@ public:
     const uint32_t *getCode32() {
         this->ready();
         const uint32_t *code = CGA64::getCode32();
-      
-        if( get_jit_dump() ) dump_code32(code);
+
+        if (get_jit_dump()) dump_code32(code);
 
         return code;
     }
@@ -1200,12 +1195,10 @@ public:
     const Xbyak::uint8 *getCode() {
         const Xbyak::uint8 *code = CodeGenerator::getCode();
 
-        if (get_jit_dump())
-            dump_code(code);
+        if (get_jit_dump()) dump_code(code);
 
         return code;
     }
-
 
     template <typename F>
     const F getCode() {

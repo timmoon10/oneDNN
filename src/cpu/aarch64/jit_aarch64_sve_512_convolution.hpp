@@ -39,9 +39,9 @@
 #include "common/primitive.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/cpu_convolution_pd.hpp"
 #include "cpu/aarch64/cpu_barrier.hpp"
 #include "cpu/aarch64/cpu_reducer.hpp"
+#include "cpu/cpu_convolution_pd.hpp"
 
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 #include "cpu/aarch64/jit_transpose_src_utils.hpp"
@@ -72,9 +72,9 @@ struct jit_aarch64_sve_512_convolution_fwd_t : public primitive_t {
                     && !has_zero_dim_memory();
             if (!ok) return status::unimplemented;
 
-            status_t status = jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jcp_,
-                    *desc(), src_md_, weights_md_, dst_md_, bias_md_, *attr(),
-                    dnnl_get_max_threads());
+            status_t status = jit_aarch64_sve_512_conv_fwd_kernel::init_conf(
+                    jcp_, *desc(), src_md_, weights_md_, dst_md_, bias_md_,
+                    *attr(), dnnl_get_max_threads());
             if (status != status::success) return status;
 
             auto scratchpad = scratchpad_registry().registrar();
@@ -212,9 +212,8 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t : public primitive_t {
                     && attr()->has_default_values() && !has_zero_dim_memory();
             if (!ok) return status::unimplemented;
 
-            status_t status
-                    = jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
-                            jcp_, *desc(), src_md_, diff_weights_md_,
+            status_t status = jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
+                    init_conf(jcp_, *desc(), src_md_, diff_weights_md_,
                             diff_bias_md_, diff_dst_md_,
                             dnnl_get_max_threads());
             if (status != status::success) return status;
