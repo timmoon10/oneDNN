@@ -1,11 +1,20 @@
 on: [push]
 
 jobs:
-  ci_test_job:
+  ClangFormatCheck:
+    runs-on: ubuntu-latest
+    name: Clang format check
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Test action step
+      run: .github/actions/test_action
+      shell: bash
+  CI_test_job:
     runs-on: ubuntu-latest
     name: Test for oneDNN
     steps:
     - name: Checkout
       uses: actions/checkout@v2
     - name: Test action step
-      uses: ./.github/actions/test_action
+      uses: .github/actions/test_action
