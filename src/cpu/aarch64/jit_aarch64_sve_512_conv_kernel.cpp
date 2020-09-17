@@ -963,23 +963,17 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
 
     const auto dat_tag_nxc = pick(ndims - 3, nwc, nhwc, ndhwc);
     const auto dat_tag_ncx = pick(ndims - 3, ncw, nchw, ncdhw);
-    const auto dat_tag_nCx4c = pick(ndims - 3, nCw4c, nChw4c, nCdhw4c);
-    const auto dat_tag_nCx8c = pick(ndims - 3, nCw8c, nChw8c, nCdhw8c);
     const auto dat_tag_nCx16c = pick(ndims - 3, nCw16c, nChw16c, nCdhw16c);
-    auto curr_src_tag = src_d.matches_one_of_tag(dat_tag_nxc, dat_tag_nCx16c,
-            dat_tag_nCx8c, dat_tag_nCx4c, dat_tag_ncx);
-    auto curr_dst_tag = dst_d.matches_one_of_tag(
-            dat_tag_nxc, dat_tag_nCx16c, dat_tag_nCx8c, dat_tag_nCx4c);
+    auto curr_src_tag = src_d.matches_one_of_tag( dat_tag_nxc, dat_tag_nCx16c, dat_tag_ncx );
+    auto curr_dst_tag = dst_d.matches_one_of_tag( dat_tag_nxc, dat_tag_nCx16c );
     bool is_data_layout_nxc
             = utils::everyone_is(dat_tag_nxc, curr_src_tag, curr_dst_tag);
 
-//[info]éÊÇËä∏Ç¶Ç∏ÉRÉÅÉìÉgâª
-    if (mayiuse(sve) && is_data_layout_nxc) return status::unimplemented;
-
-
+    /* 1st convolution check */
     jcp.is_1stconv = is_1stconv(jcp);
 
-    bool ok_to_pad_channels = true && !is_data_layout_nxc && jcp.ngroups == 1
+    /* Padding check (Channel) */
+    bool ok_to_pad_channels = true && jcp.ngroups == 1
             && src_d.data_type() == data_type::f32;
 
     const int full_simd_w = cpu_isa_traits<sve>::vlen / typesize;
@@ -987,21 +981,25 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     jcp.oc_block = jcp.simd_w;
     jcp.ic_block = jcp.is_1stconv ? jcp.ic : jcp.simd_w;
 
+    /* Channel padding */
     if (ok_to_pad_channels) {
         jcp.oc = rnd_up(jcp.oc, jcp.oc_block);
         jcp.ic = rnd_up(jcp.ic, jcp.ic_block);
     }
-    if (!IMPLICATION(!is_data_layout_nxc,
-                jcp.oc % jcp.oc_block == 0 && jcp.ic % jcp.ic_block == 0)) {
+
+    /* Input and output channels must be multiples of simd_w */
+    if (!(jcp.oc % jcp.oc_block == 0 && jcp.ic % jcp.ic_block == 0)) {
         return status::unimplemented;
     }
-    jcp.ic_tail = is_data_layout_nxc ? jcp.ic % jcp.simd_w : 0;
-    jcp.oc_tail = is_data_layout_nxc ? jcp.oc % jcp.simd_w : 0;
+    jcp.ic_tail = 0;
+    jcp.oc_tail = 0;
 
+    /* Post operation check */
     if (!post_ops_ok(jcp, attr)) {
         return status::unimplemented;
     }
 
+    /* Eltwise operation check */
     const auto &p = attr.post_ops_;
     jcp.with_sum = p.find(primitive_kind::sum) != -1;
     const int eltwise_ind = p.find(primitive_kind::eltwise);
@@ -1011,26 +1009,13 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
         if (dst_d.data_type() == data_type::s32) return status::unimplemented;
     }
 
+
     format_tag_t src_tag, dst_tag, wei_tag;
 
-    if (jcp.simd_w == 8) {
-        assert(with_groups);
-        src_tag = is_data_layout_nxc ? dat_tag_nxc : dat_tag_nCx8c;
-        dst_tag = src_tag;
-        wei_tag = pick(ndims - 3, gOIw8i8o, gOIhw8i8o, gOIdhw8i8o);
-    } else if (jcp.simd_w == 4) {
-        assert(with_groups);
-        src_tag = is_data_layout_nxc ? dat_tag_nxc : dat_tag_nCx4c;
-        dst_tag = src_tag;
-        wei_tag = pick(ndims - 3, gOIw4i4o, gOIhw4i4o, gOIdhw4i4o);
-    } else {
-        dst_tag = is_data_layout_nxc ? dat_tag_nxc : dat_tag_nCx16c;
-        src_tag = is_data_layout_nxc
-                ? dat_tag_nxc
-                : (jcp.is_1stconv ? dat_tag_ncx : dat_tag_nCx16c);
-        wei_tag = pick(2 * ndims - 6 + with_groups, OIw16i16o, gOIw16i16o,
-                OIhw16i16o, gOIhw16i16o, OIdhw16i16o, gOIdhw16i16o);
-    }
+    dst_tag = dat_tag_nCx16c;
+    src_tag = jcp.is_1stconv ? dat_tag_ncx : dat_tag_nCx16c;
+    wei_tag = pick(2 * ndims - 6 + with_groups, OIw16i16o, gOIw16i16o,
+            OIhw16i16o, gOIhw16i16o, OIdhw16i16o, gOIdhw16i16o);
 
     if (src_md.format_kind == format_kind::any)
         CHECK(memory_desc_init_by_tag(src_md, src_tag));
