@@ -3,12 +3,12 @@ on: [push]
 jobs:
   ClangFormatCheck:
     runs-on: ubuntu-latest
-    name: Clang format check
+    name: check clang format
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-    - name: Test action step
-      run: ./.github/actions/test_action
+    - name: Check clang format
+      run: ./.github/automation/clang-format.sh
       shell: bash
   CI_test_job:
     runs-on: ubuntu-latest
