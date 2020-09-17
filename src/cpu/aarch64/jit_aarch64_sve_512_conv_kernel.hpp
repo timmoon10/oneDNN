@@ -42,7 +42,6 @@
 //[info]取り敢えずコメント化。
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-#if 1
 //[info]v0.21変更をそのまま追加
 #define PRFWMAX    31
 #define LDRMAX    255
@@ -52,7 +51,6 @@
 #define MOVMAX  65535
 /* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
 #define VL_OFS(ofs) ((ofs)>>6)
-#endif
 
 namespace dnnl {
 namespace impl {
@@ -89,7 +87,6 @@ private:
         ker_reg_base_idx = 28,
     };
 
-#if 1
 //[info]v0.21のcodeを少し修正
     const xa::PReg reg_p_all_ones  = p2;
 
@@ -126,10 +123,6 @@ private:
     reg64_t reg_tail = aux_reg_ker;
     reg64_t reg_load_work = reg_tail;
 
-#if 0
-//[info]v1.6での追加コード。変更必要？
-    Xbyak::Opmask k_oc_tail_mask = Xbyak::Opmask(2);
-#endif
 
     /* Temporary registers for ARM insts */
     reg64_t reg_tmp_addr        = x14;
@@ -139,14 +132,12 @@ private:
 
     reg64_t reg_out_org         = x18;
     reg64_t reg_oi_org          = x19;
-#if 1
 //[info]レジスタの割り当ては適当
     reg64_t aux_reg_ker_d_org   = x20;
     reg64_t reg_inp_org         = x23;
     reg64_t reg_ker_org         = x22;
 
     reg64_t reg_tmp = x5;
-#endif
 
     void prefetch(const std::string prfop, int level, reg64_t in, long long int ofs) {
         bool for_load;
@@ -192,16 +183,12 @@ private:
             }
         }
     }
-#endif
 
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
-//    inline void compute_loop_fma(int ur_w, int pad_l, int pad_r);
     inline void compute_loop_fma_core(int ur_w, int pad_l, int pad_r);
-//    inline void compute_loop_4fma(int ur_w, int pad_l, int pad_r);
-//    inline void compute_loop_4fma_1st(int ur_w, int pad_l, int pad_r);
     inline void compute_loop(int ur_w, int pad_l, int pad_r);
 
     void generate();
@@ -316,7 +303,6 @@ private:
         ker_reg_base_idx = 28,
     };
 
-#if 1
 //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
 //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
     reg64_t param               = abi_param1_aarch64;
@@ -358,13 +344,11 @@ private:
     reg64_t reg_src_prf_org     = x19;
     reg64_t reg_src_org         = x20;
     reg64_t reg_oi_org          = x25;
-#if 1
 //[info]レジスタ割り当ては適当
     reg64_t reg_dst_org         = x22;
     reg64_t reg_ker_org         = x26;
     reg64_t reg_input_org       = x22;
     reg64_t reg_kernel_org      = x26;
-#endif
 
     const xa::PReg reg_p_all_ones  = p2;
 
@@ -413,13 +397,10 @@ private:
         }
     }
 
-#endif
-
     xa::ZReg reg_wei = xa::ZReg(31);
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
-//    inline void compute_loop_4fma(int ur_w, int l_overflow, int r_overflow);
     inline void compute_loop_fma(int ur_w, int l_overflow, int r_overflow);
     inline void compute_loop_fma_core(
             int ur_w, int l_overflow, int r_overflow, int k_offset);
@@ -550,7 +531,6 @@ private:
     static const int max_ur_w;
     static const int min_oh_reduce;
 
-#if 1
 //[info]v0.21のcodeを追加。v1.6追加codeは要確認。
     reg64_t param          = abi_param1_aarch64;
     reg64_t reg_input      = x1;
@@ -640,9 +620,6 @@ private:
             }
         }
     }
-#endif
-
-//    Xbyak::Opmask k_oc_mask = Xbyak::Opmask(2);
 
     inline void bias_kernel_2d();
     inline void bias_kernel_3d();
@@ -655,17 +632,6 @@ private:
     inline void compute_ic_block_step(int ur_w, int pad_l, int pad_r,
             int ic_block_step, int input_offset, int kernel_offset,
             int output_offset, bool input_wraparound = false);
-#if 0
-    inline void compute_ic_block_step_fma(int ur_w, int pad_l, int pad_r,
-            int ic_block_step, int input_offset, int kernel_offset,
-            int output_offset, bool input_wraparound);
-    inline void compute_ic_block_step_fma_expl(int ur_w, int pad_l, int pad_r,
-            int ic_block_step, int input_offset, int kernel_offset,
-            int output_offset, bool input_wraparound);
-    inline void compute_ic_block_step_4fma(int ur_w, int pad_l, int pad_r,
-            int ic_block_step, int input_offset, int kernel_offset,
-            int output_offset, bool input_wraparound);
-#endif
     inline void compute_oh_step_common(int ic_block_step, int max_ur_w);
     inline void compute_oh_step_disp();
     inline void compute_oh_loop_common();
@@ -690,23 +656,12 @@ private:
         const bool is_nxc_layout = is_src_layout_nxc();
         const size_t w_shift_st
                 = (jcp.is_hw_transp ? jcp.iw : 1) * jcp.ic_block;
-#if 0
-        ptrdiff_t w_shift = is_nxc_layout
-                ? jcp.ngroups * jcp.ic
-                : (jcp.ver == ver_4fma || jcp.is_1stconv ? 1 : w_shift_st);
-        ptrdiff_t ic_shift = jcp.ver == ver_4fma
-                ? jcp.tr_iw
-                : (jcp.is_1stconv && !is_nxc_layout
-                                ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
-                                : 1);
-#else
         ptrdiff_t w_shift = is_nxc_layout
                 ? jcp.ngroups * jcp.ic
                 : (jcp.is_1stconv ? 1 : w_shift_st);
         ptrdiff_t ic_shift = (jcp.is_1stconv && !is_nxc_layout
                                 ? (ptrdiff_t)jcp.ih * jcp.iw * jcp.id
                                 : 1);
-#endif
 
         ptrdiff_t local_input_offset = i_iw * w_shift + i_ic * ic_shift;
         return input_offset + typesize * local_input_offset;
