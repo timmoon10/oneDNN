@@ -28,13 +28,7 @@ namespace cpu {
 namespace aarch64 {
 
 /* convolution */
-enum conv_version_t {
-    ver_unused,
-    ver_fma,
-    ver_avx512_core,
-    ver_simd,
-    ver_sve
-};
+enum conv_version_t { ver_unused, ver_fma, ver_avx512_core, ver_simd, ver_sve };
 enum conv_loop_order_t {
     loop_cgn,
     loop_gnc,

@@ -20,9 +20,9 @@
 #include "common/c_types_map.hpp"
 #include "common/primitive.hpp"
 
-#include "cpu/cpu_resampling_pd.hpp"
 #include "cpu/aarch64/cpu_isa_traits.hpp"
 #include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/cpu_resampling_pd.hpp"
 
 namespace dnnl {
 namespace impl {

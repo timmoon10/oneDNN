@@ -75,8 +75,8 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
             const memory_desc_t *src_d = src_md();
             rtus_prepare(this, conv_d, src_d, dst_md());
 
-            status_t status = jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jcp_,
-                    *conv_d, *src_d, *weights_md(), *dst_md(), *attr(),
+            status_t status = jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
+                    jcp_, *conv_d, *src_d, *weights_md(), *dst_md(), *attr(),
                     dnnl_get_max_threads(), rtus_.reduce_src_);
             if (status != status::success) return status;
 
@@ -228,8 +228,8 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
                     dw_conv_buffer_size_,
                     types::data_type_size(dw_conv_pd_->src_md()->data_type));
 
-            jit_uni_dw_conv_fwd_kernel<sve,
-                    data_type::f32>::init_scratchpad(dw_scratchpad, jcp_dw);
+            jit_uni_dw_conv_fwd_kernel<sve, data_type::f32>::init_scratchpad(
+                    dw_scratchpad, jcp_dw);
 
             return status::success;
         }
@@ -308,8 +308,8 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t : public primitive_t {
             const memory_desc_t *diff_src_d = diff_src_md();
             rtus_prepare(this, conv_d, diff_src_d, diff_dst_md());
 
-            status_t status = jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jcp_,
-                    *conv_d, *diff_src_d, *weights_md(), *diff_dst_md(),
+            status_t status = jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
+                    jcp_, *conv_d, *diff_src_d, *weights_md(), *diff_dst_md(),
                     *attr(), dnnl_get_max_threads(), rtus_.reduce_src_);
             if (status != status::success) return status;
 
@@ -343,12 +343,11 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t : public primitive_t {
     friend void init_rtus_driver(conv_t *self);
 
     jit_aarch64_sve_512_1x1_convolution_bwd_data_t(const pd_t *apd)
-        : primitive_t(apd), kernel_(nullptr)
-        , rtus_driver_(nullptr) {
+        : primitive_t(apd), kernel_(nullptr), rtus_driver_(nullptr) {
         kernel_ = new jit_aarch64_sve_512_1x1_conv_kernel(
                 pd()->jcp_, *pd()->attr());
         init_rtus_driver<sve>(this);
-    } 
+    }
 
     ~jit_aarch64_sve_512_1x1_convolution_bwd_data_t() {
         delete kernel_;
@@ -399,8 +398,8 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_weights_t : public primitive_t {
             const memory_desc_t *src_d = src_md();
             rtus_prepare(this, conv_d, src_d, diff_dst_md());
 
-            status_t status = jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jcp_,
-                    *conv_d, *src_d, *diff_weights_md(), *diff_dst_md(),
+            status_t status = jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
+                    jcp_, *conv_d, *src_d, *diff_weights_md(), *diff_dst_md(),
                     *attr(), dnnl_get_max_threads(), rtus_.reduce_src_);
             if (status != status::success) return status;
 

@@ -270,7 +270,7 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
         if (eltwise_injector_) eltwise_injector_->prepare_table();
 
 #ifdef DNNL_INDIRECT_JIT_AARCH64
-	binCommit();
+        binCommit();
 #endif
 
         ker_ = getCode<decltype(ker_)>();
