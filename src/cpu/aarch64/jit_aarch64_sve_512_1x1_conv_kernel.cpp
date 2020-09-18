@@ -56,7 +56,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
     xa::LabelAArch64 bcast_loop_tail;
     xa::LabelAArch64 large_tail;
 
-    CGA64::cmp(reg_bcast_loop_iter, jcp.bcast_block);
+    CGA64::cmp_imm(reg_bcast_loop_iter, jcp.bcast_block, reg_tmp_imm);
     CGA64::b(xa::LT, bcast_loop_tail);
 
     CGA64::L_aarch64(bcast_loop); {
@@ -86,7 +86,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
             CGA64::subs_imm(reg_bcast_loop_iter, reg_bcast_loop_iter,
                             jcp.ur, reg_tmp_imm);
         }
-        CGA64::cmp(reg_bcast_loop_iter, jcp.bcast_block);
+        CGA64::cmp_imm(reg_bcast_loop_iter, jcp.bcast_block, reg_tmp_imm);
         CGA64::b(xa::GE, bcast_loop);
     }
 
@@ -94,7 +94,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
     if (jcp.ur_tail) {
         xa::LabelAArch64 bcast_loop_tail_out;
         if (jcp.ur_tail >= jcp.ur) {
-            CGA64::cmp(reg_bcast_loop_iter, jcp.ur);
+            CGA64::cmp_imm(reg_bcast_loop_iter, jcp.ur, reg_tmp_imm);
             CGA64::b(xa::GE, large_tail);
         }
         if (jcp.ur_tail % jcp.ur) {
@@ -722,7 +722,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
     for (int ur_idx = num_ur_cases - 1; ur_idx > 0; ur_idx--) {
         int label_idx = num_ur_cases - ur_idx - 1;
         if (jcp.nb_load > label_idx && jcp.ur <= ur_cases[ur_idx]) {
-            CGA64::cmp(reg_load_loop_work, simd_w * (label_idx + 1));
+            CGA64::cmp_imm(reg_load_loop_work, simd_w * (label_idx + 1), reg_tmp_imm);
             CGA64::b(xa::LE, load_loop_blk[label_idx]);
         }
     }
@@ -738,18 +738,18 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
                 }
                 load_loop_body(label_idx + 1);
                 if (label_idx - 1 > 0) {
-                    CGA64::cmp(reg_load_loop_work, 2 * label_idx * simd_w);
+                    CGA64::cmp_imm(reg_load_loop_work, 2 * label_idx * simd_w, reg_tmp_imm);
                     CGA64::b(xa::EQ, load_loop_blk[label_idx - 1]);
                 }
-                CGA64::cmp(reg_load_loop_work, label_idx * simd_w);
+                CGA64::cmp_imm(reg_load_loop_work, label_idx * simd_w, reg_tmp_imm);
                 CGA64::b(xa::GT, load_loop_blk[label_idx]);
             }
             for (int idx = label_idx - 1; idx > 0; --idx) {
-                CGA64::cmp(reg_load_loop_work, simd_w * (idx + 1));
+                CGA64::cmp_imm(reg_load_loop_work, simd_w * (idx + 1), reg_tmp_imm);
                 CGA64::b(xa::EQ, load_loop_blk[idx]);
             }
             if (ur_idx < num_ur_cases - 2) {
-                CGA64::cmp(reg_load_loop_work, simd_w);
+                CGA64::cmp_imm(reg_load_loop_work, simd_w, reg_tmp_imm);
                 CGA64::b(xa::LE, load_loop_blk[0]);
             }
         }
