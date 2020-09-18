@@ -3227,7 +3227,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
 #else
 //[info]v1.6追加コードを取り敢えず除外
         CGA64::add(reg_add_tmp, reg_output, reg_tmp);
-        CGA64::ldr(xa::ZReg(1), xa::ptr(reg_add_tmp));
+        CGA64::ldr(xa::ZReg(0), xa::ptr(reg_add_tmp));
 #endif
         CGA64::fadd(xa::ZRegS(1), xa::ZRegS(1), xa::ZRegS(0)); 
         CGA64::add_imm(reg_tmp, reg_tmp, oc_mult * jcp.typesize_out, reg_tmp_imm);
