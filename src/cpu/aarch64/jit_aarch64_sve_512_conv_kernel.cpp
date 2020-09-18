@@ -3371,7 +3371,12 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_loop_common() 
 
     const int oj_end_value = nstl::min(
             oh, utils::div_up(ihp - b_pad - (kh - 1) * dilate_h, stride_h));
-    CGA64::cmp(reg_oj, oj_end_value);
+    if( (oj_end_value >> 12) != 0 ){
+        CGA64::mov_imm(reg_tmp_imm, oj_end_value);
+        CGA64::cmp(reg_oj, reg_tmp_imm);
+    }else{
+        CGA64::cmp(reg_oj, oj_end_value);
+    }
     CGA64::b(xa::GE, oh_label_end);
 
     /* Compute middle block(s) */
@@ -3383,7 +3388,12 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_loop_common() 
         CGA64::add_imm(reg_output, reg_output, jcp.typesize_in * ow * out_mult, reg_tmp_imm);
 
         CGA64::add_imm(reg_oj, reg_oj, 1, reg_tmp_imm);
-        CGA64::cmp(reg_oj, oj_end_value);
+        if( (oj_end_value >> 12) != 0 ){
+            CGA64::mov_imm(reg_tmp_imm, oj_end_value);
+            CGA64::cmp(reg_oj, reg_tmp_imm);
+        }else{
+            CGA64::cmp(reg_oj, oj_end_value);
+        }
         CGA64::b(xa::LT, oh_label);
     }
     CGA64::L_aarch64(oh_label_end);
