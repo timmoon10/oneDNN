@@ -2009,7 +2009,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
     if (threaded) {
         CGA64::ldr(reg_iwb, xa::ptr(param, GET_OFF(iwb)));
         CGA64::cmp_imm(reg_iwb, pretail_thread, reg_tmp_imm);
-        CGA64::b(xa::EQ, end_label);
+        CGA64::b(xa::NE, end_label);
     }
 
     CGA64::L_aarch64(pretail_label);
