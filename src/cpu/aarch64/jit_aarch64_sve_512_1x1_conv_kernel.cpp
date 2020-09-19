@@ -870,6 +870,8 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jit_1x1_conv_conf_t &jcp
             = utils::everyone_is(dat_tag_nxc, jcp.src_tag, jcp.dst_tag);
     auto required_dat_tag = is_data_layout_nxc ? dat_tag_nxc : dat_tag_nCx16c;
 
+    if( is_data_layout_nxc ) return status::unimplemented;
+
     /* Channel padding check */
     bool ok_to_pad_channels = true && !is_data_layout_nxc && jcp.ngroups == 1
             && src_d.data_type() == data_type::f32;
@@ -1050,7 +1052,6 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(jit_1x1_conv_conf_t &jcp
             }
         }
         jcp.bcast_block = jcp.ur;
-
         /* Number of steps for the dst address to output, used in bcast_loop() */
         jcp.bcast_loop_output_step = jcp.ur * jcp.typesize_out
                 * (is_data_layout_nxc ? jcp.load_dim : jcp.load_block);
