@@ -41,6 +41,8 @@ SET(WITH_BLAS "" CACHE STRING "Blas type [ssl2/generic]")
 INCLUDE(CheckCSourceRuns)
 INCLUDE(CheckFortranFunctionExists)
 
+INCLUDE(CheckFunctionExists)
+
 MACRO(Check_Fortran_Libraries LIBRARIES _prefix _name _flags _list)
   # This macro checks for the existence of the combination of fortran libraries
   # given by _list.  If the combination is found, this macro checks (using the
