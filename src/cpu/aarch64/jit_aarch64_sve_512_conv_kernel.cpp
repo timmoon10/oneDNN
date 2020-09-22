@@ -3824,12 +3824,13 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
      * JIT-Kernel by unrolling with regards to height instead of width for
      * the source and filter tensors. The JIT-Kernel also transposes the
      * strides for the input and filter memory access. */
-    jcp.is_hw_transp = !is_data_layout_nxc && ndims == 4
-            && jcp.kw >= min_filter_size && jcp.kw < max_filter_size
-            && jcp.ow == 1 && jcp.kw == jcp.iw
-            && everyone_is(1, jcp.stride_w, jcp.stride_h)
-            && everyone_is(0, jcp.dilate_h, jcp.dilate_w)
-            && everyone_is(0, jcp.l_pad, jcp.t_pad, jcp.r_pad, jcp.b_pad);
+    jcp.is_hw_transp = false;
+    //jcp.is_hw_transp = !is_data_layout_nxc && ndims == 4
+    //        && jcp.kw >= min_filter_size && jcp.kw < max_filter_size
+    //        && jcp.ow == 1 && jcp.kw == jcp.iw
+    //        && everyone_is(1, jcp.stride_w, jcp.stride_h)
+    //        && everyone_is(0, jcp.dilate_h, jcp.dilate_w)
+    //        && everyone_is(0, jcp.l_pad, jcp.t_pad, jcp.r_pad, jcp.b_pad);
 
     if (jcp.is_hw_transp) {
         jcp.tr_kw = jcp.kh;
@@ -3891,7 +3892,7 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
     if (!boundaries_ok) return status::unimplemented;
 
     /* yet another common check */
-    if (!jcp.is_hw_transp && jcp.kw > 14) return status::unimplemented;
+    if (!jcp.is_hw_transp && jcp.kw > 13) return status::unimplemented;
 
     /* setting register strategy */
     const int unroll_dim = jcp.is_hw_transp ? jcp.oh : jcp.ow;
