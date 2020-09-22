@@ -2517,6 +2517,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
 {
 
     int kw = jcp.kw;
+    int iw = jcp.iw;
     int ic_block = jcp.ic_block;
     int oc_block = jcp.oc_block;
     for (int i_kw = 0; i_kw < kw; i_kw++) {
@@ -2557,16 +2558,12 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
         }
 
         for (int i_kw = 0; i_kw < kw; i_kw++) {
-            int i_iw = i_ur * jcp.stride_w + i_kw * (jcp.dilate_w + 1);
-            if (i_iw - pad_l < 0 || i_iw > (ur_w - 1) * jcp.stride_w +
-                    (kw - 1) * (jcp.dilate_w + 1) - pad_r) continue;
+            int i_iw = get_iw_idx(i_ur, i_kw, pad_l);
+            if (i_iw < 0 || i_iw > get_iw_idx(ur_w - 1, kw - 1, pad_l) - pad_r
+                    || get_iw_idx(i_ur, i_kw, jcp.l_pad) >= iw)
+                continue;
             for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
-                const size_t i_offset = (size_t)input_offset
-                    + (size_t)typesize * (
-                             (jcp.is_1stconv
-                                ? (i_iw - pad_l) + (size_t)i_ic
-                                    * ((size_t)jcp.ih*jcp.iw*jcp.id)
-                                : (i_iw - pad_l) * ic_block + i_ic));
+                size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
                 assert((i_kw * ic_block_step + i_ic) < 31);
                 assert((kw * ic_block_step + (i_ur % 4)) < 31);
                 assert(i_offset < (1LL<<31));
