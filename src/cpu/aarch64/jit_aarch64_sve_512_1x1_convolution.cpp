@@ -515,9 +515,9 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_data_t<diff_dst_type, wei_type,
                                 + ithr * pd()->rtus_.space_per_thread_;
                         p.output_data = rp.ws;
                     } else
-                      p.output_data = diff_src
-                            + data_blk_off(
-                                    diff_src_d, n, ic_off_idx, id, ih, iw);
+                        p.output_data = diff_src
+                                + data_blk_off(
+                                        diff_src_d, n, ic_off_idx, id, ih, iw);
 
                     for (int ocb_inner = 0; ocb_inner < nboc_inner;
                             ocb_inner += ocb_inner_step) {
@@ -550,9 +550,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_data_t<diff_dst_type, wei_type,
 
                         kernel_->jit_ker(&p);
                     }
-                    if (pd()->rtus_.reduce_src_){
-                        rtus_driver_->ker_(&rp);
-                    }
+                    if (pd()->rtus_.reduce_src_) { rtus_driver_->ker_(&rp); }
                 }
             }
         }
@@ -567,7 +565,6 @@ template struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t<data_type::f32>;
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
 
-
 jit_aarch64_sve_512_1x1_convolution_bwd_weights_t ::
         jit_aarch64_sve_512_1x1_convolution_bwd_weights_t(const pd_t *apd)
     : primitive_t(apd)
@@ -576,15 +573,15 @@ jit_aarch64_sve_512_1x1_convolution_bwd_weights_t ::
     , reducer_bias_(nullptr)
     , rtus_driver_(nullptr) {
 
-    kernel_ = new jit_aarch64_sve_512_1x1_conv_kernel(pd()->jcp_, *pd()->attr());
+    kernel_ = new jit_aarch64_sve_512_1x1_conv_kernel(
+            pd()->jcp_, *pd()->attr());
     acc_ker_ = new cpu_accumulator_1d_t<data_type::f32>();
     reducer_bias_ = new cpu_reducer_t<data_type::f32>(pd()->reducer_bia_conf_);
     init_rtus_driver<sve>(this);
-
 }
 
-void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::execute_backward_weights(
-        const exec_ctx_t &ctx) const {
+void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
+        execute_backward_weights(const exec_ctx_t &ctx) const {
     auto diff_dst = CTX_IN_MEM(const data_t *, DNNL_ARG_DIFF_DST);
     auto src = CTX_IN_MEM(const data_t *, DNNL_ARG_SRC);
     auto diff_weights = CTX_OUT_MEM(data_t *, DNNL_ARG_DIFF_WEIGHTS);
@@ -675,7 +672,6 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::execute_backward_weights
         const int ithr_oc_b = ithr / jcp.nthr_ic_b % jcp.nthr_oc_b;
         const int ithr_g = ithr / jcp.nthr_ic_b / jcp.nthr_oc_b % jcp.nthr_g;
         const int ithr_mb = ithr / jcp.nthr_ic_b / jcp.nthr_oc_b / jcp.nthr_g;
-
 
         /* reduction dimension */
         int mb_sp_b_start {0}, mb_sp_b_end {0};

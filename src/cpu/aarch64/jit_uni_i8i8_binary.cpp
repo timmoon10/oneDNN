@@ -302,11 +302,11 @@ struct jit_uni_i8i8_binary_kernel_t : public i8i8_binary_kernel_t,
         postamble();
 
         if (eltwise_injector_) {
-	  eltwise_injector_->prepare_table();
+            eltwise_injector_->prepare_table();
 #ifdef DNNL_INDIRECT_JIT_AARCH64
-	  binCommit();
+            binCommit();
 #endif
-	}
+        }
 
         ker_ = getCode<decltype(ker_)>();
     }

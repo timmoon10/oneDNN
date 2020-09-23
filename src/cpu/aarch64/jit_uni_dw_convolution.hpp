@@ -21,9 +21,9 @@
 #include "common/memory_tracking.hpp"
 #include "common/primitive.hpp"
 
-#include "cpu/cpu_convolution_pd.hpp"
 #include "cpu/aarch64/cpu_barrier.hpp"
 #include "cpu/aarch64/cpu_reducer.hpp"
+#include "cpu/cpu_convolution_pd.hpp"
 
 #include "cpu/aarch64/jit_uni_dw_conv_kernel_utils.hpp"
 
@@ -216,12 +216,8 @@ struct jit_uni_dw_convolution_bwd_weights_t : public primitive_t {
         bool set_default_formats() {
             using namespace format_tag;
 
-            auto dat_tag = isa == sve
-                    ? nChw16c
-                    : nChw8c;
-            auto wei_tag = isa == sve
-                    ? Goihw16g
-                    : Goihw8g;
+            auto dat_tag = isa == sve ? nChw16c : nChw8c;
+            auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
 
             return set_default_formats_common(dat_tag, wei_tag, dat_tag);
         }

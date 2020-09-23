@@ -40,7 +40,6 @@
 #include "cpu/aarch64/xbyak_translator_aarch64/xbyak/xbyak.h"
 #include "cpu/aarch64/xbyak_translator_aarch64/xbyak/xbyak_util.h"
 
-
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -57,7 +56,7 @@ enum cpu_isa_bit_t : unsigned {
     avx512_core_vnni_bit = 1u << 7,
     avx512_core_bf16_bit = 1u << 8,
     simd_bit = 1u << 9,
-    sve_bit  = 1u << 10,
+    sve_bit = 1u << 10,
 };
 
 enum cpu_isa_t : unsigned {
@@ -71,8 +70,8 @@ enum cpu_isa_t : unsigned {
     avx512_core = avx512_core_bit | avx512_common,
     avx512_core_vnni = avx512_core_vnni_bit | avx512_core,
     avx512_core_bf16 = avx512_core_bf16_bit | avx512_core_vnni,
-    simd    = simd_bit | avx512_core_bf16,
-    sve     = sve_bit | simd,
+    simd = simd_bit | avx512_core_bf16,
+    sve = sve_bit | simd,
     isa_all = ~0u,
 };
 
@@ -158,7 +157,6 @@ struct cpu_isa_traits<avx512_core_bf16> : public cpu_isa_traits<avx512_core> {
     static constexpr const char *user_option_env = "AVX512_CORE_BF16";
 };
 
-
 template <>
 struct cpu_isa_traits<simd> {
     typedef Xbyak::Xbyak_aarch64::VReg4S Vmm;
@@ -209,10 +207,8 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
         case avx512_core_bf16:
             return mayiuse(avx512_core_vnni, soft)
                     && cpu.has(Cpu::tAVX512_BF16);
-        case simd:
-            return true && cpu.has(Cpu::tSIMD);
-        case sve:
-            return true && cpu.has(Cpu::tSVE);
+        case simd: return true && cpu.has(Cpu::tSIMD);
+        case sve: return true && cpu.has(Cpu::tSVE);
         case isa_any: return true;
         case isa_all: return false;
     }

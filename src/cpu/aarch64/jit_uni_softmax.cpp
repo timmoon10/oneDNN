@@ -248,17 +248,17 @@ struct jit_softmax_base_t : public jit_generator {
             backward();
         postamble();
         if (exp_injector_) {
-	  exp_injector_->prepare_table();
+            exp_injector_->prepare_table();
 #ifdef DNNL_INDIRECT_JIT_AARCH64
-	  binCommit();
+            binCommit();
 #endif
-	}
+        }
         if (log_injector_) {
-	  log_injector_->prepare_table();
+            log_injector_->prepare_table();
 #ifdef DNNL_INDIRECT_JIT_AARCH64
-	  binCommit();
+            binCommit();
 #endif
-	}
+        }
         ker = reinterpret_cast<decltype(ker)>(const_cast<uint8_t *>(getCode()));
     }
 

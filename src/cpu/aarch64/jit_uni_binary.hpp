@@ -24,8 +24,8 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/cpu_eltwise_pd.hpp"
 #include "cpu/aarch64/cpu_isa_traits.hpp"
+#include "cpu/cpu_eltwise_pd.hpp"
 
 #include "cpu/cpu_binary_pd.hpp"
 

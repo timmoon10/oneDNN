@@ -26,9 +26,9 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
+#include "cpu/aarch64/jit_uni_reorder.hpp"
 #include "cpu/cpu_primitive.hpp"
 #include "cpu/cpu_reorder_pd.hpp"
-#include "cpu/aarch64/jit_uni_reorder.hpp"
 
 #include "cpu/aarch64/jit_aarch64_sve_512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
@@ -1619,7 +1619,7 @@ struct jit_blk_reorder_t : public primitive_t {
                 const memory_desc_t *dst_md) {
             auto prb = tr::prb_t();
 
-            if(mayiuse(sve)) return status::unimplemented; // TODO
+            if (mayiuse(sve)) return status::unimplemented; // TODO
 
             status_t prb_init_status = prb_init(prb, *src_md, *dst_md, attr);
             if (prb_init_status != status::success) return prb_init_status;
