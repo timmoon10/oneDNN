@@ -377,7 +377,7 @@ private:
 
         bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
-            xa::Prfop op;
+            xa::Prfop op = xa::PLDL1KEEP;
             switch (level) {
                 case 1:
                     op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
@@ -398,7 +398,7 @@ private:
                 CGA64::prfm(op, xa::ptr(reg_tmp_addr));
             }
         } else {
-            xa::PrfopSve op_sve;
+            xa::PrfopSve op_sve = xa::PLDL1KEEP_SVE;
             switch (level) {
                 case 1:
                     op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
