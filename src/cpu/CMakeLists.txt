@@ -71,7 +71,8 @@ endif()
 
 if (DNNL_TARGET_ARCH STREQUAL "AARCH64")
 
-  if(DNNL_INDIRECT_JIT_AARCH64)
+  # fix for PyTorch 1.6 + oneDNN 1.6 build using fcc, 2020/9/23
+  # if(DNNL_INDIRECT_JIT_AARCH64)
     append(CMAKE_C_FLAGS "-DDNNL_INDIRECT_JIT_AARCH64")
     append(CMAKE_CXX_FLAGS "-DDNNL_INDIRECT_JIT_AARCH64")
 
@@ -80,7 +81,7 @@ if (DNNL_TARGET_ARCH STREQUAL "AARCH64")
 
     append(CMAKE_C_FLAGS "-DXBYAK_AARCH64_FOR_DNNL")
     append(CMAKE_CXX_FLAGS "-DXBYAK_AARCH64_FOR_DNNL")
-  endif()
+  # endif()
 
   include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/aarch64/xbyak_translator_aarch64/xbyak

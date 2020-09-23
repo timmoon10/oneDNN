@@ -105,7 +105,10 @@ elseif(UNIX OR MINGW)
              set(DEF_ARCH_OPT_FLAGS "-O3")
              # For native compilation tune for the host processor
              if (CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
-                 append(DEF_ARCH_OPT_FLAGS "-mcpu=native")
+                 if (NOT CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
+                     NOT CMAKE_C_COMPILER MATCHES ".*/fcc$")
+                     append(DEF_ARCH_OPT_FLAGS "-mcpu=native")
+                 endif()
              endif()
         elseif(DNNL_TARGET_ARCH STREQUAL "PPC64")
              set(DEF_ARCH_OPT_FLAGS "-O3")
@@ -163,7 +166,10 @@ elseif(UNIX OR MINGW)
              set(DEF_ARCH_OPT_FLAGS "-O3")
              # For native compilation tune for the host processor
              if (CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
-                 append(DEF_ARCH_OPT_FLAGS "-mcpu=native")
+                 if (NOT CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
+                     NOT CMAKE_C_COMPILER MATCHES ".*/fcc$")
+                     append(DEF_ARCH_OPT_FLAGS "-mcpu=native")
+                 endif()
              endif()
         elseif(DNNL_TARGET_ARCH STREQUAL "PPC64")
              set(DEF_ARCH_OPT_FLAGS "-O3")
