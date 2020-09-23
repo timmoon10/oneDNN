@@ -40,7 +40,6 @@
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 #include "cpu/platform.hpp"
 
-
 #define GET_OFF(field) static_cast<int32_t>(offsetof(jit_conv_call_s, field))
 #define KNx_L2_EFFECTIVE_CAPACITY ((512 - 64) * 1024)
 #define A64FX_L2_EFFECTIVE_CAPACITY ((666 - 128) * 1024)
@@ -490,8 +489,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                     // if src has only tails to compute, skip early
                     if (jcp.ic == ic_tail) {
                         break;
-                    }
-                    else if (ic == ic_tail) {
+                    } else if (ic == ic_tail) {
                         CGA64::cmp_imm(reg_channel, ic_tail, reg_tmp_imm);
                         CGA64::b(xa::EQ, ic_tail_jmp[ki]);
                     }
@@ -745,9 +743,12 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
                                 reg_tmp_imm);
                         compute_loop(ur_w, 0, 0);
 
-                        CGA64::add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
-                        CGA64::add_imm(reg_out, reg_out, out_shift, reg_tmp_imm);
-                        CGA64::add_imm(reg_oi, reg_oi, 1, reg_tmp_imm); //inc(reg_oi);
+                        CGA64::add_imm(
+                                reg_inp, reg_inp, inp_shift, reg_tmp_imm);
+                        CGA64::add_imm(
+                                reg_out, reg_out, out_shift, reg_tmp_imm);
+                        CGA64::add_imm(
+                                reg_oi, reg_oi, 1, reg_tmp_imm); //inc(reg_oi);
                         CGA64::cmp_imm(reg_oi, n_oi, reg_tmp_imm);
 
                         CGA64::b(xa::LT, ow_loop_label);
@@ -843,7 +844,8 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         CGA64::cmp_imm(reg_owb, jcp.nb_ow - 1, reg_tmp_imm); // last ow-block ?
         CGA64::mov(reg_oi, n_oi_last_ow_block);
         CGA64::b(xa::EQ, oi_loop_label);
-        CGA64::cmp_imm(reg_owb, jcp.nb_ow - 2, reg_tmp_imm); // next to last ow-block ?
+        CGA64::cmp_imm(
+                reg_owb, jcp.nb_ow - 2, reg_tmp_imm); // next to last ow-block ?
         CGA64::mov(reg_oi, n_oi_next_last_ow_block);
         CGA64::b(xa::EQ, oi_loop_label);
         CGA64::mov(reg_oi, n_oi_not_last_ow_block); // other middle ow-blocks
@@ -873,7 +875,8 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         } else {
             CGA64::b(xa::EQ, end_label);
         }
-        CGA64::cmp_imm(reg_owb, jcp.nb_ow - 2, reg_tmp_imm); // next to last ow-block ?
+        CGA64::cmp_imm(
+                reg_owb, jcp.nb_ow - 2, reg_tmp_imm); // next to last ow-block ?
         CGA64::b(xa::LT, end_label);
         if (next_last_ow_block_padded) {
             CGA64::b(xa::EQ, last_oi_label);
@@ -995,18 +998,18 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     const auto dat_tag_nxc = pick(ndims - 3, nwc, nhwc, ndhwc);
     const auto dat_tag_ncx = pick(ndims - 3, ncw, nchw, ncdhw);
     const auto dat_tag_nCx16c = pick(ndims - 3, nCw16c, nChw16c, nCdhw16c);
-    auto curr_src_tag = src_d.matches_one_of_tag( dat_tag_nxc, dat_tag_nCx16c, dat_tag_ncx );
-    auto curr_dst_tag = dst_d.matches_one_of_tag( dat_tag_nxc, dat_tag_nCx16c );
+    auto curr_src_tag = src_d.matches_one_of_tag(
+            dat_tag_nxc, dat_tag_nCx16c, dat_tag_ncx);
+    auto curr_dst_tag = dst_d.matches_one_of_tag(dat_tag_nxc, dat_tag_nCx16c);
     bool is_data_layout_nxc
             = utils::everyone_is(dat_tag_nxc, curr_src_tag, curr_dst_tag);
 
-
     /* 1st convolution check */
     jcp.is_1stconv = is_1stconv(jcp);
-  
+
     /* Padding check (Channel) */
-    bool ok_to_pad_channels = true && jcp.ngroups == 1
-            && src_d.data_type() == data_type::f32;
+    bool ok_to_pad_channels
+            = true && jcp.ngroups == 1 && src_d.data_type() == data_type::f32;
 
     const int full_simd_w = cpu_isa_traits<sve>::vlen / typesize;
     jcp.simd_w = full_simd_w;
@@ -1026,12 +1029,8 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     jcp.ic_tail = 0;
     jcp.oc_tail = 0;
 
-
     /* Post operation check */
-    if (!post_ops_ok(jcp, attr)) {
-        return status::unimplemented;
-    }
-
+    if (!post_ops_ok(jcp, attr)) { return status::unimplemented; }
 
     /* Eltwise operation check */
     const auto &p = attr.post_ops_;
@@ -1040,10 +1039,10 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     jcp.with_eltwise = eltwise_ind != -1;
     if (jcp.with_eltwise) {
         jcp.eltwise = p.entry_[eltwise_ind].eltwise;
-        if(jcp.eltwise.alg == alg_kind::eltwise_pow) return status::unimplemented;
+        if (jcp.eltwise.alg == alg_kind::eltwise_pow)
+            return status::unimplemented;
         if (dst_d.data_type() == data_type::s32) return status::unimplemented;
     }
-
 
     format_tag_t src_tag, dst_tag, wei_tag;
 
@@ -2723,7 +2722,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
             // icb loop supported for src in nxc layout only
             assert(src_layout_nxc);
             CGA64::add_imm(reg_input, reg_input, input_icb_shift, reg_tmp_imm);
-            CGA64::add_imm(reg_kernel, reg_kernel, kernel_icb_shift, reg_tmp_imm);
+            CGA64::add_imm(
+                    reg_kernel, reg_kernel, kernel_icb_shift, reg_tmp_imm);
             CGA64::cmp_imm(reg_icb, ic_block, reg_tmp_imm);
             CGA64::b(xa::GE, icb_block_label);
         }
@@ -2842,7 +2842,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
             CGA64::add_imm(reg_kernel, reg_kernel,
                     jcp.typesize_out * ic_block_step * oc_block, reg_tmp_imm);
             CGA64::sub_imm(b_ic, b_ic, ic_block_step, reg_tmp_imm);
-            if (generate_icb_loop || ic_tail) CGA64::sub_imm(reg_icb, reg_icb, ic_block_step, reg_tmp_imm);
+            if (generate_icb_loop || ic_tail)
+                CGA64::sub_imm(reg_icb, reg_icb, ic_block_step, reg_tmp_imm);
             CGA64::cmp_imm(b_ic, ic_block_step, reg_tmp_imm);
             CGA64::b(xa::GE, ic_block_label);
         }
@@ -3060,7 +3061,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
             CGA64::add_imm(reg_kernel, reg_kernel,
                     jcp.typesize_out * ic_block_step * oc_block, reg_tmp_imm);
             CGA64::sub_imm(b_ic, b_ic, ic_block_step, reg_tmp_imm);
-            if (generate_icb_loop || ic_tail) CGA64::sub_imm(reg_icb, reg_icb, ic_block_step, reg_tmp_imm);
+            if (generate_icb_loop || ic_tail)
+                CGA64::sub_imm(reg_icb, reg_icb, ic_block_step, reg_tmp_imm);
             CGA64::cmp_imm(b_ic, ic_block_step, reg_tmp_imm);
             CGA64::b(xa::GE, ic_block_label);
         }
@@ -3228,8 +3230,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
             CGA64::str(xa::ZReg(0), xa::ptr(reg_add_tmp));
         }
 
-
-        CGA64::add_imm(reg_tmp, reg_tmp, jcp.ic_block * jcp.oc_block * jcp.typesize_out, reg_tmp_imm);
+        CGA64::add_imm(reg_tmp, reg_tmp,
+                jcp.ic_block * jcp.oc_block * jcp.typesize_out, reg_tmp_imm);
         CGA64::cmp_imm(reg_tmp, kernel_block_bytes, reg_tmp_imm);
         CGA64::b(xa::NE, zeroing_loop);
     }
@@ -3454,7 +3456,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
                         reg_tmp_imm);
 
                 CGA64::add_imm(reg_oj, reg_oj, 1, reg_tmp_imm);
-                CGA64::cmp_imm(reg_oj, nstl::min(utils::div_up(t_pad, stride_h), oh), reg_tmp_imm);
+                CGA64::cmp_imm(reg_oj,
+                        nstl::min(utils::div_up(t_pad, stride_h), oh),
+                        reg_tmp_imm);
                 CGA64::b(xa::LT, oh_tpad_tail_label);
             }
         }
@@ -3608,8 +3612,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     if (jcp.t_pad > 0) {
 
         /* Check if within top padding region */
-        assert(div_up(jcp.t_pad, jcp.stride_h) >= 0 &&
-                div_up(jcp.t_pad, jcp.stride_h) < ADDMAX);
+        assert(div_up(jcp.t_pad, jcp.stride_h) >= 0
+                && div_up(jcp.t_pad, jcp.stride_h) < ADDMAX);
         CGA64::cmp_imm(reg_oj, div_up(jcp.t_pad, jcp.stride_h), reg_tmp_imm);
         CGA64::b(xa::GE, top_padding_end_label);
 
@@ -3653,8 +3657,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     if (jcp.b_pad > 0) {
 
         /* Check if within bottom padding region */
-        assert((input_bottom_padding_overlap - 1)>=0 &&
-                (input_bottom_padding_overlap - 1)<ADDMAX);
+        assert((input_bottom_padding_overlap - 1) >= 0
+                && (input_bottom_padding_overlap - 1) < ADDMAX);
         CGA64::cmp_imm(reg_oj, input_bottom_padding_overlap - 1, reg_tmp_imm);
         CGA64::b(xa::LT, bottom_padding_end_label);
         CGA64::b(xa::GT, bottom_padding_label);
@@ -3751,7 +3755,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     if (jcp.f_pad > 0) {
 
         /* Check if within fpad region */
-        CGA64::cmp_imm(reg_d_index, div_up(jcp.f_pad, jcp.stride_d), reg_tmp_imm);
+        CGA64::cmp_imm(
+                reg_d_index, div_up(jcp.f_pad, jcp.stride_d), reg_tmp_imm);
         CGA64::b(xa::GE, fpad_end_label);
 
         /* Fpad steps */
@@ -3837,7 +3842,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_loop() {
         default: assert(!"Invalid harness type");
     }
 }
-
 
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::generate() {
     preamble();
