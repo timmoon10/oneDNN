@@ -576,10 +576,11 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
             }
 
             int num_bcast_load = 0;
-            for(int i_ur = 0; i_ur < ur; ++i_ur){
-              if( (bcast_reg_ofs + i_ur) >= 32) break;
-              prev_bcast_ofs = bcast_load(i_reduce, i_ur, prev_bcast_ofs, bcast_reg_ofs + (i_ur % num_bcast_regs));
-              num_bcast_load++;
+            for (int i_ur = 0; i_ur < ur; ++i_ur) {
+                if ((bcast_reg_ofs + i_ur) >= 32) break;
+                prev_bcast_ofs = bcast_load(i_reduce, i_ur, prev_bcast_ofs,
+                        bcast_reg_ofs + (i_ur % num_bcast_regs));
+                num_bcast_load++;
             }
 
             for (int i_ur = 0; i_ur < ur; ++i_ur) {
@@ -594,11 +595,12 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                             vreg_bcast_s(
                                     bcast_reg_ofs + (i_ur % num_bcast_regs)));
                 }
-                if((num_bcast_load + i_ur) < ur)
-                    prev_bcast_ofs = bcast_load(i_reduce, num_bcast_load+i_ur,
-                                            prev_bcast_ofs,
-                                            bcast_reg_ofs + ((i_ur + num_bcast_load) % num_bcast_regs));
-
+                if ((num_bcast_load + i_ur) < ur)
+                    prev_bcast_ofs = bcast_load(i_reduce, num_bcast_load + i_ur,
+                            prev_bcast_ofs,
+                            bcast_reg_ofs
+                                    + ((i_ur + num_bcast_load)
+                                            % num_bcast_regs));
             }
         }
     };
@@ -749,7 +751,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
     for (int ur_idx = num_ur_cases - 1; ur_idx > 0; ur_idx--) {
         int label_idx = num_ur_cases - ur_idx - 1;
         if (jcp.nb_load > label_idx && jcp.ur <= ur_cases[ur_idx]) {
-            CGA64::cmp_imm(reg_load_loop_work, simd_w * (label_idx + 1), reg_tmp_imm);
+            CGA64::cmp_imm(
+                    reg_load_loop_work, simd_w * (label_idx + 1), reg_tmp_imm);
             CGA64::b(xa::LE, load_loop_blk[label_idx]);
         }
     }
@@ -765,14 +768,17 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
                 }
                 load_loop_body(label_idx + 1);
                 if (label_idx - 1 > 0) {
-                    CGA64::cmp_imm(reg_load_loop_work, 2 * label_idx * simd_w, reg_tmp_imm);
+                    CGA64::cmp_imm(reg_load_loop_work, 2 * label_idx * simd_w,
+                            reg_tmp_imm);
                     CGA64::b(xa::EQ, load_loop_blk[label_idx - 1]);
                 }
-                CGA64::cmp_imm(reg_load_loop_work, label_idx * simd_w, reg_tmp_imm);
+                CGA64::cmp_imm(
+                        reg_load_loop_work, label_idx * simd_w, reg_tmp_imm);
                 CGA64::b(xa::GT, load_loop_blk[label_idx]);
             }
             for (int idx = label_idx - 1; idx > 0; --idx) {
-                CGA64::cmp_imm(reg_load_loop_work, simd_w * (idx + 1), reg_tmp_imm);
+                CGA64::cmp_imm(
+                        reg_load_loop_work, simd_w * (idx + 1), reg_tmp_imm);
                 CGA64::b(xa::EQ, load_loop_blk[idx]);
             }
             if (ur_idx < num_ur_cases - 2) {
@@ -886,7 +892,8 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     jcp.with_eltwise = eltwise_ind != -1;
     if (jcp.with_eltwise) {
         jcp.eltwise = p.entry_[eltwise_ind].eltwise;
-        if(jcp.eltwise.alg == alg_kind::eltwise_pow) return status::unimplemented;
+        if (jcp.eltwise.alg == alg_kind::eltwise_pow)
+            return status::unimplemented;
         if (dst_d.data_type() == data_type::s32) return status::unimplemented;
     }
 
@@ -899,7 +906,7 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
             = utils::everyone_is(dat_tag_nxc, jcp.src_tag, jcp.dst_tag);
     auto required_dat_tag = is_data_layout_nxc ? dat_tag_nxc : dat_tag_nCx16c;
 
-    if( is_data_layout_nxc ) return status::unimplemented;
+    if (is_data_layout_nxc) return status::unimplemented;
 
     /* Channel padding check */
     bool ok_to_pad_channels = true && !is_data_layout_nxc && jcp.ngroups == 1
@@ -925,7 +932,7 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     jcp.ic_block = jcp.oc_block = simd_w;
 
     jcp.transpose_src = false; // TODO: remove?
-    jcp.use_vmovntps = false;  // TODO: remove?
+    jcp.use_vmovntps = false; // TODO: remove?
 
     if (everyone_is(data_type::f32, src_d.data_type(), weights_d.data_type(),
                 dst_d.data_type())) {
@@ -986,22 +993,22 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         if (one_of(jcp.prop_kind, forward_training, forward_inference)) {
             /* Forward */
             if (jcp.with_dw_conv) jcp.ur = nstl::min(jcp.ow, jcp.ur);
-            jcp.reduce_dim = jcp.ic;            // src channel
-            jcp.reduce_block = jcp.ic_block;    // src simd_w
+            jcp.reduce_dim = jcp.ic; // src channel
+            jcp.reduce_block = jcp.ic_block; // src simd_w
 
-            jcp.load_dim = jcp.oc;              // dst channel
-            jcp.load_block = jcp.oc_block;      // dst simd_W
+            jcp.load_dim = jcp.oc; // dst channel
+            jcp.load_block = jcp.oc_block; // dst simd_W
 
-            jcp.bcast_dim = jcp.is;             // src H*W
+            jcp.bcast_dim = jcp.is; // src H*W
         } else {
             /* Backward data */
-            jcp.reduce_dim = jcp.oc;            // src channel
-            jcp.reduce_block = jcp.oc_block;    // src simd_w
+            jcp.reduce_dim = jcp.oc; // src channel
+            jcp.reduce_block = jcp.oc_block; // src simd_w
 
-            jcp.load_dim = jcp.ic;              // dst channel
-            jcp.load_block = jcp.ic_block;      // dst simd_w
+            jcp.load_dim = jcp.ic; // dst channel
+            jcp.load_block = jcp.ic_block; // dst simd_w
 
-            jcp.bcast_dim = jcp.os;             // src H*W
+            jcp.bcast_dim = jcp.os; // src H*W
         }
 
         /* # of consecutive channel elements  */
@@ -1026,13 +1033,13 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         // spatial : H*D of dst
         const int spatial
                 = (one_of(jcp.prop_kind, forward_training, forward_inference))
-                ? jcp.od * jcp.oh   // forward
-                : jcp.id * jcp.ih;  // backward
+                ? jcp.od * jcp.oh // forward
+                : jcp.id * jcp.ih; // backward
 
-        max_regs = 9;             // max # of ur_w
-        min_regs = 6;             // min # of ur_w
+        max_regs = 9; // max # of ur_w
+        min_regs = 6; // min # of ur_w
         size_threshold = 14;
-        ur_step = 1;              // step size of ur_w param checking
+        ur_step = 1; // step size of ur_w param checking
         jcp.expl_bcast = true;
         jcp.use_vmovntps = true;
         jcp.ur = 1;
@@ -1049,8 +1056,8 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
          *                256 > src channel
          */
         if (jcp.load_dim > 128 && jcp.load_dim < BIG_LOAD_DIM
-            && spatial > SMALL_SPATIAL && spatial < BIG_SPATIAL
-            && jcp.reduce_dim < 256) {
+                && spatial > SMALL_SPATIAL && spatial < BIG_SPATIAL
+                && jcp.reduce_dim < 256) {
             max_regs = 6;
             min_regs = 5;
         }
@@ -1069,7 +1076,8 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         }
 
         if (jcp.ur == 1) {
-            jcp.ur = nstl::min(max_regs, jcp.os); // If ur = 1, then min(max_regs, H*W of dst)
+            jcp.ur = nstl::min(max_regs,
+                    jcp.os); // If ur = 1, then min(max_regs, H*W of dst)
             int os_tail = jcp.os % max_regs;
             for (int i = max_regs; i >= min_regs; i -= ur_step) {
                 int i_tail = jcp.os % i;
