@@ -570,7 +570,6 @@ template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
     preamble();
     CGA64::ptrue(reg_p_all_ones.b);
-
     CGA64::ldr(reg_dsrc, xa::ptr(abi_param1_aarch64, GET_OFF(src)));
     CGA64::ldr(reg_ddst, xa::ptr(abi_param1_aarch64, GET_OFF(dst)));
     CGA64::ldr(reg_kernel, xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
@@ -617,10 +616,17 @@ template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_filter() {
     for (int i = 0; i < jcp.kw; ++i) {
         int off_filter = i * simd_w;
-        xa::ZReg zreg_acc = get_acc_reg(i);
         CGA64::add_imm(reg_tmp_addr, reg_tmp_filter, off_filter * sizeof(float),
                 reg_tmp_imm);
-        CGA64::ldr(zreg_acc, xa::ptr(reg_tmp_addr));
+        if(simd_w == 16){
+            xa::ZReg zreg_acc = get_acc_reg(i);
+            CGA64::ldr(zreg_acc, xa::ptr(reg_tmp_addr));
+        }else if(simd_w == 8){
+            xa::ZRegS zregs_acc = get_acc_reg_s(i);
+            CGA64::ld1w(zregs_acc, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+        }else{
+            assert(!"Unsupport: simd_w != 16, 8");
+        }
     }
 }
 
@@ -657,7 +663,13 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
 
         CGA64::add_imm(reg_tmp_addr, reg_tmp_output, off_output * sizeof(float),
                 reg_tmp_imm);
-        CGA64::ldr(zreg_output, xa::ptr(reg_tmp_addr));
+        if(simd_w == 16){
+            CGA64::ldr(zreg_output, xa::ptr(reg_tmp_addr));
+        }else if(simd_w == 8){
+            CGA64::ld1w(zregs_output, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+        }else{
+            assert(!"Unsupport: simd_w != 16, 8");
+        }
 
         if (i_ur == 0) {
             for (int c = 0; c < input_overlap; ++c) {
@@ -668,11 +680,19 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-                xa::ZReg zreg_input = get_input_reg(c % jcp.kw);
 
                 CGA64::add_imm(reg_tmp_addr, reg_tmp_input,
                         off_input * sizeof(float), reg_tmp_imm);
-                CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
+                if(simd_w == 16){
+                    xa::ZReg zreg_input = get_input_reg(c % jcp.kw);
+                    CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
+                }else if(simd_w == 8){
+                    xa::ZRegS zregs_input = get_input_reg_s(c % jcp.kw);
+                    CGA64::ld1w(zregs_input, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                }else{
+                    assert(!"Unsupport: simd_w != 16, 8");
+                }
+ 
             }
         } else {
             for (int c = 0; c < cascade_input; ++c) {
@@ -685,10 +705,17 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (overlap + c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-                xa::ZReg zreg_input = get_input_reg((overlap + c) % jcp.kw);
                 CGA64::add_imm(reg_tmp_addr, reg_tmp_input,
                         off_input * sizeof(float), reg_tmp_imm);
-                CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
+                if(simd_w == 16){
+                    xa::ZReg zreg_input = get_input_reg((overlap + c) % jcp.kw);
+                    CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
+                }else if(simd_w == 8){
+                    xa::ZRegS zregs_input = get_input_reg_s((overlap + c) % jcp.kw);
+                    CGA64::ld1w(zregs_input, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                }else{
+                    assert(!"Unsupport: simd_w != 16, 8");
+                }
             }
         }
 
@@ -723,7 +750,13 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_step_unroll(
         int off_output = i * simd_w;
         CGA64::add_imm(reg_tmp_addr, reg_tmp_output, off_output * sizeof(float),
                 reg_tmp_imm);
-        CGA64::ldr(xa::ZReg(31), xa::ptr(reg_tmp_addr));
+        if(simd_w == 16){
+            CGA64::ldr(xa::ZReg(31), xa::ptr(reg_tmp_addr));
+        }else if(simd_w == 8){
+            CGA64::ld1w(xa::ZRegS(31), reg_p_all_ones, xa::ptr(reg_tmp_addr));
+        }else{
+            assert(!"Unsupport: simd_w != 16, 8");
+        }
         CGA64::fadd(zregs_bias, zregs_bias, xa::ZRegS(31));
     }
 }
@@ -732,17 +765,31 @@ template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_filter() {
     for (int i = 0; i < jcp.kw; ++i) {
         int off_filter = i * simd_w;
-        xa::ZReg zreg_acc = get_acc_reg(i);
         CGA64::add_imm(reg_tmp_addr, reg_tmp_filter, off_filter * sizeof(float),
                 reg_tmp_imm);
-        CGA64::str(zreg_acc, xa::ptr(reg_tmp_addr));
+        if(simd_w == 16){
+            xa::ZReg zreg_acc = get_acc_reg(i);
+            CGA64::str(zreg_acc, xa::ptr(reg_tmp_addr));
+        }else if(simd_w == 8){
+            xa::ZRegS zregs_acc = get_acc_reg_s(i);
+            CGA64::st1w(zregs_acc, reg_p_all_ones, xa::ptr(reg_tmp_addr) );
+        }else{
+            assert(!"Unsupported: simd_w != 16, 8");
+        }
     }
 }
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_bias() {
-    xa::ZReg zreg_bias = get_bias_reg(0);
-    CGA64::str(zreg_bias, xa::ptr(reg_bias_baddr));
+    if(simd_w == 16){
+        xa::ZReg zreg_bias = get_bias_reg(0);
+        CGA64::str(zreg_bias, xa::ptr(reg_bias_baddr));
+    }else if(simd_w == 8){
+        xa::ZRegS zregs_bias = get_bias_reg_s(0);
+        CGA64::st1w(zregs_bias, reg_p_all_ones, xa::ptr(reg_bias_baddr));
+    }else{
+        assert(!"Unsupported: simd_w != 16, 8");
+    }
 }
 
 template <cpu_isa_t isa>
@@ -1083,7 +1130,14 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
     preamble();
-    CGA64::ptrue(reg_p_all_ones.b);
+    simd_w = jcp.simd_w;
+    if(simd_w == 16){
+        CGA64::ptrue(reg_p_all_ones.b);
+    }else if(simd_w == 8){
+        CGA64::ptrue(reg_p_all_ones.b, xa::VL32);
+    }else{
+        assert(!"Unsupport: simd_w != 16, 8");
+    }
     CGA64::ldr(reg_input_baddr,
             xa::ptr(abi_param1_aarch64,
                     static_cast<int32_t>(offsetof(jit_dw_conv_call_s, input))));
