@@ -1130,7 +1130,6 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
     preamble();
-    simd_w = jcp.simd_w;
     if(simd_w == 16){
         CGA64::ptrue(reg_p_all_ones.b);
     }else if(simd_w == 8){
@@ -1156,6 +1155,7 @@ void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
 }
 
 template struct jit_uni_dw_conv_bwd_weights_kernel_f32<sve>;
+template struct jit_uni_dw_conv_bwd_weights_kernel_f32<sve256>;
 
 } // namespace aarch64
 } // namespace cpu

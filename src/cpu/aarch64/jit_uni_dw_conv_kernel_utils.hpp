@@ -413,7 +413,7 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     using namespace dnnl::impl::utils;
 
     jcp.dwei_dt = cd.diff_weights_desc.data_type;
-    jcp.isa = sve;
+    jcp.isa = isa;
 
     if (!mayiuse(isa)) return status::unimplemented;
 
@@ -428,9 +428,6 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     if (!jcp.is_depthwise) return status::unimplemented;
 
     jcp.ch_block = isa == sve ? 16 : 8;
-    if( (jcp.ngroups % jcp.ch_block != 0) && (isa == sve)){
-        jcp.ch_block = 8;
-    }
     jcp.simd_w = jcp.ch_block;
 
     jcp.mb = src_d.dims()[0];
@@ -460,10 +457,8 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
 
     jcp.with_bias = cd.diff_bias_desc.format_kind != format_kind::undef;
 
-    //auto dat_tag = isa == sve ? nChw16c : nChw8c;
-    //auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
-    auto dat_tag = jcp.simd_w == 16 ? nChw16c : nChw8c;
-    auto wei_tag = jcp.simd_w == 16 ? Goihw16g : Goihw8g;
+    auto dat_tag = isa == sve ? nChw16c : nChw8c;
+    auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
 
 
     jcp.src_tag = src_d.matches_one_of_tag(dat_tag);
