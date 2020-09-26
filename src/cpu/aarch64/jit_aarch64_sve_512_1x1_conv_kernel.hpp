@@ -43,7 +43,10 @@ namespace aarch64 {
 struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
     jit_aarch64_sve_512_1x1_conv_kernel(
             const jit_1x1_conv_conf_t &ajcp, const primitive_attr_t &attr)
-        : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
+        : jit_generator(nullptr, 1024 * 1024)
+        , jcp(ajcp)
+        , attr_(attr)
+        , eltwise_injector_(nullptr) {
 
         if (jcp.with_eltwise) {
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(

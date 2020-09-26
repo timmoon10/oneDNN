@@ -732,7 +732,14 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     Xbyak::Label end_log_label;
     compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_le_os);
+#ifdef DNNL_INDIRECT_JIT_AARCH64
+    h->CodeGeneratorAArch64::orrs(h->P_TMP_0.b,
+            h->P_ALL_ONE / Xbyak_aarch64::T_z,
+            Xbyak_aarch64::PRegB(k_mask.getIdx()),
+            Xbyak_aarch64::PRegB(k_mask.getIdx()));
+#else
     test_mask();
+#endif
     h->jz(end_log_label);
 
     // Blend extreme values into src if reach here.
