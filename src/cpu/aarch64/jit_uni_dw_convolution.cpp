@@ -571,6 +571,7 @@ void jit_uni_dw_convolution_bwd_weights_t<isa, src_type,
 }
 
 template struct jit_uni_dw_convolution_bwd_weights_t<sve, data_type::f32>;
+template struct jit_uni_dw_convolution_bwd_weights_t<sve256, data_type::f32>;
 
 } // namespace aarch64
 } // namespace cpu

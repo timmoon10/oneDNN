@@ -600,7 +600,7 @@ private:
     reg64_t reg_kernel_org = x22;
     reg64_t reg_output_org = x23;
 
-    xa::ZRegS zreg_idata = xa::ZRegS(31);
+    reg64_t reg_pre_addr_input = x25;
 
     const xa::PReg reg_p_all_ones = p2;
 

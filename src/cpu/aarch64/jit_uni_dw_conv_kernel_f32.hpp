@@ -202,8 +202,8 @@ struct jit_uni_dw_conv_bwd_weights_kernel_f32 : public jit_generator {
 private:
     using reg64_t = const xa::XReg;
     const xa::PReg reg_p_all_ones = p2;
+    int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
 
-    const int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
 
     /* XXX: offset between input and accummulators is 3, therefore, assume 'kw'
      * is no larger than 3*/

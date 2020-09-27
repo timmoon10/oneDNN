@@ -252,6 +252,8 @@ private:
 
 using jit_aarch64_sve_512_dw_convolution_bwd_weights_t
         = jit_uni_dw_convolution_bwd_weights_t<sve, data_type::f32>;
+using jit_aarch64_sve_256_dw_convolution_bwd_weights_t
+        = jit_uni_dw_convolution_bwd_weights_t<sve256, data_type::f32>;
 
 } // namespace aarch64
 } // namespace cpu

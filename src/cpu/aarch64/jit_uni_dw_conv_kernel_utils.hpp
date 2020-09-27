@@ -413,7 +413,7 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     using namespace dnnl::impl::utils;
 
     jcp.dwei_dt = cd.diff_weights_desc.data_type;
-    jcp.isa = sve;
+    jcp.isa = isa;
 
     if (!mayiuse(isa)) return status::unimplemented;
 
@@ -428,6 +428,7 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     if (!jcp.is_depthwise) return status::unimplemented;
 
     jcp.ch_block = isa == sve ? 16 : 8;
+    jcp.simd_w = jcp.ch_block;
 
     jcp.mb = src_d.dims()[0];
 
@@ -458,6 +459,7 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
 
     auto dat_tag = isa == sve ? nChw16c : nChw8c;
     auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
+
 
     jcp.src_tag = src_d.matches_one_of_tag(dat_tag);
     jcp.wei_tag = diff_weights_d.matches_one_of_tag(wei_tag);

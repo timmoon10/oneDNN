@@ -100,6 +100,7 @@ bool init_max_cpu_isa() {
         ELSEIF_HANDLE_CASE(sse41);
         ELSEIF_HANDLE_CASE(avx);
         ELSEIF_HANDLE_CASE(avx2);
+        ELSEIF_HANDLE_CASE(sve256);
         ELSEIF_HANDLE_CASE(avx512_mic);
         ELSEIF_HANDLE_CASE(avx512_mic_4ops);
         ELSEIF_HANDLE_CASE(avx512_core);
@@ -133,6 +134,7 @@ struct isa_info_t {
             case avx: return dnnl_cpu_isa_avx;
             case sse41: return dnnl_cpu_isa_sse41;
             case sve: return dnnl_cpu_isa_sve;
+            case sve256: return dnnl_cpu_isa_sve256;
             case simd: return dnnl_cpu_isa_simd;
             default: return dnnl_cpu_isa_all;
         }
@@ -157,6 +159,7 @@ struct isa_info_t {
             case avx: return "Intel AVX";
             case sse41: return "Intel SSE4.1";
             case sve: return "AARCH64 SVE";
+            case sve256: return "AARCH64 SVE (VL:256-bit)";
             case simd: return "AARCH64 SIMD";
             default: return "AARCH64";
         }
@@ -179,6 +182,7 @@ static const isa_info_t get_isa_info_t(void) {
     HANDLE_CASE(avx);
     HANDLE_CASE(sse41);
     HANDLE_CASE(sve);
+    HANDLE_CASE(sve256);
     HANDLE_CASE(simd);
 #undef HANDLE_CASE
     return isa_info_t(isa_any);
@@ -218,6 +222,7 @@ status_t set_max_cpu_isa(dnnl_cpu_isa_t isa) {
         HANDLE_CASE(avx512_core_vnni);
         HANDLE_CASE(avx512_core_bf16);
         HANDLE_CASE(simd);
+        HANDLE_CASE(sve256);
         HANDLE_CASE(sve);
         default: return invalid_arguments;
     }
