@@ -535,6 +535,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         int bcast_reg_ofs = utils::rnd_up(ur * load_loop_blk, jcp.fma_step)
                 + jcp.fma_step * load_loop_blk;
         int num_bcast_regs = 32 - bcast_reg_ofs;
+        int bcast_reg_idx = 0;
 
         for (int i_reduce = 0; i_reduce < i_reduce_end;
                 i_reduce += reduce_step) { // IC
@@ -575,12 +576,12 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                 }
             }
 
-            int num_bcast_load = 0;
+            int bcast_reg_startidx = bcast_reg_idx % num_bcast_regs;
             for (int i_ur = 0; i_ur < ur; ++i_ur) {
-                if ((bcast_reg_ofs + i_ur) >= 32) break;
+                if (i_ur >= num_bcast_regs) break;
                 prev_bcast_ofs = bcast_load(i_reduce, i_ur, prev_bcast_ofs,
-                        bcast_reg_ofs + (i_ur % num_bcast_regs));
-                num_bcast_load++;
+                        bcast_reg_ofs + (bcast_reg_idx % num_bcast_regs));
+                bcast_reg_idx++;
             }
 
             for (int i_ur = 0; i_ur < ur; ++i_ur) {
@@ -593,14 +594,15 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                     CGA64::fmla(vreg_accum_s(i_load, i_ur), reg_p_all_ones,
                             vreg_load_s(i_load, 0),
                             vreg_bcast_s(
-                                    bcast_reg_ofs + (i_ur % num_bcast_regs)));
+                                    bcast_reg_ofs + ((bcast_reg_startidx + i_ur) % num_bcast_regs)));
+                                    //bcast_reg_ofs + (i_ur % num_bcast_regs)));
                 }
-                if ((num_bcast_load + i_ur) < ur)
-                    prev_bcast_ofs = bcast_load(i_reduce, num_bcast_load + i_ur,
-                            prev_bcast_ofs,
-                            bcast_reg_ofs
-                                    + ((i_ur + num_bcast_load)
-                                            % num_bcast_regs));
+                if ((num_bcast_regs + i_ur) < ur){
+                    prev_bcast_ofs = bcast_load(i_reduce, 
+                                                num_bcast_regs + i_ur, prev_bcast_ofs,
+                                                bcast_reg_ofs + (bcast_reg_idx % num_bcast_regs));
+                    bcast_reg_idx++;
+                }
             }
         }
     };
