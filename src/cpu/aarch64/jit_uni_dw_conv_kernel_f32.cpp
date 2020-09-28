@@ -433,31 +433,31 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
     CGA64::mov(iter_kh, reg_kh);
     xa::LabelAArch64 kh_label;
     CGA64::L_aarch64(kh_label);
-    {
+    { // KH loop
         CGA64::mov(aux1_reg_ddst, aux_reg_ddst);
         CGA64::mov(aux1_reg_kernel, aux_reg_kernel);
 
         CGA64::mov(iter_kw, reg_kw);
         xa::LabelAArch64 kw_label;
         CGA64::L_aarch64(kw_label);
-        {
-            for (int ch = 0; ch < ur_ch_blocks; ch++) {
+        { // KW loop
+            for (int ch = 0; ch < ur_ch_blocks; ch++) { // unrolloing channel blocks
                 int ker_off = ch * kh * kw * ch_blk;
                 xa::ZReg zreg_ker = get_ker_reg(0);
                 xa::ZRegS zregs_ker = get_ker_reg_s(0);
 
                 CGA64::add_imm(reg_tmp_addr, aux1_reg_kernel,
                         ker_off * sizeof(float), reg_tmp_imm);
-                CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));
+                CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));    // filter?
 
-                for (int w = 0; w < ur_str_w; w++) {
+                for (int w = 0; w < ur_str_w; w++) { // unrolling dst width?
                     int ddst_off = (ch * oh * ow + w) * ch_blk;
 
                     xa::ZReg zreg_src = get_src_reg(0);
                     xa::ZRegS zregs_src = get_src_reg_s(0);
                     CGA64::add_imm(reg_tmp_addr, aux1_reg_ddst,
                             ddst_off * sizeof(float), reg_tmp_imm);
-                    CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
+                    CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));    // src?
 
                     xa::ZRegS zregs_acc = get_acc_reg_s(ch * ur_str_w + w);
                     CGA64::fmla(
@@ -525,13 +525,13 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         CGA64::mov(aux_reg_ddst, reg_ddst);
         CGA64::mov(aux_reg_kernel, reg_kernel);
 
-        load_ddst(ur_ch_blocks, ur_w);
+        load_ddst(ur_ch_blocks, ur_w);    // zero clear
         apply_filter(ur_ch_blocks, ur_w);
         store_dsrc(ur_ch_blocks, ur_w);
 
         CGA64::add_imm(reg_dsrc, reg_dsrc,
                 sizeof(float) * ur_w * jcp.ch_block * jcp.stride_w,
-                reg_tmp_imm);
+                reg_tmp_imm); 
         CGA64::add_imm(reg_ddst, reg_ddst, sizeof(float) * ur_w * jcp.ch_block,
                 reg_tmp_imm);
 
@@ -637,8 +637,18 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::zero_bias() {
 }
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_bias() {
-    xa::ZReg zreg_bias = get_bias_reg(0);
-    CGA64::ldr(zreg_bias, xa::ptr(reg_bias_baddr));
+    if(simd_w == 16){
+        xa::ZReg zreg_bias = get_bias_reg(0);
+        CGA64::ldr(zreg_bias, xa::ptr(reg_bias_baddr));
+    }else if(simd_w == 8){
+        xa::ZRegS zregs_bias = get_bias_reg_s(0);
+        CGA64::ld1w(zregs_bias, reg_p_all_ones, xa::ptr(reg_bias_baddr));
+    }else{
+        assert(!"Unsupport: simd_w != 16, 8");
+    }
+
+
+        
 }
 
 template <cpu_isa_t isa>
