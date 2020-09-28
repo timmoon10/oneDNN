@@ -1232,6 +1232,10 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
                 }
                 jcp.nb_oc_blocking = best_nb_oc_blocking;
                 jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
+                if (jcp.l_pad > jcp.ur_w) {
+                    jcp.nb_oc_blocking = 1;
+                    jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
+                }
             }
         }
     }
