@@ -405,7 +405,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
     };
 
     auto bcast_load = [&](int jj, int nb_oc_block, int aux_input_offset,
-                              int prev_ofs, int jj_end) {
+                              int prev_ofs) {
         if (((aux_input_offset & 0x3) == 0) && (aux_input_offset < LDRWMAX)
                 && (aux_input_offset >= 0)) {
             CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
@@ -482,7 +482,8 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
             int jj_start = get_ow_start(ki, pad_l);
             int jj_end = get_ow_end(ur_w, ki, pad_r);
 
-            int wei_reg_ofs = nb_oc_block * jcp.ur_w + jj_end;
+            int wei_reg_ofs = nb_oc_block * jcp.ur_w;
+            wei_reg_ofs += ur_w >= 16 ? 1 : jj_end;
             int num_regs4wei = 32 - wei_reg_ofs;
             for (int ic = 0; ic < ic_block; ic++) {
                 if (ic_tail && ic >= ic_tail) {
@@ -494,14 +495,16 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                         CGA64::b(xa::EQ, ic_tail_jmp[ki]);
                     }
                 }
-                if (jcp.kernel_kind == expl_bcast) {
+#if 1
+                if ((jcp.kernel_kind == expl_bcast) && (ur_w < 16)) {
                     for (int jj = jj_start; jj < jj_end; jj++) {
                         size_t aux_input_offset
                                 = get_input_offset(ki, ic, jj, pad_l);
                         prev_bcast_ofs = bcast_load(jj, nb_oc_block,
-                                aux_input_offset, prev_bcast_ofs, jj_end);
+                                aux_input_offset, prev_bcast_ofs);
                     }
                 }
+#endif
                 int wei_count = 0;
                 for (int ii = 0; ii < nb_oc_block; ii++) {
                     int reg_idx = wei_reg_ofs + ii;
@@ -527,10 +530,23 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
 
                     for (int jj = jj_start; jj < jj_end; jj++)
                         if (jcp.kernel_kind == expl_bcast) {
-                            CGA64::fmla(zreg_out_s(jj, ii), reg_p_all_ones,
-                                    zreg_inp_s(jj, nb_oc_block),
-                                    zreg_wei_s(
-                                            wei_reg_ofs + (ii % num_regs4wei)));
+                            if(ur_w >= 16){
+                                size_t aux_input_offset
+                                        = get_input_offset(ki, ic, jj, pad_l);
+                                prev_bcast_ofs = bcast_load(0, nb_oc_block,
+                                        aux_input_offset, prev_bcast_ofs);
+    
+                                CGA64::fmla(zreg_out_s(jj, ii), reg_p_all_ones,
+                                        zreg_inp_s(0, nb_oc_block),
+                                        zreg_wei_s(
+                                                wei_reg_ofs + (ii % num_regs4wei)));
+
+                            }else{
+                                CGA64::fmla(zreg_out_s(jj, ii), reg_p_all_ones,
+                                        zreg_inp_s(jj, nb_oc_block),
+                                        zreg_wei_s(
+                                                wei_reg_ofs + (ii % num_regs4wei)));
+                            }
                         } else {
                             assert(NULL);
                         }
@@ -1235,6 +1251,9 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
                 if (jcp.l_pad > jcp.ur_w) {
                     jcp.nb_oc_blocking = 1;
                     jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
+                }
+                if (jcp.l_pad >= 16) {
+                    jcp.ur_w = nstl::min(jcp.l_pad, 29);
                 }
             }
         }
