@@ -32,6 +32,9 @@
 #include "cpu/aarch64/jit_aarch64_sve_512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_uni_batch_normalization.hpp"
 
+#define CG CodeGeneratorAArch64
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -43,6 +46,7 @@ using namespace memory_tracking::names;
 
 using namespace Xbyak;
 namespace barrier = simple_barrier;
+namespace xa = Xbyak_aarch64;
 
 typedef float acc_data_t;
 
@@ -129,6 +133,14 @@ struct jit_bnorm_t : public jit_generator {
     // channel tail processing
     Opmask ktail_mask = Opmask(2);
 
+#ifndef DNNL_X64_IMPLEMENTATION
+    /* Caution: Chose predicate registers not used by x64's implementation. */
+    xa::PReg p_512 = p7;
+    xa::PReg p_lsb_256 = p6;
+    xa::PReg p_lsb_128 = p5;
+    xa::PReg p_tmp0 = p4;
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
+
     // FP32->BF16 emulation
     bf16_emulation_t *bf16_emu_ {nullptr};
     Reg64 reg_bf16_tmp = reg_tmp;
@@ -149,7 +161,22 @@ struct jit_bnorm_t : public jit_generator {
     Vmm vbeta = Vmm(isa == avx512_common ? 27 : 12);
     Vmm veps = Vmm(isa == avx512_common ? 28 : 13);
     Vmm vchan_size = Vmm(isa == avx512_common ? 29 : 14);
+#ifdef DNNL_X64_IMPLEMENTATION
     Vmm vtail_mask = Vmm(isa == avx512_common ? 30 : 15);
+#endif
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    const std::vector<uint32_t> tmp_vec_idx
+            = {31, isa == avx512_common ? 20 : 5};
+
+    /* Caution: Chose predicate registers not used by x64's implementation. */
+    xa::ZReg z_tmp0 = z31;
+    xa::ZReg z_tmp1 = isa == avx512_common ? z20 : z5;
+    xa::ZReg z_relu_mask_avx2 = z30;
+
+    const std::vector<xa::ZReg> z_tmp_vec = {z_tmp0, z_tmp1};
+    constexpr static int z_tmp_vec_size = 2;
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
 
     size_t t0_pf_offt;
     size_t t1_pf_offt;
@@ -204,7 +231,9 @@ struct jit_bnorm_t : public jit_generator {
     }
 
     void load_common_params() {
+#ifdef DNNL_X64_IMPLEMENTATION
 #define PARAM_OFF(x) offsetof(call_params_t, x)
+
         mov(reg_rbuf1, ptr[reg_param + PARAM_OFF(rbuf1)]);
         if (bdesc_->is_bwd()) mov(reg_rbuf2, ptr[reg_param + PARAM_OFF(rbuf2)]);
         mov(reg_coff_max, ptr[reg_param + PARAM_OFF(coff_max)]);
@@ -223,6 +252,7 @@ struct jit_bnorm_t : public jit_generator {
         mov(ptr[rsp + stack_off_N_nthr], reg_tmp);
         mov(reg_tmp, ptr[reg_param + PARAM_OFF(N_ithr)]);
         mov(ptr[rsp + stack_off_N_ithr], reg_tmp);
+
         mov(reg_tmp, ptr[reg_param + PARAM_OFF(src)]);
         mov(ptr[rsp + stack_off_src], reg_tmp);
         mov(reg_tmp, ptr[reg_param + PARAM_OFF(dst)]);
@@ -235,6 +265,7 @@ struct jit_bnorm_t : public jit_generator {
         mov(ptr[rsp + stack_off_ws], reg_tmp);
         mov(reg_tmp, ptr[reg_param + PARAM_OFF(barrier)]);
         mov(ptr[rsp + stack_off_barrier], reg_tmp);
+
         if (is_spatial_thr_) {
             mov(reg_tmp, ptr[reg_param + PARAM_OFF(spat_size_loc)]);
             mov(ptr[rsp + stack_off_spat_size_loc], reg_tmp);
@@ -258,20 +289,157 @@ struct jit_bnorm_t : public jit_generator {
             mov(reg_var, reg_tmp);
         }
 #undef PARAM_OFF
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+#define PARAM_OFF(x) offsetof(call_params_t, x)
+#define PARAM_OFF_DIFF(x, y) \
+    (static_cast<int32_t>(PARAM_OFF(x)) - static_cast<int32_t>(PARAM_OFF(y)))
+#define LDR_PARAM(r, x, y) \
+    assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
+    CG::ldr(xa::XReg(IDX(r)), xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(x, y)))
+#define LDR_PARAM_TMP(x, y) \
+    assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
+    CG::ldr(X_TMP_0, xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(x, y)));
+#define STR_PARAM_TMP(x, y) \
+    assert(-256 <= static_cast<int32_t>(x) - static_cast<int32_t>(y) \
+            && static_cast<int32_t>(x) - static_cast<int32_t>(y) <= 256); \
+    CG::str(X_TMP_0, xa::pre_ptr(x_tmp_sp, x - y));
+
+        CG::mov(X_TMP_ADDR, xa::XReg(IDX(reg_param)));
+        CG::ldr(xa::XReg(IDX(reg_rbuf1)),
+                xa::pre_ptr(X_TMP_ADDR, PARAM_OFF(rbuf1)));
+        if (bdesc_->is_bwd()) {
+            LDR_PARAM(reg_rbuf2, rbuf2, rbuf1);
+            LDR_PARAM(reg_coff_max, coff_max, rbuf2);
+        } else {
+            LDR_PARAM(reg_coff_max, coff_max, rbuf1);
+        }
+        LDR_PARAM(reg_soff_max, soff_max, coff_max);
+        LDR_PARAM(reg_mb_stride_Bc, mb_stride_Bc, soff_max);
+        CG::lsl(xa::XReg(IDX(reg_coff_max)), xa::XReg(IDX(reg_coff_max)), 2);
+
+        LDR_PARAM(reg_mean, mean, mb_stride_Bc);
+        LDR_PARAM(reg_scale_shift, scale_shift, mean);
+
+        CG::ldr(W_TMP_1,
+                xa::pre_ptr(
+                        X_TMP_ADDR, PARAM_OFF_DIFF(chan_size, scale_shift)));
+        CG::ldr(W_TMP_2,
+                xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(one, chan_size)));
+        CG::ldr(W_TMP_3, xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(eps, one)));
+
+        if (vchan_size.isYMM() || vchan_size.isZMM()) {
+            CG::dup(xa::ZRegS(IDX(vchan_size)), W_TMP_1);
+            CG::dup(xa::ZRegS(IDX(vone)), W_TMP_2);
+            CG::dup(xa::ZRegS(IDX(veps)), W_TMP_3);
+
+            if (vchan_size.isYMM()) {
+                CG::mov(xa::ZRegS(IDX(vchan_size)), P_MSB_256 / xa::T_m, 0);
+                CG::mov(xa::ZRegS(IDX(vone)), P_MSB_256 / xa::T_m, 0);
+                CG::mov(xa::ZRegS(IDX(veps)), P_MSB_256 / xa::T_m, 0);
+            }
+        } else {
+            CG::dup(xa::VReg4S(IDX(vchan_size)), W_TMP_1);
+            CG::dup(xa::VReg4S(IDX(vone)), W_TMP_2);
+            CG::dup(xa::VReg4S(IDX(veps)), W_TMP_3);
+        }
+
+        xa::XReg x_tmp_sp {X_TMP_4};
+        CG::mov(x_tmp_sp, xa::XReg(IDX(rsp)));
+        LDR_PARAM_TMP(N_nthr, eps);
+        CG::str(X_TMP_0, xa::pre_ptr(x_tmp_sp, stack_off_N_nthr));
+        LDR_PARAM_TMP(N_ithr, N_nthr);
+        STR_PARAM_TMP(stack_off_N_ithr, stack_off_N_nthr);
+
+        LDR_PARAM_TMP(src, N_ithr);
+        STR_PARAM_TMP(stack_off_src, stack_off_N_ithr);
+
+        LDR_PARAM_TMP(dst, src);
+        STR_PARAM_TMP(stack_off_dst, stack_off_src);
+
+        LDR_PARAM_TMP(diff_src, dst);
+        STR_PARAM_TMP(stack_off_diff_src, stack_off_dst);
+
+        LDR_PARAM_TMP(diff_dst, diff_src);
+        STR_PARAM_TMP(stack_off_diff_dst, stack_off_diff_src);
+
+        LDR_PARAM_TMP(ws, diff_dst);
+        STR_PARAM_TMP(stack_off_ws, stack_off_diff_dst);
+
+        LDR_PARAM_TMP(barrier, ws);
+        STR_PARAM_TMP(stack_off_barrier, stack_off_ws);
+
+        size_t tmpSize = PARAM_OFF(barrier);
+        int32_t tmpStack = stack_off_barrier;
+
+        if (is_spatial_thr_) {
+            CG::ldr(X_TMP_0,
+                    xa::pre_ptr(
+                            X_TMP_ADDR, PARAM_OFF(spat_size_loc) - tmpSize));
+            STR_PARAM_TMP(stack_off_spat_size_loc, tmpStack);
+            LDR_PARAM_TMP(S_s, spat_size_loc);
+            STR_PARAM_TMP(stack_off_s_s, stack_off_spat_size_loc);
+            LDR_PARAM_TMP(S_tail, S_s);
+            STR_PARAM_TMP(stack_off_s_tail, stack_off_s_s);
+            tmpSize = PARAM_OFF(S_tail);
+            tmpStack = stack_off_s_tail;
+        }
+        if (is_c_padded()) {
+            CG::ldr(X_TMP_0,
+                    xa::pre_ptr(X_TMP_ADDR, PARAM_OFF(is_cblk_tail) - tmpSize));
+            STR_PARAM_TMP(stack_off_is_cblk_tail, tmpStack);
+            tmpSize = PARAM_OFF(is_cblk_tail);
+            tmpStack = stack_off_is_cblk_tail;
+        }
+        if (bdesc_->is_fwd()) {
+            CG::ldr(X_TMP_0, xa::pre_ptr(X_TMP_ADDR, PARAM_OFF(var) - tmpSize));
+            CG::mov(xa::XReg(IDX(reg_var)), X_TMP_0);
+        } else {
+            CG::ldr(X_TMP_0,
+                    xa::pre_ptr(
+                            X_TMP_ADDR, PARAM_OFF(diff_scale_shift) - tmpSize));
+            STR_PARAM_TMP(stack_off_diff_scale_shift, tmpStack);
+            LDR_PARAM_TMP(var, diff_scale_shift);
+            CG::mov(xa::XReg(IDX(reg_var)), X_TMP_0);
+        }
+#undef LDR_PARAM
+#undef LDR_PARAM_TMP
+#undef STR_PARAM_TMP
+#undef PARAM_OFF
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 
     void prepare_tail_mask_avx512_common() {
         if (!is_c_padded()) return;
 
         const int tail = bdesc_->C() % (int)(vlen / sizeof(float));
+#ifdef DNNL_X64_IMPLEMENTATION
         const int mask = (1 << tail) - 1;
 
         Reg32 regw_tmp = reg_tmp.cvt32();
         // The kmovw instrucion here can be translated correctly by translator
         mov(regw_tmp, mask);
         kmovw(ktail_mask, regw_tmp);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        uint32_t idx = IDX(ktail_mask);
+        switch (tail) {
+            case 16: CG::ptrue(xa::PRegS(idx), xa::VL16); break;
+            case 8: CG::ptrue(xa::PRegS(idx), xa::VL8); break;
+            case 7: CG::ptrue(xa::PRegS(idx), xa::VL7); break;
+            case 6: CG::ptrue(xa::PRegS(idx), xa::VL6); break;
+            case 5: CG::ptrue(xa::PRegS(idx), xa::VL5); break;
+            case 4: CG::ptrue(xa::PRegS(idx), xa::VL4); break;
+            case 3: CG::ptrue(xa::PRegS(idx), xa::VL3); break;
+            case 2: CG::ptrue(xa::PRegS(idx), xa::VL2); break;
+            case 1: CG::ptrue(xa::PRegS(idx), xa::VL1); break;
+            default:
+                CG::index(z_tmp0.s, 1, 1);
+                CG::cmple(xa::PRegS(idx), p_512 / xa::T_z, z_tmp0.s, tail);
+                break;
+        }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void prepare_tail_mask_avx2_common() {
         if (!is_c_padded()) return;
 
@@ -283,6 +451,7 @@ struct jit_bnorm_t : public jit_generator {
         mov(reg_tmp, reinterpret_cast<size_t>(&mask[8 - tail]));
         vmovups(vtail_mask, ptr[reg_tmp]);
     }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     void prepare_relu() {
         with_relu = bdesc_->is_fwd()
@@ -298,6 +467,7 @@ struct jit_bnorm_t : public jit_generator {
         }
     }
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void prepare_l_relu_mask_avx2() {
         Label l_mask_after;
         jmp(l_mask_after);
@@ -307,6 +477,13 @@ struct jit_bnorm_t : public jit_generator {
             dd(1 << i);
         L(l_mask_after);
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    void prepare_l_relu_mask_avx2() {
+        CG::mov(z_relu_mask_avx2.s, p_lsb_256 / xa::T_z, 1);
+        CG::index(z_tmp0.s, 0, 1);
+        CG::lsl(z_relu_mask_avx2.s, p_lsb_256 / xa::T_m, z_tmp0.s);
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     void fwd_process_relu_avx2(Vmm vdst, int offt, Vmm vstore_mask) {
         Reg64 reg_store_mask = reg_diff_scale_shift;
@@ -322,32 +499,86 @@ struct jit_bnorm_t : public jit_generator {
     void fwd_process_relu_avx512_common(Vmm vdst, int offt = 0) {
         shr(is_nspc_ ? reg_soff_nspc : reg_soff, bit_shift());
         vcmpps(kstore_mask, vzero, vdst, _cmp_lt_os);
+#ifdef DNNL_X64_IMPLEMENTATION
         kmovw(ptr[reg_ws + (is_nspc_ ? reg_soff_nspc : reg_soff)
                       + offt / (1 << bit_shift())],
                 kstore_mask);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::PRegB p_mask {IDX(kstore_mask)};
+        if (is_nspc_)
+            CG::add(X_TMP_1, xa::XReg(IDX(reg_ws)),
+                    xa::XReg(IDX(reg_soff_nspc)));
+        else
+            CG::add(X_TMP_1, xa::XReg(IDX(reg_ws)), xa::XReg(IDX(reg_soff)));
+        if (offt / (1 << bit_shift()))
+            CG::add_imm(X_TMP_1, X_TMP_1, offt / (1 << bit_shift()), X_TMP_0);
+        CG::uzp1(P_TMP_0.b, p_mask, p_mask);
+        CG::uzp1(P_TMP_0.b, P_TMP_0.b, P_TMP_0.b);
+        CG::sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        CG::str(P_TMP_0, xa::ptr(X_TRANSLATOR_STACK));
+        CG::ldurh(W_TMP_0, xa::ptr(X_TRANSLATOR_STACK));
+        CG::add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        CG::strh(W_TMP_0, xa::ptr(X_TMP_1));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         vblendmps(vdst | kstore_mask, vzero, vdst);
         shl(is_nspc_ ? reg_soff_nspc : reg_soff, bit_shift());
     }
 
     void bwd_process_relu_avx2(Vmm vdiff_dst, int offt, Vmm vstore_mask) {
+        /* vstore_mask is a temporal register. */
         shr(reg_soff, bit_shift());
+#ifdef DNNL_X64_IMPLEMENTATION
         vpbroadcastb(vstore_mask,
                 ptr[reg_ws + reg_soff + offt / (1 << bit_shift())]);
         vpand(vstore_mask, vstore_mask, ptr[rip + l_relu_mask_avx2]);
         vpcmpeqd(vstore_mask, vstore_mask, ptr[rip + l_relu_mask_avx2]);
         vblendvps(vdiff_dst, vzero, vdiff_dst, vstore_mask);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        int disp = offt / (1 << bit_shift());
+        uint32_t idx = IDX(vstore_mask);
+        xa::ZReg vstore {idx};
+        xa::ZRegS diff_dst {IDX(vdiff_dst)};
+        CG::add(X_TMP_0, xa::XReg {IDX(reg_ws)}, xa::XReg {IDX(reg_soff)});
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::ldurb(W_TMP_0, xa::ptr(X_TMP_0));
+        CG::cpy(vstore.s, p_lsb_256 / xa::T_m, W_TMP_0);
+        CG::and_(vstore.d, vstore.d, z_relu_mask_avx2.d);
+        CG::cmpeq(p_tmp0.s, p_lsb_256 / xa::T_z, vstore.s, z_relu_mask_avx2.s);
+        CG::sel(diff_dst, p_tmp0, diff_dst, xa::ZRegS {IDX(vzero)});
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         shl(reg_soff, bit_shift());
     }
 
     void bwd_process_relu_avx512_common(Vmm vdiff_dst, int offt = 0) {
         shr(is_nspc_ ? reg_soff_nspc : reg_soff, bit_shift());
+#ifdef DNNL_X64_IMPLEMENTATION
         kmovw(kstore_mask,
                 ptr[reg_ws + (is_nspc_ ? reg_soff_nspc : reg_soff)
                         + offt / (1 << bit_shift())]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::PReg p_mask {IDX(kstore_mask)};
+        if (is_nspc_)
+            CG::add(X_TMP_1, xa::XReg(IDX(reg_ws)),
+                    xa::XReg(IDX(reg_soff_nspc)));
+        else
+            CG::add(X_TMP_1, xa::XReg(IDX(reg_ws)), xa::XReg(IDX(reg_soff)));
+        if (offt / (1 << bit_shift()))
+            CG::add_imm(X_TMP_1, X_TMP_1, offt / (1 << bit_shift()), X_TMP_0);
+
+        CG::sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        CG::ldurh(W_TMP_0, xa::ptr(X_TMP_1));
+        CG::strh(W_TMP_0, xa::ptr(X_TRANSLATOR_STACK));
+        CG::ldr(p_mask, xa::ptr(X_TRANSLATOR_STACK));
+        CG::zip1(p_mask.b, p_mask.b, p_mask.b);
+        CG::zip1(p_mask.b, p_mask.b, p_mask.b);
+        CG::add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         vmovups(vdiff_dst | kstore_mask | T_z, vdiff_dst);
         shl(is_nspc_ ? reg_soff_nspc : reg_soff, bit_shift());
     }
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void uni_vmovups_spat_data(const Operand &dst, const Operand &src) {
         if (dst.isMEM()) {
             if (is_bf16_) {
@@ -377,7 +608,39 @@ struct jit_bnorm_t : public jit_generator {
             }
         }
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    void uni_vmovups_spat_data(const Operand &dst, const Operand &src) {
+        if (dst.isMEM()) {
+            if (is_bf16_) {
+                constexpr bool isAvx2 = isa == avx2;
+                const typename std::conditional<isAvx2, Xmm, Ymm>::type
+                        dst_reg {src.getIdx()};
+                const typename std::conditional<isAvx2, Ymm, Zmm>::type
+                        src_reg {src.getIdx()};
 
+                // convert f32 output to bf16
+                if (mayiuse(avx512_core_bf16))
+                    vcvtneps2bf16(dst_reg, src_reg);
+                else
+                    bf16_emu_->vcvtneps2bf16(dst_reg, src_reg);
+
+                vmovdqu16(dst.getAddress(), dst_reg);
+            } else {
+                uni_vmovups_aarch64(dst.getAddress(), Vmm(src.getIdx()));
+            }
+        } else {
+            if (is_bf16_) {
+                // convert bf16 input to f32
+                vpmovzxwd(Vmm(dst.getIdx()), src.getAddress());
+                vpslld(Vmm(dst.getIdx()), Vmm(dst.getIdx()), 0x10);
+            } else {
+                uni_vmovups_aarch64(Vmm(dst.getIdx()), src.getAddress());
+            }
+        }
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
+#ifdef DNNL_X64_IMPLEMENTATION
     void uni_vmovups_tail_avx2_common(
             const Operand &dst, const Operand &src, Label &l_ret) {
         if (dst.isMEM()) {
@@ -387,7 +650,9 @@ struct jit_bnorm_t : public jit_generator {
         }
         jmp(l_ret);
     }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void uni_vmovups_tail_avx512_common(
             const Operand &dst, const Operand &src, Label &l_ret) {
         if (dst.isMEM())
@@ -397,7 +662,35 @@ struct jit_bnorm_t : public jit_generator {
 
         jmp(l_ret);
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    void uni_vmovups_tail_avx512_common(
+            const Operand &dst, const Operand &src, Label &l_ret) {
+        if (dst.isMEM()) {
+            RegExp exp = dst.getAddress().getRegExp();
+            assert(exp.getScale() == 1);
+            CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                    xa::XReg(IDX(exp.getIndex())));
+            size_t disp = exp.getDisp();
+            if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
 
+            CG::st1w(xa::ZRegS(IDX(src)), xa::PReg(IDX(ktail_mask)) / xa::T_z,
+                    xa::ptr(X_TMP_0));
+        } else {
+            RegExp exp = src.getAddress().getRegExp();
+            assert(exp.getScale() == 1);
+            CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                    xa::XReg(IDX(exp.getIndex())));
+            size_t disp = exp.getDisp();
+            if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+            CG::ld1w(xa::ZRegS(IDX(dst)), xa::PReg(IDX(ktail_mask)) / xa::T_z,
+                    xa::ptr(X_TMP_0));
+        }
+        jmp(l_ret);
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
+#ifdef DNNL_X64_IMPLEMENTATION
     void uni_vmovups_maybe_tail(const Operand &dst, const Operand &src) {
         Label l_no_mask, l_ret;
 
@@ -423,6 +716,250 @@ struct jit_bnorm_t : public jit_generator {
 
         L(l_ret);
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    void uni_vmovups_maybe_tail(const Operand &dst, const Operand &src) {
+        Label l_no_mask, l_ret;
+
+        if (is_c_padded()) {
+            mov(reg_tmp, ptr[rsp + stack_off_is_cblk_tail]);
+            cmp(reg_tmp, 0);
+            jz(l_no_mask);
+
+            lea(reg_tmp, ptr[reg_coff + vlen]);
+            cmp(reg_tmp, reg_coff_max);
+            jl(l_no_mask);
+            assert(isa == avx512_common || isa == avx2);
+            uni_vmovups_tail_avx512_common(dst, src, l_ret);
+        }
+        L(l_no_mask);
+        if (dst.isMEM())
+            uni_vmovups_aarch64(dst.getAddress(), Vmm(src.getIdx()));
+        else
+            uni_vmovups_aarch64(Vmm(dst.getIdx()), src.getAddress());
+
+        L(l_ret);
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    void uni_vdivps_aarch64(const Xmm &dst, const Xmm &src, const Xmm &src2,
+            const xa::PReg &pred) {
+        (void)pred;
+        CG::fdiv(xa::VReg4S {IDX(dst)}, xa::VReg4S {IDX(src)},
+                xa::VReg4S {IDX(src2)});
+    }
+
+    void uni_vdivps_aarch64(const Ymm &dst, const Ymm &src, const Ymm &src2,
+            const xa::PReg &pred) {
+        uni_vdivps_aarch64(Zmm {dst.getIdx()}, Zmm {src.getIdx()},
+                Zmm {src2.getIdx()}, pred);
+    }
+
+    void uni_vdivps_aarch64(const Zmm &dst, const Zmm &src, const Zmm &src2,
+            const xa::PReg &pred) {
+        uint32_t dstIdx = IDX(dst);
+        uint32_t srcIdx = IDX(src);
+        uint32_t src2Idx = IDX(src2);
+
+        if (dstIdx == src2Idx) {
+            CG::mov(z_tmp0.d, xa::ZRegD {src2Idx});
+            CG::mov(xa::ZRegD {dstIdx}, xa::ZRegD {srcIdx});
+            CG::fdiv(xa::ZRegS {dstIdx}, pred / xa::T_m, z_tmp0.s);
+        } else if (dstIdx == srcIdx) {
+            CG::fdiv(xa::ZRegS {dstIdx}, pred / xa::T_m, xa::ZRegS {src2Idx});
+        } else {
+            CG::mov(xa::ZRegD {dstIdx}, xa::ZRegD {srcIdx});
+            CG::fdiv(xa::ZRegS {dstIdx}, pred / xa::T_m, xa::ZRegS {src2Idx});
+        }
+    }
+
+    void uni_vsqrtps_aarch64(
+            const Xmm &dst, const Xmm &src, const xa::PReg &pred) {
+        (void)pred;
+        CG::fsqrt(xa::VReg4S {IDX(dst)}, xa::VReg4S {IDX(src)});
+    }
+
+    void uni_vsqrtps_aarch64(
+            const Ymm &dst, const Ymm &src, const xa::PReg &pred) {
+        uni_vsqrtps_aarch64(Zmm {dst.getIdx()}, Zmm {src.getIdx()}, pred);
+    }
+
+    void uni_vsqrtps_aarch64(
+            const Zmm &dst, const Zmm &src, const xa::PReg &pred) {
+        CG::fsqrt(xa::ZRegS {IDX(dst)}, pred / xa::T_m, xa::ZRegS {IDX(src)});
+    }
+
+    void uni_vaddps_unpredicate_aarch64(
+            const Xmm &dst, const Xmm &src, const Xmm &src2) {
+        CG::fadd(xa::VReg4S {IDX(dst)}, xa::VReg4S {IDX(src)},
+                xa::VReg4S {IDX(src2)});
+    }
+
+    void uni_vaddps_unpredicate_aarch64(
+            const Ymm &dst, const Ymm &src, const Ymm &src2) {
+        uni_vaddps_unpredicate_aarch64(
+                Zmm {dst.getIdx()}, Zmm {src.getIdx()}, Zmm {src2.getIdx()});
+    }
+
+    void uni_vaddps_unpredicate_aarch64(
+            const Zmm &dst, const Zmm &src, const Zmm &src2) {
+        CG::fadd(xa::ZRegS {IDX(dst)}, xa::ZRegS {IDX(src)},
+                xa::ZRegS {IDX(src2)});
+    }
+
+    void uni_vfnmadd231ps_aarch64(const Xmm &dst, const Xmm &src,
+            const Xmm &src2, const xa::PReg &pred) {
+        CG::fmls(xa::VReg4S(IDX(dst)), xa::VReg4S(IDX(src)),
+                xa::VReg4S(IDX(src2)));
+    }
+
+    void uni_vfnmadd231ps_aarch64(const Ymm &dst, const Ymm &src,
+            const Ymm &src2, const xa::PReg &pred) {
+        uni_vfnmadd231ps_aarch64(Zmm {dst.getIdx()}, Zmm {src.getIdx()},
+                Zmm {src2.getIdx()}, pred);
+    }
+
+    void uni_vfnmadd231ps_aarch64(const Zmm &dst, const Zmm &src,
+            const Zmm &src2, const xa::PReg &pred) {
+        CG::fmls(xa::ZRegS(IDX(dst)), pred / xa::T_m, xa::ZRegS(IDX(src)),
+                xa::ZRegS(IDX(src2)));
+    }
+
+    void uni_vfmadd231ps_aarch64(
+            const Xmm &dst, const Xmm &src, const Xmm &src2, xa::PReg &pred) {
+        CG::fmla(xa::VReg4S(IDX(dst)), xa::VReg4S(IDX(src)),
+                xa::VReg4S(IDX(src2)));
+    }
+
+    void uni_vfmadd231ps_aarch64(
+            const Ymm &dst, const Ymm &src, const Ymm &src2, xa::PReg &pred) {
+        CG::fmla(xa::ZRegS(IDX(dst)), pred / xa::T_m, xa::ZRegS(IDX(src)),
+                xa::ZRegS(IDX(src2)));
+    }
+
+    void uni_vfmadd231ps_aarch64(
+            const Zmm &dst, const Zmm &src, const Zmm &src2, xa::PReg &pred) {
+        CG::fmla(xa::ZRegS(IDX(dst)), pred / xa::T_m, xa::ZRegS(IDX(src)),
+                xa::ZRegS(IDX(src2)));
+    }
+
+    void uni_vfmadd213ps_aarch64(
+            const Xmm &dst, const Xmm &src, const Xmm &src2, xa::PReg &pred) {
+        CG::fmad(xa::ZRegS(IDX(dst)), pred / xa::T_m, xa::ZRegS(IDX(src)),
+                xa::ZRegS(IDX(src2)));
+    }
+
+    void uni_vfmadd213ps_aarch64(
+            const Ymm &dst, const Ymm &src, const Ymm &src2, xa::PReg &pred) {
+        CG::fmad(xa::ZRegS(IDX(dst)), pred / xa::T_m, xa::ZRegS(IDX(src)),
+                xa::ZRegS(IDX(src2)));
+    }
+
+    void uni_vfmadd213ps_aarch64(
+            const Zmm &dst, const Zmm &src, const Zmm &src2, xa::PReg &pred) {
+        CG::fmad(xa::ZRegS(IDX(dst)), pred / xa::T_m, xa::ZRegS(IDX(src)),
+                xa::ZRegS(IDX(src2)));
+    }
+
+    void uni_vmovntps_aarch64(const Reg64 &base, const Reg64 &off,
+            const int disp, const Xmm &v, const xa::PReg &p512,
+            const xa::PReg &p256, const xa::PReg &p128) {
+        CG::add(X_TMP_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
+        if (disp != 0) CG::add_imm(X_TMP_ADDR, X_TMP_ADDR, disp, X_TMP_0);
+
+        CG::stnt1w(xa::ZRegS(IDX(v)), p128, xa::ptr(X_TMP_ADDR));
+    }
+
+    void uni_vmovntps_aarch64(const Reg64 &base, const Reg64 &off,
+            const int disp, const Ymm &v, const xa::PReg &p512,
+            const xa::PReg &p256, const xa::PReg &p128) {
+        CG::add(X_TMP_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
+        if (disp != 0) CG::add_imm(X_TMP_ADDR, X_TMP_ADDR, disp, X_TMP_0);
+
+        CG::stnt1w(xa::ZRegS(IDX(v)), p256, xa::ptr(X_TMP_ADDR));
+    }
+
+    void uni_vmovntps_aarch64(const Reg64 &base, const Reg64 &off,
+            const int disp, const Zmm &v, const xa::PReg &p512,
+            const xa::PReg &p256, const xa::PReg &p128) {
+        CG::add(X_TMP_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
+        if (disp != 0) CG::add_imm(X_TMP_ADDR, X_TMP_ADDR, disp, X_TMP_0);
+
+        CG::stnt1w(xa::ZRegS(IDX(v)), p_512, xa::ptr(X_TMP_ADDR));
+    }
+
+    void uni_vmovups_aarch64(const Xmm &x, const Operand &op) {
+        RegExp exp = op.getAddress().getRegExp();
+
+        assert(exp.getScale() == 1);
+        CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                xa::XReg(IDX(exp.getIndex())));
+        size_t disp = exp.getDisp();
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::ld1(xa::VReg4S(IDX(x)), xa::ptr(X_TMP_0));
+    }
+
+    void uni_vmovups_aarch64(const Ymm &y, const Operand &op) {
+        RegExp exp = op.getAddress().getRegExp();
+
+        assert(exp.getScale() == 1);
+        CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                xa::XReg(IDX(exp.getIndex())));
+        size_t disp = exp.getDisp();
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::ld1w(xa::ZRegS(IDX(y)), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
+    }
+
+    void uni_vmovups_aarch64(const Zmm &z, const Operand &op) {
+        RegExp exp = op.getAddress().getRegExp();
+
+        assert(exp.getScale() == 1);
+        CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                xa::XReg(IDX(exp.getIndex())));
+        size_t disp = exp.getDisp();
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::ldr(xa::ZReg(IDX(z)), xa::ptr(X_TMP_0));
+    }
+
+    void uni_vmovups_aarch64(const Operand &op, const Xmm &x) {
+        RegExp exp = op.getAddress().getRegExp();
+
+        assert(exp.getScale() == 1);
+        CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                xa::XReg(IDX(exp.getIndex())));
+        size_t disp = exp.getDisp();
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::st1(xa::VReg4S(IDX(x)), xa::ptr(X_TMP_0));
+    }
+
+    void uni_vmovups_aarch64(const Operand &op, const Ymm &y) {
+        RegExp exp = op.getAddress().getRegExp();
+
+        assert(exp.getScale() == 1);
+        CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                xa::XReg(IDX(exp.getIndex())));
+        size_t disp = exp.getDisp();
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::st1w(xa::ZRegS(IDX(y)), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
+    }
+
+    void uni_vmovups_aarch64(const Operand &op, const Zmm &z) {
+        RegExp exp = op.getAddress().getRegExp();
+
+        assert(exp.getScale() == 1);
+        CG::add(X_TMP_0, xa::XReg(IDX(exp.getBase())),
+                xa::XReg(IDX(exp.getIndex())));
+        size_t disp = exp.getDisp();
+        if (disp) CG::add_imm(X_TMP_0, X_TMP_0, disp, X_TMP_1);
+
+        CG::str(xa::ZReg(IDX(z)), xa::ptr(X_TMP_0));
+    }
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
 
     void barrier() {
         mov(reg_nnthr, ptr[rsp + stack_off_N_nthr]);
@@ -430,9 +967,20 @@ struct jit_bnorm_t : public jit_generator {
         simple_barrier::generate(*this, reg_bar, reg_nnthr);
     }
 
+#ifndef DNNL_X64_IMPLEMENTATION
     Address mean_ptr(size_t offt = 0) {
         return vmmword[reg_mean + reg_coff + offt + 0 * chan_data_offt];
     }
+#else //#ifndef DNNL_X64_IMPLEMENTATION
+    xa::XReg mean_ptr(size_t off = 0) {
+        xa::XReg x_addr {xtDefaultAddrIdx};
+
+        CG::add(x_addr, xa::XReg(IDX(reg_mean)), xa::XReg(IDX(reg_coff)));
+        if (offt) CG::add_imm(x_addr, x_addr, offt, X_TMP_0);
+
+        return x_addr;
+    }
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
 
     Address var_ptr(size_t offt = 0) {
         return vmmword[reg_var + reg_coff + offt + 0 * chan_data_offt];
@@ -500,7 +1048,11 @@ struct jit_bnorm_t : public jit_generator {
         Label ch_label;
         L(ch_label);
         {
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(Vmm(0), vmmword[reg_rbuf1 + reg_coff]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(Vmm(0), vmmword[reg_rbuf1 + reg_coff]);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             spat_loop(
                     spat_size, unroll_blocks, unroll_regs,
                     [=](size_t base_reg) {
@@ -524,7 +1076,11 @@ struct jit_bnorm_t : public jit_generator {
                         Vmm v = Vmm(base_reg * 2);
                         if (base_reg) uni_vaddps(b, b, v);
                     });
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
             add(reg_coff, vlen);
             cmp(reg_coff, reg_coff_max);
@@ -556,13 +1112,22 @@ struct jit_bnorm_t : public jit_generator {
             for (int spat_pt = 0; spat_pt < num_spat_pts; ++spat_pt) {
                 int coff = 0, offt = 0;
                 for (int ch_idx = 0; ch_idx < num_ch_blks; ++ch_idx) {
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vmovups_maybe_tail(vmean, mean_ptr(coff));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vmovups_maybe_tail(vmean, mean_ptr(coff));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                     uni_vmovups_spat_data(Vmm(sp_idx),
                             vmmword[reg_src + reg_soff_nspc + offt]);
 
                     vsubps(Vmm(30), vmean, Vmm(sp_idx++));
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vfmadd231ps(Vmm(ch_idx), Vmm(30), Vmm(30));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vfmadd231ps_aarch64(
+                            Vmm(ch_idx), Vmm(30), Vmm(30), p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                     coff += vlen;
                     offt += vlen_spat_data_;
@@ -572,7 +1137,11 @@ struct jit_bnorm_t : public jit_generator {
         };
 
         for (int idx = 0, offt = 0; idx < num_ch_blks; ++idx, offt += vlen)
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(Vmm(idx), vmmword[reg_rbuf1 + reg_coff + offt]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(Vmm(idx), vmmword[reg_rbuf1 + reg_coff + offt]);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
         xor_(reg_soff_nspc, reg_soff_nspc);
 
@@ -598,7 +1167,11 @@ struct jit_bnorm_t : public jit_generator {
         }
 
         for (int idx = 0, offt = 0; idx < num_ch_blks; ++idx, offt += vlen)
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff + offt], Vmm(idx));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_coff + offt], Vmm(idx));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 
     void forward_channels_nspc_compute(const int num_ch_blks) {
@@ -626,7 +1199,11 @@ struct jit_bnorm_t : public jit_generator {
                     uni_vmovups_maybe_tail(vmean, mean_ptr(coff));
                     uni_vmovups_maybe_tail(vsqrtvar, var_ptr(coff));
                     uni_vaddps(vsqrtvar, vsqrtvar, veps);
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vsqrtps(vsqrtvar, vsqrtvar);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vsqrtps_aarch64(vsqrtvar, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                     if (bdesc_->use_scaleshift()) {
                         uni_vmovups_maybe_tail(vgamma, gamma_ptr(coff));
@@ -636,7 +1213,11 @@ struct jit_bnorm_t : public jit_generator {
                     Vmm vscale = bdesc_->use_scaleshift() ? vgamma : vone;
                     Vmm vdiv = bdesc_->use_scaleshift() ? vgamma : vsqrtvar;
 
+#ifdef DNNL_X64_IMPLEMENTATION
                     vdivps(vdiv, vscale, vsqrtvar);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vdivps_aarch64(vdiv, vscale, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                     uni_vmovups_spat_data(
                             Vmm(idx), vmmword[reg_src + reg_soff_nspc + offt]);
@@ -644,7 +1225,11 @@ struct jit_bnorm_t : public jit_generator {
                     uni_vsubps(Vmm(idx), Vmm(idx), vmean);
 
                     if (bdesc_->use_scaleshift()) { // --flags=S
+#ifdef DNNL_X64_IMPLEMENTATION
                         uni_vfmadd213ps(Vmm(idx), vgamma, vbeta);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                        uni_vfmadd213ps_aarch64(Vmm(idx), vgamma, vbeta, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                     } else {
                         uni_vmulps(Vmm(idx), Vmm(idx), vsqrtvar);
                     }
@@ -656,9 +1241,15 @@ struct jit_bnorm_t : public jit_generator {
                     }
 
                     if (stream_store_allowed) {
+#ifdef DNNL_X64_IMPLEMENTATION
                         uni_vmovntps(vmmword[reg_dst + reg_soff_nspc + offt],
                                 Vmm(idx));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                        uni_vmovntps_aarch64(reg_dst, reg_soff_nspc, offt,
+                                Vmm(idx), p_512, p_lsb_256, p_lsb_128);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                     } else {
+
                         uni_vmovups_spat_data(
                                 vmmword[reg_dst + reg_soff_nspc + offt],
                                 Vmm(idx));
@@ -677,7 +1268,11 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
+#ifdef DNNL_X64_IMPLEMENTATION
             test(reg_dst, vlen - 1);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            CG::cmp(xa::XReg(IDX(reg_dst)), vlen - 1);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             jnz(normal_store, T_NEAR);
             compute(true);
             jmp(end_store, T_NEAR);
@@ -732,7 +1327,11 @@ struct jit_bnorm_t : public jit_generator {
         L(ch_label);
         {
             uni_vmovups_maybe_tail(vmean, mean_ptr());
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(Vmm(0), vmmword[reg_rbuf1 + reg_coff]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(Vmm(0), vmmword[reg_rbuf1 + reg_coff]);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             spat_loop(
                     spat_size, unroll_blocks, unroll_regs,
                     [=](size_t base_reg) {
@@ -752,7 +1351,11 @@ struct jit_bnorm_t : public jit_generator {
                         } else {
                             vsubps(vtmp1, vmean, vtmp0);
                         }
+#ifdef DNNL_X64_IMPLEMENTATION
                         uni_vfmadd231ps(v, vtmp1, vtmp1);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                        uni_vfmadd231ps_aarch64(v, vtmp1, vtmp1, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                         mic_prefetcht0(
                                 ptr[reg_src + reg_soff + offt + t0_pf_offt]);
@@ -764,7 +1367,11 @@ struct jit_bnorm_t : public jit_generator {
                         Vmm v = Vmm(base_reg * 3);
                         if (base_reg) uni_vaddps(b, b, v);
                     });
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             add(reg_coff, vlen);
             cmp(reg_coff, reg_coff_max);
             jl(ch_label);
@@ -777,7 +1384,11 @@ struct jit_bnorm_t : public jit_generator {
         Label zero_rbuf;
         L(zero_rbuf);
         {
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             add(reg_coff, isa == sse41 ? vlen / 2 : vlen);
             cmp(reg_coff, reg_coff_max);
             jne(zero_rbuf);
@@ -838,13 +1449,50 @@ struct jit_bnorm_t : public jit_generator {
                 Label mean_reduction_thrs;
                 L(mean_reduction_thrs);
                 {
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vaddps(Vmm(1), Vmm(1), vmmword[reg_rbuf1 + reg_roff]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    CG::add(X_TMP_0, xa::XReg(IDX(reg_rbuf1)),
+                            xa::XReg(IDX(reg_roff)));
+                    if (Vmm(1).isZMM()) {
+                        xa::ZRegS z {1};
+                        CG::ld1w(z_tmp0.s, p_512 / xa::T_z, xa::ptr(X_TMP_0));
+                        CG::fadd(z, z, z_tmp0.s);
+                    } else if (Vmm(1).isYMM()) {
+                        xa::ZRegS z {1};
+                        CG::ld1w(z_tmp0.s, p_lsb_256 / xa::T_z,
+                                xa::ptr(X_TMP_0));
+                        CG::fadd(z, p_lsb_256 / xa::T_z, z_tmp0.s);
+                    } else {
+                        xa::VReg4S v {1};
+                        CG::ldr(xa::QReg(tmp_vec_idx[0]), xa::ptr(X_TMP_0));
+                        CG::fadd(v, v, xa::VReg4S {tmp_vec_idx[0]});
+                    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vmovups(vmmword[reg_rbuf1 + reg_roff], Vmm(0));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_roff], Vmm(0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                     add(reg_roff, reg_coff_max);
                     sub(reg_ctr, 1);
                     jnz(mean_reduction_thrs);
                 }
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vdivps(Vmm(1), Vmm(1), vchan_size);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                if (vchan_size.isZMM())
+                    CG::fdiv(xa::ZRegS {1}, p_512 / xa::T_m,
+                            xa::ZRegS {IDX(vchan_size)});
+                else if (vchan_size.isYMM())
+                    CG::fdiv(xa::ZRegS {1}, p_lsb_256 / xa::T_m,
+                            xa::ZRegS {IDX(vchan_size)});
+                else {
+                    xa::VReg4S v {1};
+                    CG::fdiv(v, v, xa::VReg4S {IDX(vchan_size)});
+                }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vmovups_maybe_tail(mean_ptr(), Vmm(1));
 
                 add(reg_coff, isa == sse41 ? vlen / 2 : vlen);
@@ -909,12 +1557,44 @@ struct jit_bnorm_t : public jit_generator {
                 Label var_reduction_thrs;
                 L(var_reduction_thrs);
                 { // TODO: unroll (?)
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vaddps(Vmm(1), Vmm(1), vmmword[reg_rbuf1 + reg_roff]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    CG::add(X_TMP_0, xa::XReg(IDX(reg_rbuf1)),
+                            xa::XReg(IDX(reg_roff)));
+                    if (Vmm(1).isZMM()) {
+                        xa::ZRegS z {1};
+                        CG::ld1w(z_tmp0.s, p_512 / xa::T_z, xa::ptr(X_TMP_0));
+                        CG::fadd(z, z, z_tmp0.s);
+                    } else if (Vmm(1).isYMM()) {
+                        xa::ZRegS z {1};
+                        CG::ld1w(z_tmp0.s, p_lsb_256 / xa::T_z,
+                                xa::ptr(X_TMP_0));
+                        CG::fadd(z, p_lsb_256 / xa::T_z, z_tmp0.s);
+                    } else {
+                        xa::VReg4S v {1};
+                        CG::ldr(xa::QReg(tmp_vec_idx[0]), xa::ptr(X_TMP_0));
+                        CG::fadd(v, v, xa::VReg4S {tmp_vec_idx[0]});
+                    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                     add(reg_roff, reg_coff_max);
                     sub(reg_ctr, 1);
                     jnz(var_reduction_thrs);
                 }
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vdivps(Vmm(1), Vmm(1), vchan_size);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                if (vchan_size.isZMM())
+                    CG::fdiv(xa::ZRegS {1}, p_512 / xa::T_m,
+                            xa::ZRegS {IDX(vchan_size)});
+                else if (vchan_size.isYMM())
+                    CG::fdiv(xa::ZRegS {1}, p_lsb_256 / xa::T_m,
+                            xa::ZRegS {IDX(vchan_size)});
+                else {
+                    xa::VReg4S v {1};
+                    CG::fdiv(v, v, xa::VReg4S {IDX(vchan_size)});
+                }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vmovups_maybe_tail(var_ptr(), Vmm(1));
                 add(reg_coff, isa == sse41 ? vlen / 2 : vlen);
 
@@ -933,7 +1613,11 @@ struct jit_bnorm_t : public jit_generator {
             uni_vmovups_maybe_tail(vmean, mean_ptr());
             uni_vmovups_maybe_tail(vsqrtvar, var_ptr());
             uni_vaddps(vsqrtvar, vsqrtvar, veps);
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vsqrtps(vsqrtvar, vsqrtvar);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vsqrtps_aarch64(vsqrtvar, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
             if (bdesc_->use_scaleshift()) {
                 uni_vmovups_maybe_tail(vgamma, gamma_ptr());
@@ -948,7 +1632,11 @@ struct jit_bnorm_t : public jit_generator {
                 divps(vbuf, vsqrtvar);
                 movups(vdiv, vbuf);
             } else {
+#ifdef DNNL_X64_IMPLEMENTATION
                 vdivps(vdiv, vscale, vsqrtvar);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                uni_vdivps_aarch64(vdiv, vscale, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             }
 
             auto compute = [=](bool stream_store_allowed) {
@@ -966,7 +1654,12 @@ struct jit_bnorm_t : public jit_generator {
                                     + t1_pf_offt]);
                             uni_vsubps(v, v, vmean);
                             if (bdesc_->use_scaleshift()) {
+#ifdef DNNL_X64_IMPLEMENTATION
                                 uni_vfmadd213ps(v, vgamma, vbeta);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                                uni_vfmadd213ps_aarch64(
+                                        v, vgamma, vbeta, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                             } else {
                                 uni_vmulps(v, v, vsqrtvar);
                             }
@@ -979,8 +1672,13 @@ struct jit_bnorm_t : public jit_generator {
                                     fwd_process_relu_avx2(v, offt, Vmm(3));
                             }
                             if (stream_store_allowed) {
+#ifdef DNNL_X64_IMPLEMENTATION
                                 uni_vmovntps(
                                         vmmword[reg_dst + reg_soff + offt], v);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                                uni_vmovntps_aarch64(reg_dst, reg_soff_nspc,
+                                        offt, v, p_512, p_lsb_256, p_lsb_128);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                             } else {
                                 uni_vmovups_spat_data(
                                         vmmword[reg_dst + reg_soff + offt], v);
@@ -991,7 +1689,11 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
+#ifdef DNNL_X64_IMPLEMENTATION
                 test(reg_dst, vlen - 1);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                CG::cmp(xa::XReg(IDX(reg_dst)), vlen - 1);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 jnz(normal_store, T_NEAR);
                 compute(true);
                 jmp(end_store, T_NEAR);
@@ -1108,8 +1810,13 @@ struct jit_bnorm_t : public jit_generator {
         L(sh_channels);
         {
             uni_vmovups_maybe_tail(vmean, mean_ptr());
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(Vmm(0), vmmword[reg_rbuf1 + reg_coff]);
             uni_vmovups(Vmm(1), vmmword[reg_rbuf2 + reg_coff]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(Vmm(0), vmmword[reg_rbuf1 + reg_coff]);
+            uni_vmovups_aarch64(Vmm(1), vmmword[reg_rbuf2 + reg_coff]);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             spat_loop(
                     spat_size, 1, 1,
                     [=](size_t base_reg) {
@@ -1144,7 +1851,11 @@ struct jit_bnorm_t : public jit_generator {
                             mulps(t3, t2);
                             subps(o0, t3);
                         } else {
+#ifdef DNNL_X64_IMPLEMENTATION
                             vfnmadd231ps(o0, t3, t2);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                            uni_vfnmadd231ps_aarch64(o0, t3, t2, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                         }
                         uni_vaddps(o1, o1, t2);
                         mic_prefetcht0(ptr[reg_diff_dst + reg_soff + offt
@@ -1164,8 +1875,13 @@ struct jit_bnorm_t : public jit_generator {
                             uni_vaddps(b1, b1, Vmm(base_reg * 5 + 1));
                         }
                     });
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
             uni_vmovups(vmmword[reg_rbuf2 + reg_coff], Vmm(1));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+            uni_vmovups_aarch64(vmmword[reg_rbuf2 + reg_coff], Vmm(1));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             add(reg_coff, vlen);
             cmp(reg_coff, reg_coff_max);
             jl(sh_channels);
@@ -1174,8 +1890,15 @@ struct jit_bnorm_t : public jit_generator {
 
     void backward_sh_channels_nspc_compute(const int num_ch_blks) {
         for (int idx = 0, offt = 0; idx < 2 * num_ch_blks; offt += vlen) {
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(Vmm(idx++), vmmword[reg_rbuf1 + reg_coff + offt]);
             uni_vmovups(Vmm(idx++), vmmword[reg_rbuf2 + reg_coff + offt]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(
+                    Vmm(idx++), vmmword[reg_rbuf1 + reg_coff + offt]);
+            uni_vmovups_aarch64(
+                    Vmm(idx++), vmmword[reg_rbuf2 + reg_coff + offt]);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         }
 
         xor_(reg_soff_nspc, reg_soff_nspc);
@@ -1211,7 +1934,12 @@ struct jit_bnorm_t : public jit_generator {
 
                 uni_vsubps(
                         Vmm(sp_idx + 2), vmean, Vmm(sp_idx), Vmm(sp_idx + 2));
+#ifdef DNNL_X64_IMPLEMENTATION
                 vfnmadd231ps(Vmm(ch_idx), Vmm(sp_idx + 2), Vmm(sp_idx + 1));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                uni_vfnmadd231ps_aarch64(
+                        Vmm(ch_idx), Vmm(sp_idx + 2), Vmm(sp_idx + 1), p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vaddps(Vmm(ch_idx + 1), Vmm(ch_idx + 1), Vmm(sp_idx + 1));
 
                 coff += vlen;
@@ -1224,8 +1952,15 @@ struct jit_bnorm_t : public jit_generator {
         }
 
         for (int idx = 0, offt = 0; idx < 2 * num_ch_blks; offt += vlen) {
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff + offt], Vmm(idx++));
             uni_vmovups(vmmword[reg_rbuf2 + reg_coff + offt], Vmm(idx++));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(
+                    vmmword[reg_rbuf1 + reg_coff + offt], Vmm(idx++));
+            uni_vmovups_aarch64(
+                    vmmword[reg_rbuf2 + reg_coff + offt], Vmm(idx++));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         }
     }
 
@@ -1285,15 +2020,25 @@ struct jit_bnorm_t : public jit_generator {
             uni_vmovups_maybe_tail(vmean, mean_ptr());
             uni_vmovups_maybe_tail(vsqrtvar, var_ptr());
             uni_vaddps(vsqrtvar, vsqrtvar, veps);
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vsqrtps(vsqrtvar, vsqrtvar);
             uni_vdivps(vsqrtvar, vone, vsqrtvar, vbuf);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vsqrtps_aarch64(vsqrtvar, vsqrtvar, p_512);
+            uni_vdivps_aarch64(vsqrtvar, vone, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             if (bdesc_->use_scaleshift())
                 uni_vmovups_maybe_tail(vgamma, gamma_ptr());
             uni_vmovups_maybe_tail(vdiff_gamma, diff_gamma_ptr());
             uni_vmovups_maybe_tail(vdiff_beta, diff_beta_ptr());
             uni_vmulps(vdiff_gamma, vdiff_gamma, vsqrtvar);
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vdivps(vdiff_beta, vdiff_beta, vchan_size);
             uni_vdivps(vdiff_gamma, vdiff_gamma, vchan_size);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vdivps_aarch64(vdiff_beta, vdiff_beta, vchan_size, p_512);
+            uni_vdivps_aarch64(vdiff_gamma, vdiff_gamma, vchan_size, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
             auto compute = [=](bool stream_store_allowed) {
                 spat_loop(
@@ -1327,9 +2072,14 @@ struct jit_bnorm_t : public jit_generator {
                                 uni_vmulps(v, v, vgamma);
                             }
                             if (stream_store_allowed) {
+#ifdef DNNL_X64_IMPLEMENTATION
                                 uni_vmovntps(
                                         vmmword[reg_diff_src + reg_soff + offt],
                                         v);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                                uni_vmovntps_aarch64(reg_diff_src, reg_soff,
+                                        offt, v, p_512, p_lsb_256, p_lsb_128);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                             } else {
                                 uni_vmovups_spat_data(
                                         vmmword[reg_diff_src + reg_soff + offt],
@@ -1349,7 +2099,11 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
+#ifdef DNNL_X64_IMPLEMENTATION
                 test(reg_diff_src, vlen - 1);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                CG::cmp(xa::XReg(IDX(reg_diff_src)), vlen - 1);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 jnz(normal_store, T_NEAR);
                 compute(true);
                 jmp(end_store, T_NEAR);
@@ -1388,8 +2142,13 @@ struct jit_bnorm_t : public jit_generator {
                     uni_vmovups_maybe_tail(vsqrtvar, var_ptr(coff));
 
                     uni_vaddps(vsqrtvar, vsqrtvar, veps);
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vsqrtps(vsqrtvar, vsqrtvar);
                     uni_vdivps(vsqrtvar, vone, vsqrtvar, vbuf);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vsqrtps_aarch64(vsqrtvar, vsqrtvar, p_512);
+                    uni_vdivps_aarch64(vsqrtvar, vone, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                     if (bdesc_->use_scaleshift())
                         uni_vmovups_maybe_tail(vgamma, gamma_ptr(coff));
@@ -1404,8 +2163,15 @@ struct jit_bnorm_t : public jit_generator {
                     mov(reg_ws, ptr[rsp + stack_off_ws_off_copy]);
 
                     uni_vmulps(vdiff_gamma, vdiff_gamma, vsqrtvar);
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vdivps(vdiff_beta, vdiff_beta, vchan_size);
                     uni_vdivps(vdiff_gamma, vdiff_gamma, vchan_size);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    uni_vdivps_aarch64(
+                            vdiff_beta, vdiff_beta, vchan_size, p_512);
+                    uni_vdivps_aarch64(
+                            vdiff_gamma, vdiff_gamma, vchan_size, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
                     uni_vmovups_spat_data(Vmm(idx),
                             vmmword[reg_diff_dst + reg_soff_nspc + offt]);
@@ -1434,9 +2200,15 @@ struct jit_bnorm_t : public jit_generator {
                     }
 
                     if (stream_store_allowed) {
+#ifdef DNNL_X64_IMPLEMENTATION
                         uni_vmovntps(
                                 vmmword[reg_diff_src + reg_soff_nspc + offt],
                                 Vmm(idx));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                        uni_vmovntps_aarch64(reg_diff_src, reg_soff_nspc, offt,
+                                Vmm(idx), p_512, p_lsb_256, p_lsb_128);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
                     } else {
                         uni_vmovups_spat_data(
                                 vmmword[reg_diff_src + reg_soff_nspc + offt],
@@ -1454,7 +2226,11 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
+#ifdef DNNL_X64_IMPLEMENTATION
             test(reg_diff_src, vlen - 1);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            CG::cmp(xa::XReg(IDX(reg_diff_src)), vlen - 1);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             jnz(normal_store, T_NEAR);
             compute(true);
             jmp(end_store, T_NEAR);
@@ -1523,8 +2299,13 @@ struct jit_bnorm_t : public jit_generator {
 
         L(zero_rbuf);
         {
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
             uni_vmovups(vmmword[reg_rbuf2 + reg_coff], Vmm(0));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            uni_vmovups_aarch64(vmmword[reg_rbuf1 + reg_coff], Vmm(0));
+            uni_vmovups_aarch64(vmmword[reg_rbuf2 + reg_coff], Vmm(0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             add(reg_coff, isa == sse41 ? vlen / 2 : vlen);
             cmp(reg_coff, reg_coff_max);
             jne(zero_rbuf);
@@ -1591,14 +2372,42 @@ struct jit_bnorm_t : public jit_generator {
                 uni_vpxor(Vmm(1), Vmm(1), Vmm(1));
                 uni_vmovups_maybe_tail(vsqrtvar, var_ptr());
                 uni_vaddps(vsqrtvar, vsqrtvar, veps);
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vsqrtps(vsqrtvar, vsqrtvar);
                 uni_vdivps(vsqrtvar, vone, vsqrtvar, vbuf);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                uni_vsqrtps_aarch64(vsqrtvar, vsqrtvar, p_512);
+                uni_vdivps_aarch64(vsqrtvar, vone, vsqrtvar, p_512);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 mov(reg_ctr, reg_nnthr);
                 Label sh_reduction_thrs;
                 L(sh_reduction_thrs);
                 { // TODO: unroll (?)
+#ifdef DNNL_X64_IMPLEMENTATION
                     uni_vaddps(Vmm(0), Vmm(0), vmmword[reg_rbuf1 + reg_roff]);
                     uni_vaddps(Vmm(1), Vmm(1), vmmword[reg_rbuf2 + reg_roff]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                    xa::XReg x_roff {IDX(reg_roff)};
+
+                    CG::add(X_TMP_0, xa::XReg {IDX(reg_rbuf1)}, x_roff);
+                    CG::add(X_TMP_1, xa::XReg {IDX(reg_rbuf2)}, x_roff);
+                    if (Vmm(0).isZMM()) {
+                        CG::ld1w(z_tmp0.s, p_512 / xa::T_z, xa::ptr(X_TMP_0));
+                        CG::ld1w(z_tmp1.s, p_512 / xa::T_z, xa::ptr(X_TMP_1));
+                    } else if (Vmm(0).isYMM()) {
+                        CG::ld1w(z_tmp0.s, p_lsb_256 / xa::T_z,
+                                xa::ptr(X_TMP_0));
+                        CG::ld1w(z_tmp1.s, p_lsb_256 / xa::T_z,
+                                xa::ptr(X_TMP_1));
+                    } else {
+                        CG::ld1(xa::VReg4S {tmp_vec_idx[0]}, xa::ptr(X_TMP_0));
+                        CG::ld1(xa::VReg4S {tmp_vec_idx[1]}, xa::ptr(X_TMP_1));
+                    }
+                    uni_vaddps_unpredicate_aarch64(
+                            Vmm(0), Vmm(0), Vmm(tmp_vec_idx[0]));
+                    uni_vaddps_unpredicate_aarch64(
+                            Vmm(1), Vmm(1), Vmm(tmp_vec_idx[1]));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                     add(reg_roff, reg_coff_max);
                     sub(reg_ctr, 1);
                     jnz(sh_reduction_thrs);
@@ -1695,10 +2504,20 @@ struct jit_bnorm_t : public jit_generator {
             }
         }
 
+#ifndef DNNL_X64_IMPLEMENTATION
+        CG::ptrue(p_512.b);
+        CG::ptrue(p_lsb_256.b, xa::VL32);
+        CG::ptrue(p_lsb_128.b, xa::VL16);
+#endif
+
+#ifdef DNNL_X64_IMPLEMENTATION
         if (isa == avx512_common)
             prepare_tail_mask_avx512_common();
         else if (isa == avx2)
             prepare_tail_mask_avx2_common();
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        prepare_tail_mask_avx512_common();
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
         compute_static_strides();
         sub(rsp, stack_size_required);
