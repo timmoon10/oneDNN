@@ -165,14 +165,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                     ? (jcp.bcast_dim + i_ur) * reduce_mul
                     : i_ur * reduce_mul + i_reduce;
         } else {
-            if (jcp.transpose_src) {
-                const int reduce_group = i_reduce / 4;
-                const int reduce_shift = i_reduce % 4;
-                ofs = 4 * (reduce_group * jcp.ic_block + i_ur) + reduce_shift;
-            } else {
-                int rmul = bcast_layout_nxc ? jcp.ic : jcp.ic_block;
-                ofs = i_reduce * rmul + i_ur;
-            }
+            int rmul = bcast_layout_nxc ? jcp.ic : jcp.ic_block;
+            ofs = i_reduce * rmul + i_ur;
         }
 
         ofs = jcp.typesize_in * ofs;
@@ -540,39 +534,12 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         for (int i_reduce = 0; i_reduce < i_reduce_end;
                 i_reduce += reduce_step) { // IC
             for (int i_load = 0; i_load < load_loop_blk; ++i_load) { // OC
-                // if transposed input data used and if spatial size is
-                // not divided by transpose step (4) then for last reduce step
-                // we should load only needed load_registers data
-                // and clear remaining
-                if (jcp.transpose_src && jcp.is % jcp.fma_step && last_block
-                        && i_reduce == jcp.reduce_loop_unroll - reduce_step) {
-                    xa::LabelAArch64 load_all;
-                    xa::LabelAArch64 load_finish;
-                    CGA64::tst(reg_reduce_pos_flag, FLAG_SP_LAST);
-                    CGA64::b(xa::EQ, load_all);
-
-                    const int n_loads = jcp.is % jcp.fma_step;
-                    for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
-                        if (i_fma < n_loads)
-                            load_load(i_reduce + i_fma, i_load, i_fma);
-                        else
-                            CGA64::fmov(vreg_load_s(i_load, i_fma));
-                    }
-                    CGA64::b(load_finish);
-
-                    CGA64::L_aarch64(load_all);
-                    for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
-                        load_load(i_reduce + i_fma, i_load, i_fma);
-                    }
-                    CGA64::L_aarch64(load_finish);
-                } else {
-                    for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
+                for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
 #if 0
-                        if (i_load + 1 == load_loop_blk && load_dim_tail)
-                            vreg = vreg | k_load_dim_mask | T_z;
+                    if (i_load + 1 == load_loop_blk && load_dim_tail)
+                        vreg = vreg | k_load_dim_mask | T_z;
 #endif
-                        load_load(i_reduce + i_fma, i_load, i_fma);
-                    }
+                    load_load(i_reduce + i_fma, i_load, i_fma);
                 }
             }
 
@@ -933,7 +900,6 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     /* Channel blocking size is simd_w */
     jcp.ic_block = jcp.oc_block = simd_w;
 
-    jcp.transpose_src = false; // TODO: remove?
     jcp.use_vmovntps = false; // TODO: remove?
 
     if (everyone_is(data_type::f32, src_d.data_type(), weights_d.data_type(),
@@ -1020,11 +986,11 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         jcp.reduce_loop_bcast_step = jcp.reduce_loop_unroll
                 * (is_data_layout_nxc ? 1 : jcp.bcast_dim) * jcp.typesize_in;
 
-        /* Offset for moving 16o*16i on filter array */
+        /* Offset: 16o*16i (filter) */
         jcp.reduce_loop_load_step
                 = jcp.reduce_loop_unroll * jcp.load_block * jcp.typesize_in;
 
-        /* Offset for moving I/16 * 16o */
+        /* Offset: I/16 * 16o */
         jcp.load_loop_load_step
                 = (utils::rnd_up(jcp.reduce_dim, jcp.reduce_block))
                 * jcp.load_block * jcp.typesize_in;
@@ -1235,10 +1201,7 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
 
     } else if (jcp.prop_kind == backward_weights) { /* BWD weight */
 
-        if (jcp.transpose_src)
-            jcp.reduce_dim = jcp.tr_is;
-        else
-            jcp.reduce_dim = jcp.is;
+        jcp.reduce_dim = jcp.is;
 
         jcp.reduce_block = best_divider(jcp.reduce_dim, 7, 16, true);
         if (jcp.reduce_dim % jcp.reduce_block != 0)
@@ -1400,14 +1363,9 @@ void jit_aarch64_sve_512_1x1_conv_kernel::init_scratchpad(
                 jcp.typesize_out);
     }
 
-    if (jcp.transpose_src) {
-        const size_t tr_src_size
-                = (size_t)jcp.nthr_mb * jcp.ngroups * jcp.ic * jcp.tr_is;
-        scratchpad.book(key_conv_tr_src, tr_src_size, jcp.typesize_out);
-        scratchpad.book<simple_barrier::ctx_t>(key_conv_tr_src_bctx, jcp.nthr);
-    }
 }
 
+/* BWD W*/
 void jit_aarch64_sve_512_1x1_conv_kernel::balance(jit_1x1_conv_conf_t &jcp) {
     int nthreads = jcp.nthr;
     // initialize jcp reduction threading properties
@@ -1416,9 +1374,12 @@ void jit_aarch64_sve_512_1x1_conv_kernel::balance(jit_1x1_conv_conf_t &jcp) {
         /* simplification... fortunately it doesn't hurt much */
         return;
     }
-    const int nb_bcast = div_up(jcp.bcast_dim, jcp.bcast_block);
-    const int nb_load = div_up(jcp.load_dim, jcp.load_block);
-    const int nb_reduce = div_up(jcp.reduce_dim, jcp.reduce_block);
+    // bcast_dim: src H*W, bcast_block: ur (fwd, bwd_d)
+    const int nb_bcast = div_up(jcp.bcast_dim, jcp.bcast_block);  // # of H*W loop
+    // load_dim: dst channel, load_block: simd_w 
+    const int nb_load = div_up(jcp.load_dim, jcp.load_block);     // # of dst channel loop
+    // reduce_dim: src channel, reduce_block: simd_w
+    const int nb_reduce = div_up(jcp.reduce_dim, jcp.reduce_block); // # of src channel loop
 
     jcp.nthr_g = jcp.ngroups;
     const int nthr = nthreads / jcp.nthr_g;
@@ -1435,11 +1396,6 @@ void jit_aarch64_sve_512_1x1_conv_kernel::balance(jit_1x1_conv_conf_t &jcp) {
         int bcast_koeff = 1;
         int load_koeff = 1;
         int output_koeff = 12;
-        if (jcp.transpose_src) {
-            bcast_koeff = 5;
-            load_koeff = 1;
-            output_koeff = 8;
-        }
         return 0
                 + (size_t)bcast_koeff * div_up(jcp.mb * nb_reduce, nthr_mb)
                 * div_up(jcp.ngroups, jcp.nthr_g) * div_up(nb_bcast, nthr_ic_b)
