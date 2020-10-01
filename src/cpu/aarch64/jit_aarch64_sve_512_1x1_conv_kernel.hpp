@@ -15,7 +15,7 @@
 *******************************************************************************/
 
 #ifndef CPU_AARCH64_JIT_SVE_1x1_CONV_KERNEL_HPP
-#define CPU_AARCH64_JIT_SVE_1X1_CONV_KERNEL_HPP
+#define CPU_AARCH64_JIT_SVE_1x1_CONV_KERNEL_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
@@ -174,8 +174,6 @@ private:
 
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
 
-    int stack_space_needed = 16;
-    int bcast_loop_work_offt = 0;
     void bcast_loop(int load_loop_blk);
     void reduce_loop(int load_loop_blk, int ur, int substep, bool wraparound);
 
