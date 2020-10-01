@@ -8,12 +8,13 @@ before_script:
     - git submodule sync --recursive
     - git submodule update --init --recursive
 
-job_1:
+fcc_w/_SSL2:
   stage: test
-  image: 0b158dd36e5c
+  image: c4b91d43773a
   script:
 #    - pwd
 #    - ls
+    - source setenv-fcc
     - export ONEDNN_ROOT_DIR=`pwd`
     - cd src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/
     - mkdir build_xed_aarch64
@@ -28,6 +29,6 @@ job_1:
     - mkdir build
     - cd build
     - export LD_LIBRARY_PATH=${XED_ROOT_DIR}/lib:${LD_LIBRARY_PATH} && \
-    - cmake -DDNNL_INDIRECT_JIT_AARCH64=ON ..
+    - cmake -DDNNL_INDIRECT_JIT_AARCH64=ON -DWITH_BLAS=ssl2 ..
     - make -j48
     - make test
