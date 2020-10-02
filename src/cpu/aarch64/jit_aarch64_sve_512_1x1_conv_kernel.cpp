@@ -30,6 +30,7 @@
 
 #include "cpu/aarch64/jit_aarch64_sve_512_1x1_conv_kernel.hpp"
 #include "cpu/aarch64/jit_uni_1x1_conv_utils.hpp"
+#include "cpu/aarch64/jit_op_imm_check.hpp"
 
 #define GET_OFF(field) \
     static_cast<int32_t>(offsetof(jit_1x1_conv_call_s, field))
@@ -49,7 +50,6 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
 
     CGA64::mov(aux1_reg_bcast_data, reg_bcast_data);
     CGA64::mov(aux_reg_bcast_data, reg_bcast_data);
-
     CGA64::mov(aux_reg_output_data, reg_output_data);
     CGA64::mov(reg_bcast_loop_iter, reg_bcast_loop_work);
 
@@ -141,9 +141,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
     auto bias_load = [=](int i_load, int i_ur) {
         int ofs = jcp.typesize_out * jcp.oc_block * i_load;
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
-
+        if(ldr_imm_check(ofs)){
             CGA64::ldr(vreg_accum(i_load, i_ur),
                     xa::ptr(reg_bias_data, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
@@ -171,13 +169,11 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         ofs = jcp.typesize_in * ofs;
         int tmp_ofs = ofs;
-        if (((ofs & 0x3) == 0) && (ofs <= LDRWMAX) && (ofs >= 0)) {
+        if (ld1rw_imm_check(ofs)) {
             CGA64::ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
                     xa::ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
         } else {
-            if ((prev_ofs != -1) && ((ofs - prev_ofs) >= 0)
-                    && ((ofs - prev_ofs) <= LDRWMAX)
-                    && (((ofs - prev_ofs) & 0x3) == 0)) {
+            if ((prev_ofs != -1) && ld1rw_imm_check(ofs-prev_ofs)){
                 CGA64::ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>((ofs - prev_ofs))));
@@ -211,8 +207,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs = i_load * lmul + u0 * rmul;
         ofs = u1 * jcp.reduce_loop_load_step + jcp.typesize_in * ofs;
 
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
+        if (ldr_imm_check(ofs)){
             ofs = VL_OFS(ofs);
             CGA64::ldr(vreg_load(i_load, i_fma),
                     xa::ptr(aux_reg_load_data, static_cast<int32_t>(ofs)));
@@ -244,8 +239,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs_tmp = ofs;
 
         if (bwd_iload) CGA64::mov(r, i_load);
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
+        if (ldr_imm_check(ofs)){
             if (bwd_iload)
                 CGA64::madd(r, r, reg_output_stride, aux_reg_output_data);
             CGA64::ldr(
@@ -296,15 +290,13 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs_tmp = ofs;
 
         if (bwd_iload) CGA64::mov(r, i_load);
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
+        if (str_imm_check(ofs)) {
             if (bwd_iload)
                 CGA64::madd(r, r, reg_output_stride, aux_reg_output_data);
             CGA64::str(vreg_accum(i_load, i_ur),
                     xa::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
-            if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)
-                    && ((VL_OFS(ofs - prev_ofs)) <= LDRMAX)) {
+            if ((prev_ofs != -1) && str_imm_check(ofs - prev_ofs)) {
                 if (bwd_iload)
                     CGA64::madd(r, r, reg_output_stride, reg_prev_out_addr);
                 else
