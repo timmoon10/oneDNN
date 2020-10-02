@@ -922,9 +922,9 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     jcp.load_grp_count = 1;
 
     // TODO: mov check funcs into platform files
-    const int L1_capacity = get_A64FX_cache_size(1, true) / sizeof(float);
+    const int L1_capacity = platform::get_A64FX_cache_size(1, true, 1) / sizeof(float);
     const int L2_size
-            = get_A64FX_cache_size(2, false, nthreads) / sizeof(float);
+            = platform::get_A64FX_cache_size(2, false, nthreads) / sizeof(float);
     const int L2_capacity = (L2_size * 3) / 4;
 
     /* FWD, BWD data */

@@ -40,6 +40,8 @@
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 #include "cpu/platform.hpp"
 
+#include "cpu/aarch64/jit_op_imm_check.hpp"
+
 #define GET_OFF(field) static_cast<int32_t>(offsetof(jit_conv_call_s, field))
 #define KNx_L2_EFFECTIVE_CAPACITY ((512 - 64) * 1024)
 #define A64FX_L2_EFFECTIVE_CAPACITY ((666 - 128) * 1024)
@@ -60,14 +62,8 @@ using namespace Xbyak;
 namespace {
 
 constexpr auto small_spatial = 14;
-#if 1
-unsigned int L1_cache_size = platform::get_per_core_cache_size(1);
-unsigned int L2_cache_size = platform::get_per_core_cache_size(2);
-#else
-//[info]記述形式が変わっているが以下でよい？
-unsigned int L1_cache_size = get_A64FX_cache_size(1, true, 1);
-unsigned int L2_cache_size = get_A64FX_cache_size(2, true, 1);
-#endif
+unsigned int L1_cache_size = platform::get_A64FX_cache_size(1, true, 1);
+unsigned int L2_cache_size = platform::get_A64FX_cache_size(2, true, 1);
 
 inline void pick_loop_order(jit_conv_conf_t &jcp) {
     using namespace prop_kind;
@@ -1281,12 +1277,7 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     jcp.ow_block = get_ow_block(jcp.nb_oc_blocking, jcp.ur_w, thr_eff);
     jcp.nb_ow = div_up(jcp.ow, jcp.ow_block);
 
-//[info]buildエラー仮対処
-#if 0
-    const int L2_size = get_A64FX_cache_size(2, false, nthreads) / sizeof(float);
-#else
-    const int L2_size = platform::get_per_core_cache_size(2) / sizeof(float);
-#endif
+    const int L2_size = platform::get_A64FX_cache_size(2, false, nthreads) / sizeof(float);
 
     // Source and output data needs to fit in L2,
     // leaving some space for weights and prefetching.
@@ -2439,7 +2430,7 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
             // TODO: Implement a more general optimization taking into account
             // the height dimension.
             int L2_part
-                    = (platform::get_per_core_cache_size(2) * 7 / 8) / typesize;
+                    = (platform::get_A64FX_cache_size(2, false, nthreads) * 7 / 8) / typesize;
             int size_diff_src_chunk = jcp.ic_block * nb_ic_blocking * ur_w;
             int size_diff_dst_chunk = jcp.oc_block * ur_w;
             int size_wei_chunk
