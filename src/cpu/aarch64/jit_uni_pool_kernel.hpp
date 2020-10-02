@@ -28,6 +28,9 @@
 #include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
+#define CG CodeGeneratorAArch64
+namespace xa = Xbyak_aarch64;
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -64,6 +67,8 @@ private:
     using Reg32 = Xbyak::Reg32;
     using Reg64 = Xbyak::Reg64;
 
+  using XReg = xa::XReg;
+
     using Vmm = typename utils::conditional3<isa == sse41, Xmm, isa == avx, Ymm,
             Zmm>::type;
     int reg_idx(int idx) {
@@ -96,12 +101,21 @@ private:
     Vmm vmm_k_offset = Vmm(1);
 
     // Used only for avx512 when bf16 is present
+#ifdef DNNL_X64_IMPLEMENTATION
     inline Vmm vmm_idx() {
         if (!jpp.is_backward) {
             return (jpp.is_training) ? Vmm(4) : Vmm(1);
         } else
             return Vmm(4);
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    inline uint32_t reg_idx() {
+        if (!jpp.is_backward) {
+            return (jpp.is_training) ? 4 : 1;
+        } else
+            return 4;
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     Zmm bf16_emu_reserv_1 = Zmm(5);
     Zmm bf16_emu_reserv_2 = Zmm(6);
@@ -109,9 +123,26 @@ private:
     Reg64 bf16_emu_reserv_4 = r11;
     Zmm bf16_emu_reserv_5 = Zmm(8);
 
+  const std::vector<uint32_t> tmp_vec_idx
+  = {20, 21, 22, 23, 24, 25, 26, 27};
+  xa::ZReg z_tmp0 = z20;
+  xa::ZReg z_tmp1 = z21;
+  xa::ZReg z_tmp2 = z22;
+  xa::ZReg z_tmp3 = z23;
+  xa::ZReg z_tmp4 = z24;
+  xa::ZReg z_tmp5 = z25;
+  xa::ZReg z_tmp6 = z26;
+  xa::ZReg z_tmp7 = z27;
+
     Opmask k_c_tail_mask = Opmask(4);
     Opmask k_mask_cvt = Opmask(5);
     Opmask k_store_mask = Opmask(6);
+
+  /* Caution: Chose predicate registers not used by x64's implementation. */
+  xa::PReg p_lsb_256 = p1;
+  xa::PReg p_512 = p2;
+  xa::PReg p_tmp0 = p3;
+  xa::PReg p_lsb_32 = p7;
 
     // Here be some (tame) dragons. This kernel does not follow the regular
     // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu
@@ -145,6 +176,12 @@ private:
     reg64_t aux_reg_zero_ih = r15;
     reg64_t ki = r12;
     reg64_t aux_reg_input_d = r8;
+
+  using xReg_t = const XReg;
+  xreg_t aux_xreg_input = x9;
+  xreg_t xreg_output = x12;
+  xreg_t xreg_index = x10;
+  
 
     Reg32 reg_shuf_mask = esi;
 
