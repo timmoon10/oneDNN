@@ -180,6 +180,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
     //[info]取り敢えずv0.21と同一codeを展開
     int reg_ofs = jcp.ur_w * jcp.nb_oc_blocking;
     int num_regs = 32 - reg_ofs;
+    int prev_out_ofs = -1;
 
     for (int k = 0; k < jcp.nb_oc_blocking; k++)
         for (int j = 0; j < ur_w; j++) {
@@ -197,9 +198,20 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             //[info]取り敢えずv0.21を参考に展開
             size_t aux_output_offset = get_output_offset(j, k);
             int idx = reg_ofs + ((j + k * ur_w) % num_regs);
-            CGA64::add_imm(
+            if(j == 0){
+                CGA64::add_imm(
                     reg_out_long_offt, reg_out, aux_output_offset, reg_tmp_imm);
-            CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt));
+                prev_out_ofs = aux_output_offset;
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt));
+            }else if(ldr_imm_check(aux_output_offset - prev_out_ofs)){
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt, 
+                            static_cast<int32_t>(VL_OFS(aux_output_offset - prev_out_ofs))));
+            }else{
+                CGA64::add_imm(
+                    reg_out_long_offt, reg_out_long_offt, aux_output_offset - prev_out_ofs, reg_tmp_imm);
+                prev_out_ofs = aux_output_offset;
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt));
+            }
             CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
 #endif
         }
