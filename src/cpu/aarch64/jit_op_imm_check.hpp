@@ -6,6 +6,10 @@
 #define STRMAX    255
 #define STRMIN    (-256)
 #define LD1RWMAX  252
+#define PRFMMAX   32760
+#define PRFMMIN   0
+#define PRFWMAX   31
+#define PRFWMIN   (-32)
 
 namespace dnnl{
 namespace impl{
@@ -43,6 +47,24 @@ template <typename T>
 bool ld1rw_imm_check(T ofs){
     return ((ofs & 0x3) == 0) && (ofs <= LD1RWMAX) && (ofs >= 0);
 }
+
+// Is the optional positive immediate byte offset, 
+// a multiple of 8 in the range 0 to 32760, defaulting to 0 
+// and encoded in the "imm12" field as <pimm>/8.
+template <typename T>
+bool prfm_imm_check(T ofs){
+    return (ofs <= PRFMMAX) && (ofs >= PRFMMIN) && ((ofs & 0x7) == 0);
+}
+
+template <typename T>
+bool prfw_imm_check(T ofs){
+    int vlen = cpu_isa_traits<sve>::vlen;
+    int vlen_shift = cpu_isa_traits<sve>::vlen_shift;
+    int shifted_ofs = ofs >> vlen_shift;
+
+    return (shifted_ofs <= PRFWMAX) && (shifted_ofs >= PRFWMIN) && ((ofs % vlen) == 0);
+}
+
 
 } // namespace aarch64
 } // namespace cpu

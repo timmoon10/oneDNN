@@ -171,11 +171,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
       ofs = jcp.typesize_in * ofs;
       int tmp_ofs = ofs;
       if ((ofs&0xFF)==0) { /* Alined to the cache line size */
-        if((ofs <= PRFMMAX) && (ofs >= PRFMMIN)){
+        if(prfm_imm_check(ofs)){
           CGA64::prfm(xa::PLDL1KEEP, xa::ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
         }else{
-          if((prev_ofs != -1) && ((ofs - prev_ofs)>=PRFMMIN)
-             && ((ofs - prev_ofs) <= PRFMMAX) ){
+          if((prev_ofs != -1) && prfm_imm_check(ofs - prev_ofs) ){
             CGA64::prfm(xa::PLDL1KEEP, xa::ptr(reg_prev_bcast_addr, static_cast<int32_t>(ofs-prev_ofs)));
           }else{
             if((prev_ofs != -1) && ((ofs - prev_ofs)>=0)){
@@ -189,13 +188,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
           }
         }
       } else {
-        if((VL_OFS(ofs) <= PRFWMAX) &&
-           (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
+        if(prfw_imm_check(ofs)) {
           CGA64::prfw(xa::PLDL1KEEP_SVE, reg_p_all_ones, xa::ptr(aux_reg_bcast_data, static_cast<int32_t>(VL_OFS(ofs))));
         } else{
-          if((prev_ofs != -1) &&
-             (VL_OFS(ofs - prev_ofs) >= (-1 * PRFWMAX - 1)) &&
-             (VL_OFS(ofs - prev_ofs) <= PRFWMAX)){
+          if((prev_ofs != -1) && prfw_imm_check(ofs - prev_ofs)){
             CGA64::prfw(xa::PLDL1KEEP_SVE, reg_p_all_ones, xa::ptr(reg_prev_bcast_addr, static_cast<int32_t>VL_OFS(ofs-prev_ofs)));
           }else{
             if((prev_ofs != -1) &&
