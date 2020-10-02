@@ -402,15 +402,13 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
 
     auto bcast_load = [&](int jj, int nb_oc_block, int aux_input_offset,
                               int prev_ofs) {
-        if (((aux_input_offset & 0x3) == 0) && (aux_input_offset < LDRWMAX)
-                && (aux_input_offset >= 0)) {
+        if(ld1rw_imm_check(aux_input_offset)){
             CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
                     xa::ptr(aux_reg_inp,
                             static_cast<int32_t>(aux_input_offset)));
         } else {
-            if ((prev_ofs != -1) && ((aux_input_offset - prev_ofs) > 0)
-                    && ((aux_input_offset - prev_ofs) < LDRWMAX)
-                    && (((aux_input_offset - prev_ofs) & 0x3) == 0)) {
+            if ((prev_ofs != -1) 
+                  && ld1rw_imm_check(aux_input_offset - prev_ofs)){
 
                 CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
@@ -440,13 +438,13 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
     auto wei_load = [=](int aux_kernel_offset, int reg_idx, int prev_ofs) {
         int ofs = aux_kernel_offset;
 
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))) {
+        if (ldr_imm_check(ofs)) {
             CGA64::ldr(zreg_wei(reg_idx),
                     xa::ptr(aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             int ofs_tmp = ofs - prev_ofs;
-            if ((prev_ofs != -1) && (VL_OFS(ofs_tmp) >= (-1 * LDRMAX))
-                    && (VL_OFS(ofs_tmp) <= LDRMAX)) {
+            if ((prev_ofs != -1) 
+                  && ldr_imm_check(ofs_tmp)){
                 CGA64::ldr(zreg_wei(reg_idx),
                         xa::ptr(reg_prev_wei_addr,
                                 static_cast<int32_t>(VL_OFS(ofs_tmp))));
@@ -467,7 +465,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
         return prev_ofs;
     };
 
-    //[info]v0.21を参考に修正。要見直し。
     align(32);
     CGA64::L_aarch64(kh_label);
     {
@@ -491,7 +488,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                         CGA64::b(xa::EQ, ic_tail_jmp[ki]);
                     }
                 }
-#if 1
                 if ((jcp.kernel_kind == expl_bcast) && (ur_w < 16)) {
                     for (int jj = jj_start; jj < jj_end; jj++) {
                         size_t aux_input_offset
@@ -500,7 +496,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                                 aux_input_offset, prev_bcast_ofs);
                     }
                 }
-#endif
                 int wei_count = 0;
                 for (int ii = 0; ii < nb_oc_block; ii++) {
                     int reg_idx = wei_reg_ofs + ii;
@@ -1110,31 +1105,12 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
         return status::unimplemented;
 
     jcp.ur_w = nstl::min(jcp.ow, regs); // ur_w is min(output width, regs=28)
-    // TODO (Tanya): currently applied to Segnet convolutions only.
-    // Need to try for other topologies
-    if (jcp.ow > 150 && jcp.ur_w < regs / 2) jcp.ur_w = regs;
+    if (jcp.ow > 150) jcp.ur_w = regs;
 
     int n_oi = (jcp.ow / jcp.ur_w);
     int r_pad = calculate_end_padding(
             jcp.l_pad, jcp.ur_w * n_oi, jcp.iw, jcp.stride_w, ext_kw);
     if (jcp.l_pad > 0 && r_pad > 0) n_oi--;
-
-    // Heuristic to optimize code size on KNX
-    bool large_code_size = jcp.ur_w != jcp.ow && jcp.l_pad > 0 && r_pad > 0
-            && ((jcp.l_pad <= 0 && n_oi > 0) || (jcp.l_pad > 0 && n_oi > 1));
-    if (large_code_size) {
-        const int max_code_size = 24 * 1024;
-        const int num_ops_per_reg = 6 + jcp.ic_block * jcp.kw;
-        int mult = 1;
-        if (jcp.l_pad > 0) mult += 1;
-        if (r_pad > 0) mult += 1;
-        for (int ur_w = jcp.ur_w; ur_w > regs / 2; --ur_w) {
-            if (ur_w * mult * num_ops_per_reg * 9 < max_code_size) {
-                jcp.ur_w = ur_w;
-                break;
-            }
-        }
-    }
 
     /* Grouped channel offset to support 'non-blocked data' format for
      * convolution sizes with '(input_channel / ngroups) < simd' */
@@ -3974,6 +3950,7 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
             && IMPLICATION(jcp.dilate_h != 0, ext_kh <= jcp.ih);
     if (!ok) return status::unimplemented;
 
+
     jcp.r_pad = nstl::max(0,
             calculate_end_padding(
                     jcp.l_pad, jcp.ow, jcp.iw, jcp.stride_w, ext_kw));
@@ -4041,6 +4018,7 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
 
     if (!IMPLICATION(!is_data_layout_nxc, jcp.oc % jcp.oc_block == 0))
         return status::unimplemented;
+
     jcp.ic_tail = is_data_layout_nxc ? jcp.ic % jcp.simd_w : 0;
     jcp.oc_tail = is_data_layout_nxc ? jcp.oc % jcp.simd_w : 0;
 
@@ -4103,7 +4081,7 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
                 && utils::everyone_is(data_type::f32, src_d.data_type(),
                         diff_weights_d.data_type(), diff_dst_d.data_type())
                 && IMPLICATION(!is_data_layout_nxc,
-                        (one_of(jcp.ic, 1, 2, 3) && jcp.ngroups == 1));
+                        (one_of(jcp.ic, 1, 2, 3, 4) && jcp.ngroups == 1));
         if (!src_ok) return status::unimplemented;
 
         jcp.ver = ver_fma;
