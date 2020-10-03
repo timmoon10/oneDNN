@@ -102,8 +102,7 @@ private:
 
     reg64_t aux_reg_ker_d       = x2;   // ker addr (3d)
     reg64_t aux_reg_inp_d       = x11;  // src addr (3d)
-    reg64_t reg_ki              = x3;
-    reg64_t reg_tmp             = x5;
+    reg64_t reg_ki              = x3;   // d-dim loop var? (3d)
 
     reg64_t reg_kj              = x13;
     reg64_t reg_relu_ns         = x13;
