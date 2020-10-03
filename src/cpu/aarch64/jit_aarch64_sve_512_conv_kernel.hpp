@@ -92,13 +92,11 @@ private:
     reg64_t reg_inp             = x1;   // src base addr (2d)
     reg64_t reg_ker             = x2;   // ker base addr (2d)
     reg64_t reg_out             = x3;   // dst base addr (2d)
-    reg64_t reg_owb             = x5;
-    reg64_t reg_out_prf         = x6;
+    reg64_t reg_owb             = x5;   // num of ow-block
+    reg64_t reg_out_prf         = x6;   // addr for prefetch 
 
-    reg64_t aux_reg_inp         = x7;
-    reg64_t aux_reg_ker         = x8;
-    reg64_t aux_reg_inp_prf     = x9;
-    reg64_t aux_reg_ker_prf     = x10;
+    reg64_t aux_reg_inp         = x7;   // src addr (main loop)
+    reg64_t aux_reg_ker         = x8;   // ker addr (main loop)
     reg64_t reg_channel         = x9;
     reg64_t reg_bias            = x10;
 
