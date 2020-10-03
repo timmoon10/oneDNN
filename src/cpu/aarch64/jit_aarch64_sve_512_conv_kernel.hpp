@@ -108,11 +108,11 @@ private:
     reg64_t reg_oi              = x11;
     reg64_t reg_kh              = x12;  // ker h size
 
-    reg64_t reg_out_long_offt   = x7;
-
+    reg64_t reg_out_ofs         = x7;   // dst addr (store_output)
+#if 0
     reg64_t reg_tail            = aux_reg_ker;
     reg64_t reg_load_work       = reg_tail;
-
+#endif
     /* Temporary registers for ARM insts */
     reg64_t reg_tmp_addr        = x14;
     reg64_t reg_prev_bcast_addr = x15;

@@ -193,24 +193,24 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             size_t aux_output_offset = get_output_offset(j, k);
             vaddps(vmm,
                     make_safe_addr(
-                            reg_out, aux_output_offset, reg_out_long_offt));
+                            reg_out, aux_output_offset, reg_out_ofs));
 #else
             //[info]取り敢えずv0.21を参考に展開
             size_t aux_output_offset = get_output_offset(j, k);
             int idx = reg_ofs + ((j + k * ur_w) % num_regs);
             if(j == 0){
                 CGA64::add_imm(
-                    reg_out_long_offt, reg_out, aux_output_offset, reg_tmp_imm);
+                    reg_out_ofs, reg_out, aux_output_offset, reg_tmp_imm);
                 prev_out_ofs = aux_output_offset;
-                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt));
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_ofs));
             }else if(ldr_imm_check(aux_output_offset - prev_out_ofs)){
-                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt, 
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_ofs, 
                             static_cast<int32_t>(VL_OFS(aux_output_offset - prev_out_ofs))));
             }else{
                 CGA64::add_imm(
-                    reg_out_long_offt, reg_out_long_offt, aux_output_offset - prev_out_ofs, reg_tmp_imm);
+                    reg_out_ofs, reg_out_ofs, aux_output_offset - prev_out_ofs, reg_tmp_imm);
                 prev_out_ofs = aux_output_offset;
-                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_long_offt));
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_out_ofs));
             }
             CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
 #endif
