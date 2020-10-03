@@ -91,24 +91,24 @@ private:
     reg64_t param               = abi_param1_aarch64;
     reg64_t reg_inp             = x1;   // src base addr (2d)
     reg64_t reg_ker             = x2;   // ker base addr (2d)
+    reg64_t aux_reg_ker_d       = x2;   // ker addr (3d)
     reg64_t reg_out             = x3;   // dst base addr (2d)
+    reg64_t reg_ki              = x3;   // d-dim loop var? (3d)
     reg64_t reg_owb             = x5;   // num of ow-block
     reg64_t reg_out_prf         = x6;   // addr for prefetch 
 
     reg64_t aux_reg_inp         = x7;   // src addr (main loop)
+    reg64_t reg_out_ofs         = x7;   // dst addr (store_output)
     reg64_t aux_reg_ker         = x8;   // ker addr (main loop)
     reg64_t reg_channel         = x9;   // reduce workload
     reg64_t reg_bias            = x10;  // bias addr (prepare_out)
 
-    reg64_t aux_reg_ker_d       = x2;   // ker addr (3d)
     reg64_t aux_reg_inp_d       = x11;  // src addr (3d)
-    reg64_t reg_ki              = x3;   // d-dim loop var? (3d)
-
-    reg64_t reg_kj              = x13;  // ker h workload
     reg64_t reg_oi              = x11;
-    reg64_t reg_kh              = x12;  // ker h size
 
-    reg64_t reg_out_ofs         = x7;   // dst addr (store_output)
+    reg64_t reg_kh              = x12;  // ker h size
+    reg64_t reg_kj              = x13;  // ker h workload
+
 #if 0
     reg64_t reg_tail            = aux_reg_ker;
     reg64_t reg_load_work       = reg_tail;
@@ -122,8 +122,8 @@ private:
     reg64_t reg_out_org         = x18;    // dst base addr (3d)
     reg64_t reg_oi_org          = x19;    // base oi (3d)
     reg64_t aux_reg_ker_d_org   = x20;
-    reg64_t reg_inp_org         = x23;    // src base addr (3d)
     reg64_t reg_ker_org         = x22;    // ker base addr (3d)
+    reg64_t reg_inp_org         = x23;    // src base addr (3d)
 
 
     void prefetch(
@@ -137,8 +137,8 @@ private:
             assert(!"invalid prfop");
         }
 
-        bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
-        if (cacheline_alinged == true) {
+        bool cacheline_aligned = ((ofs & 0xFF) == 0) ? true : false;
+        if (cacheline_aligned == true) {
             xa::Prfop op = xa::PLDL1KEEP;
             switch (level) {
                 case 1:
