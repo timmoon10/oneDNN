@@ -108,7 +108,6 @@ private:
     reg64_t reg_oi              = x11;
     reg64_t reg_kh              = x12;  // ker h size
 
-    reg64_t reg_long_offt       = x20;
     reg64_t reg_out_long_offt   = x7;
 
     reg64_t reg_tail            = aux_reg_ker;
