@@ -681,7 +681,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     CGA64::ldr(reg_inp, xa::ptr(abi_param1_aarch64, GET_OFF(src)));
     CGA64::ldr(reg_out, xa::ptr(abi_param1_aarch64, GET_OFF(dst)));
     CGA64::ldr(reg_ker, xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
-    CGA64::ldr(reg_ker_prf, xa::ptr(abi_param1_aarch64, GET_OFF(filt_prf)));
     CGA64::ldr(reg_kh, xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
 
 //[info]取り敢えずコメント化。
@@ -717,16 +716,11 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
 
         if (ow == ur_w) {
             CGA64::ldr(
-                    reg_inp_prf, xa::ptr(abi_param1_aarch64, GET_OFF(src_prf)));
-            CGA64::ldr(
                     reg_out_prf, xa::ptr(abi_param1_aarch64, GET_OFF(dst_prf)));
             compute_loop(ur_w, l_pad, r_pad);
         } else {
-            CGA64::mov(reg_inp_prf, reg_inp);
             CGA64::mov(reg_out_prf, reg_out);
             if (n_oi == 0) {
-                CGA64::add_imm(
-                        reg_inp_prf, reg_inp_prf, inp_shift_pad, reg_tmp_imm);
                 CGA64::add_imm(
                         reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                 compute_loop(ur_w, l_pad, r_pad1);
@@ -734,16 +728,12 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
                 CGA64::add_imm(reg_out, reg_out, out_shift, reg_tmp_imm);
                 if (ur_w_tail != 0) {
                     CGA64::add_imm(
-                            reg_inp_prf, reg_inp_prf, inp_shift, reg_tmp_imm);
-                    CGA64::add_imm(
                             reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                     compute_loop(ur_w_tail, 0, r_pad);
                 }
             } else {
                 CGA64::mov(reg_oi, 0);
                 if (l_pad > 0) {
-                    CGA64::add_imm(reg_inp_prf, reg_inp_prf, inp_shift_pad,
-                            reg_tmp_imm);
                     CGA64::add_imm(
                             reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                     compute_loop(ur_w, l_pad, 0);
@@ -756,8 +746,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
                     xa::LabelAArch64 ow_loop_label;
                     CGA64::L_aarch64(ow_loop_label);
                     {
-                        CGA64::add_imm(reg_inp_prf, reg_inp_prf, inp_shift,
-                                reg_tmp_imm);
                         CGA64::add_imm(reg_out_prf, reg_out_prf, out_shift,
                                 reg_tmp_imm);
                         compute_loop(ur_w, 0, 0);
@@ -775,16 +763,12 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
                 }
                 if (r_pad1 > 0) {
                     CGA64::add_imm(
-                            reg_inp_prf, reg_inp_prf, inp_shift, reg_tmp_imm);
-                    CGA64::add_imm(
                             reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                     compute_loop(ur_w, 0, r_pad1);
                     CGA64::add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
                     CGA64::add_imm(reg_out, reg_out, out_shift, reg_tmp_imm);
                 }
                 if (ur_w_tail != 0) {
-                    CGA64::add_imm(
-                            reg_inp_prf, reg_inp_prf, inp_shift, reg_tmp_imm);
                     CGA64::add_imm(
                             reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                     compute_loop(ur_w_tail, 0, r_pad);
@@ -830,14 +814,9 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         // the first ow block, compute left padding
 
         CGA64::mov(reg_oi, n_oi_first_ow_block);
-        CGA64::mov(reg_inp_prf, reg_inp);
         CGA64::mov(reg_out_prf, reg_out);
 
         if (l_pad > 0) {
-            CGA64::ldr(reg_ker_prf,
-                    xa::ptr(abi_param1_aarch64, GET_OFF(filt_prf)));
-            CGA64::add_imm(
-                    reg_inp_prf, reg_inp_prf, inp_shift_pad, reg_tmp_imm);
             CGA64::add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
             compute_loop(ur_w, l_pad, 0);
             CGA64::add_imm(reg_inp, reg_inp, inp_shift_pad, reg_tmp_imm);
@@ -855,8 +834,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
             // just to consider left padding, not compute
             CGA64::add_imm(
                     reg_inp, reg_inp, inp_shift_pad_second_block, reg_tmp_imm);
-            CGA64::add_imm(reg_inp_prf, reg_inp_prf, inp_shift_pad_second_block,
-                    reg_tmp_imm);
         }
 
         // set number of iteration for oi-loop
@@ -871,12 +848,10 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
 
         // oi loop w/o padding
         CGA64::L_aarch64(oi_loop_label);
-        CGA64::ldr(reg_ker_prf, xa::ptr(abi_param1_aarch64, GET_OFF(filt_prf)));
         CGA64::L_aarch64(oi_loop_start_label);
         CGA64::cmp(reg_oi, 0);
         CGA64::b(xa::LE, oi_loop_end_label);
 
-        CGA64::add_imm(reg_inp_prf, reg_inp_prf, inp_shift, reg_tmp_imm);
         CGA64::add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
         compute_loop(ur_w, 0, 0);
         CGA64::add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
@@ -907,8 +882,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
 
         // last oi block with right padding
         CGA64::L_aarch64(last_oi_label);
-        CGA64::ldr(reg_ker_prf, xa::ptr(abi_param1_aarch64, GET_OFF(filt_prf)));
-        CGA64::add_imm(reg_inp_prf, reg_inp_prf, inp_shift, reg_tmp_imm);
         CGA64::add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
         compute_loop(ur_w, 0, r_pad1);
         CGA64::add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
@@ -919,9 +892,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         CGA64::b(xa::LT, end_label);
 
         CGA64::L_aarch64(tail_label);
-        CGA64::ldr(reg_ker_prf, xa::ptr(abi_param1_aarch64, GET_OFF(filt_prf)));
         if (ur_w_tail != 0) {
-            CGA64::add_imm(reg_inp_prf, reg_inp_prf, inp_shift, reg_tmp_imm);
             CGA64::add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
             compute_loop(ur_w_tail, 0, r_pad);
         }
