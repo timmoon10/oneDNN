@@ -375,10 +375,9 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
             // aux_reg_ker_d == reg_ker we need to save its value and restore
             // it after kd loop
             CGA64::mov(aux_reg_ker_d_org, aux_reg_ker_d);
-        } else
-            CGA64::ldr(
-                    aux_reg_ker_d, xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
-
+        } else{
+            CGA64::mov(aux_reg_ker_d, aux_reg_ker_d_org);
+        }
         CGA64::mov(aux_reg_inp_d, reg_inp);
 
         CGA64::L_aarch64(kd_label);
@@ -682,6 +681,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     CGA64::ldr(reg_out, xa::ptr(abi_param1_aarch64, GET_OFF(dst)));
     CGA64::ldr(reg_ker, xa::ptr(abi_param1_aarch64, GET_OFF(filt)));
     CGA64::ldr(reg_kh, xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
+    if(jcp.ndims == 5) CGA64::mov(aux_reg_ker_d_org, reg_ker);
 
 //[info]取り敢えずコメント化。
 #if 0

@@ -97,12 +97,11 @@ private:
 
     reg64_t aux_reg_inp         = x7;   // src addr (main loop)
     reg64_t aux_reg_ker         = x8;   // ker addr (main loop)
-    reg64_t reg_channel         = x9;
-    reg64_t reg_bias            = x10;
+    reg64_t reg_channel         = x9;   // reduce workload
+    reg64_t reg_bias            = x10;  // bias addr (prepare_out)
 
-    reg64_t aux_reg_ker_d       = x2;
-    reg64_t aux_reg_inp_d       = x11;
-    reg64_t aux_reg_inp_d_prf   = x6;
+    reg64_t aux_reg_ker_d       = x2;   // ker addr (3d)
+    reg64_t aux_reg_inp_d       = x11;  // src addr (3d)
     reg64_t aux_reg_ker_d_prf   = x12;
     reg64_t reg_ki              = x3;
     reg64_t reg_tmp             = x5;
