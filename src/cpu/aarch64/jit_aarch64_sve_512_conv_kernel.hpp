@@ -548,48 +548,47 @@ private:
     static const int max_ur_w;
     static const int min_oh_reduce;
 
-    //[info]v0.21のcodeを追加。v1.6追加codeは要確認。
-    reg64_t param = abi_param1_aarch64;
-    reg64_t reg_input = x1;
-    reg64_t reg_kernel = x2;
-    reg64_t reg_output = x3;
-    reg64_t b_ic = x20;
-    reg64_t kj = x5;
-    reg64_t reg_kh = x6;
-    reg64_t reg_ur_w_trips = x7;
-    reg64_t reg_oj = x8;
-    //    reg64_t reg_ih_count   = x9;
-    reg64_t reg_tmp = x10;
-    reg64_t reg_long_offt = x10;
-    //[info]v1.6追加code
-    reg64_t reg_icb = x9;
-    //
+    reg64_t param               = abi_param1_aarch64;
+    reg64_t reg_input           = x1;
+    reg64_t reg_kernel          = x2;
+    reg64_t reg_output          = x3;
+    reg64_t b_ic                = x20;
+    reg64_t kj                  = x5;
+    reg64_t reg_kh              = x6;
+    reg64_t reg_ur_w_trips      = x7;
+    reg64_t reg_oj              = x8;
+    reg64_t reg_tmp             = x10;
+    reg64_t reg_long_offt       = x10;
+    reg64_t reg_icb             = x9;
 
-    reg64_t ki = x11;
-    reg64_t reg_kd_count = x12;
-    reg64_t reg_oi = x12;
-    reg64_t reg_d_index = x13;
-    reg64_t reg_input_d = x8;
-    reg64_t reg_output_d = x9;
-    reg64_t aux_reg_input = x12;
-    reg64_t aux_reg_kernel = x13;
-    reg64_t reg_bias = x9;
-    //[info]v1.6追加code
-    reg64_t reg_oc_tail = x10;
-    //
-    reg64_t reg_add_tmp = x14;
-    reg64_t reg_tmp_imm = x15;
+    reg64_t ki                  = x11;
+    reg64_t reg_kd_count        = x12;
+    reg64_t reg_oi              = x12;
+    reg64_t reg_d_index         = x13;
+    reg64_t reg_input_d         = x8;
+    reg64_t reg_output_d        = x9;
+    reg64_t aux_reg_input       = x12;
+    reg64_t aux_reg_kernel      = x13;
+    reg64_t reg_bias            = x9;
+    reg64_t reg_oc_tail         = x10;
 
-    reg64_t reg_kd_count_org = x16;
-    reg64_t reg_input_d_org = x17;
-    reg64_t reg_output_d_org = x18;
-    reg64_t reg_d_index_org = x19;
+    /* Temporary registers */
+    reg64_t reg_add_tmp         = x14;
+    reg64_t reg_tmp_imm         = x15;
 
-    reg64_t reg_input_org = x24;
-    reg64_t reg_kernel_org = x22;
-    reg64_t reg_output_org = x23;
+    reg64_t reg_kd_count_org    = x16;
+    reg64_t reg_input_d_org     = x17;
+    reg64_t reg_output_d_org    = x18;
+    reg64_t reg_d_index_org     = x19;
 
-    reg64_t reg_pre_addr_input = x25;
+    reg64_t reg_input_org       = x24;
+    reg64_t reg_kernel_org      = x22;
+    reg64_t reg_output_org      = x23;
+
+    reg64_t reg_pre_addr_input  = x25;
+    reg64_t reg_pre_addr_out    = x26;
+    reg64_t reg_pre_addr_ker    = x26;
+
 
     const xa::PReg reg_p_all_ones = p2;
 
