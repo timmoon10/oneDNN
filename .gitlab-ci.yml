@@ -5,15 +5,21 @@ stages:
     - test
 
 before_script:
-    - git submodule sync --recursive
-    - git submodule update --init --recursive
+
+ClangFormatCheck:
+  stage: test
+  image: bce7edfda510
+  script:
+  - ./.github/automation/clang-format.sh
 
 fcc_w/_SSL2:
   stage: test
-  image: c4b91d43773a
+  image: bce7edfda510
   script:
 #    - pwd
 #    - ls
+    - git submodule sync --recursive
+    - git submodule update --init --recursive
     - source setenv-fcc
     - export ONEDNN_ROOT_DIR=`pwd`
     - cd src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/

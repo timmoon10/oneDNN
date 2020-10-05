@@ -204,7 +204,6 @@ private:
     const xa::PReg reg_p_all_ones = p2;
     int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
 
-
     /* XXX: offset between input and accummulators is 3, therefore, assume 'kw'
      * is no larger than 3*/
     inline xa::ZReg get_bias_reg(int idx = 0) { return xa::ZReg(idx); }
