@@ -2619,10 +2619,13 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                             static_cast<int32_t>(i_offset - pre_offset_input)));
 
         } else {
-
-            CGA64::add_imm(
-                    reg_pre_addr_input, reg_input, i_offset, reg_tmp_imm);
-
+            if((pre_offset_input >= 0) && (((long long int)i_offset - pre_offset_input) >= 0)){
+                CGA64::add_imm(reg_pre_addr_input, reg_pre_addr_input, 
+                                i_offset - pre_offset_input, reg_tmp_imm);
+            }else{
+                CGA64::add_imm(reg_pre_addr_input, reg_input, 
+                                i_offset, reg_tmp_imm);
+            }
             ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
                     reg_p_all_ones, xa::ptr(reg_pre_addr_input));
             pre_offset_input = i_offset;
