@@ -24,7 +24,7 @@
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-#define PRFMMIN (-256)
+#define PRFMMIN 0
 #define PRFWMAX 31
 #define LDRMAX 255
 #define LDRWMAX 252

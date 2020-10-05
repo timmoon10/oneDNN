@@ -29,6 +29,7 @@
 #include "cpu/platform.hpp"
 
 #include "cpu/aarch64/jit_aarch64_sve_512_1x1_conv_kernel.hpp"
+#include "cpu/aarch64/jit_op_imm_check.hpp"
 #include "cpu/aarch64/jit_uni_1x1_conv_utils.hpp"
 
 #define GET_OFF(field) \
@@ -49,7 +50,6 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
 
     CGA64::mov(aux1_reg_bcast_data, reg_bcast_data);
     CGA64::mov(aux_reg_bcast_data, reg_bcast_data);
-
     CGA64::mov(aux_reg_output_data, reg_output_data);
     CGA64::mov(reg_bcast_loop_iter, reg_bcast_loop_work);
 
@@ -141,15 +141,85 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
     auto bias_load = [=](int i_load, int i_ur) {
         int ofs = jcp.typesize_out * jcp.oc_block * i_load;
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
-
+        if (ldr_imm_check(ofs)) {
             CGA64::ldr(vreg_accum(i_load, i_ur),
                     xa::ptr(reg_bias_data, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             CGA64::add_imm(reg_tmp_ofs, reg_bias_data, ofs, reg_tmp_imm);
             CGA64::ldr(vreg_accum(i_load, i_ur), xa::ptr(reg_tmp_ofs));
         }
+    };
+
+    auto bcast_prf = [=](int i_reduce, int i_ur, int prev_ofs) {
+        int ofs;
+
+        if (one_of(jcp.prop_kind, forward_training, forward_inference,
+                    backward_data)) {
+            ofs = (i_reduce == jcp.reduce_loop_unroll)
+                    ? (jcp.bcast_dim + i_ur) * jcp.reduce_loop_unroll
+                    : i_ur * jcp.reduce_loop_unroll + i_reduce;
+        } else {
+            if (jcp.transpose_src) {
+                const int reduce_group = i_reduce / 4;
+                const int reduce_shift = i_reduce % 4;
+                ofs = 4 * (reduce_group * jcp.ic_block + i_ur) + reduce_shift;
+            } else
+                ofs = i_reduce * jcp.ic_block + i_ur;
+        }
+
+        ofs = jcp.typesize_in * ofs;
+        int tmp_ofs = ofs;
+        if ((ofs & 0xFF) == 0) { /* Alined to the cache line size */
+            if (prfm_imm_check(ofs)) {
+                CGA64::prfm(xa::PLDL1KEEP,
+                        xa::ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
+            } else {
+                if ((prev_ofs != -1) && prfm_imm_check(ofs - prev_ofs)) {
+                    CGA64::prfm(xa::PLDL1KEEP,
+                            xa::ptr(reg_prev_bcast_addr,
+                                    static_cast<int32_t>(ofs - prev_ofs)));
+                } else {
+                    if ((prev_ofs != -1) && ((ofs - prev_ofs) >= 0)) {
+                        ofs = ofs - prev_ofs;
+                        CGA64::add_imm(reg_prev_bcast_addr, reg_prev_bcast_addr,
+                                ofs, reg_tmp_imm);
+                    } else {
+                        CGA64::add_imm(reg_prev_bcast_addr, aux_reg_bcast_data,
+                                ofs, reg_tmp_imm);
+                    }
+                    prev_ofs = tmp_ofs;
+                    CGA64::prfm(xa::PLDL1KEEP, xa::ptr(reg_prev_bcast_addr));
+                }
+            }
+        } else {
+            if (prfw_imm_check(ofs)) {
+                CGA64::prfw(xa::PLDL1KEEP_SVE, reg_p_all_ones,
+                        xa::ptr(aux_reg_bcast_data,
+                                static_cast<int32_t>(VL_OFS(ofs))));
+            } else {
+                if ((prev_ofs != -1) && prfw_imm_check(ofs - prev_ofs)) {
+                    CGA64::prfw(xa::PLDL1KEEP_SVE, reg_p_all_ones,
+                            xa::ptr(reg_prev_bcast_addr,
+                                    static_cast<int32_t> VL_OFS(
+                                            ofs - prev_ofs)));
+                } else {
+                    if ((prev_ofs != -1) && (ofs - prev_ofs) >= 0) {
+                        ofs = ofs - prev_ofs;
+                        CGA64::add_imm(reg_prev_bcast_addr, reg_prev_bcast_addr,
+                                ofs, reg_tmp_imm);
+                    } else {
+                        CGA64::add_imm(reg_prev_bcast_addr, aux_reg_bcast_data,
+                                ofs, reg_tmp_imm);
+                    }
+                    prev_ofs = tmp_ofs;
+
+                    CGA64::prfw(xa::PLDL1KEEP_SVE, reg_p_all_ones,
+                            xa::ptr(reg_prev_bcast_addr));
+                }
+            }
+        }
+
+        return prev_ofs;
     };
 
     auto bcast_load = [=](int i_reduce, int i_ur, int prev_ofs, int bcast_idx) {
@@ -165,25 +235,17 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                     ? (jcp.bcast_dim + i_ur) * reduce_mul
                     : i_ur * reduce_mul + i_reduce;
         } else {
-            if (jcp.transpose_src) {
-                const int reduce_group = i_reduce / 4;
-                const int reduce_shift = i_reduce % 4;
-                ofs = 4 * (reduce_group * jcp.ic_block + i_ur) + reduce_shift;
-            } else {
-                int rmul = bcast_layout_nxc ? jcp.ic : jcp.ic_block;
-                ofs = i_reduce * rmul + i_ur;
-            }
+            int rmul = bcast_layout_nxc ? jcp.ic : jcp.ic_block;
+            ofs = i_reduce * rmul + i_ur;
         }
 
         ofs = jcp.typesize_in * ofs;
         int tmp_ofs = ofs;
-        if (((ofs & 0x3) == 0) && (ofs <= LDRWMAX) && (ofs >= 0)) {
+        if (ld1rw_imm_check(ofs)) {
             CGA64::ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
                     xa::ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
         } else {
-            if ((prev_ofs != -1) && ((ofs - prev_ofs) >= 0)
-                    && ((ofs - prev_ofs) <= LDRWMAX)
-                    && (((ofs - prev_ofs) & 0x3) == 0)) {
+            if ((prev_ofs != -1) && ld1rw_imm_check(ofs - prev_ofs)) {
                 CGA64::ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>((ofs - prev_ofs))));
@@ -217,8 +279,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs = i_load * lmul + u0 * rmul;
         ofs = u1 * jcp.reduce_loop_load_step + jcp.typesize_in * ofs;
 
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
+        if (ldr_imm_check(ofs)) {
             ofs = VL_OFS(ofs);
             CGA64::ldr(vreg_load(i_load, i_fma),
                     xa::ptr(aux_reg_load_data, static_cast<int32_t>(ofs)));
@@ -250,8 +311,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs_tmp = ofs;
 
         if (bwd_iload) CGA64::mov(r, i_load);
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
+        if (ldr_imm_check(ofs)) {
             if (bwd_iload)
                 CGA64::madd(r, r, reg_output_stride, aux_reg_output_data);
             CGA64::ldr(
@@ -302,15 +362,13 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs_tmp = ofs;
 
         if (bwd_iload) CGA64::mov(r, i_load);
-        if ((VL_OFS(ofs) <= LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
-                && ((ofs & 0x3f) == 0)) {
+        if (str_imm_check(ofs)) {
             if (bwd_iload)
                 CGA64::madd(r, r, reg_output_stride, aux_reg_output_data);
             CGA64::str(vreg_accum(i_load, i_ur),
                     xa::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
-            if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)
-                    && ((VL_OFS(ofs - prev_ofs)) <= LDRMAX)) {
+            if ((prev_ofs != -1) && str_imm_check(ofs - prev_ofs)) {
                 if (bwd_iload)
                     CGA64::madd(r, r, reg_output_stride, reg_prev_out_addr);
                 else
@@ -439,88 +497,6 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         }
     };
 
-#if 0
-    auto prefetch_callback = [=](int ur, int i_reduce, int i_ur, int i_load,
-                                     bool last_block, bool wraparound,
-                                     int reduce_step) {
-        bool pf_ker_l1 = true;
-        bool pf_ker_l2 = wraparound;
-        int n_ops = (jcp.reduce_loop_unroll / reduce_step) * ur * load_loop_blk;
-        int i_op = (i_reduce / reduce_step) * ur * load_loop_blk
-                + i_ur * load_loop_blk + i_load;
-
-        int n_pf_ker_l1 = pf_ker_l1 ? jcp.reduce_block : 0;
-        int n_pf_ker_l2 = pf_ker_l2 && wraparound ? jcp.reduce_block : 0;
-        int n_pf_out_l1 = jcp.use_vmovntps ? 0 : ur;
-
-        int pf_inp_ops = n_ops / 2; // # of operations during which to pf input
-        int pf_inp_trigger;
-        if (jcp.prop_kind == backward_weights)
-            pf_inp_trigger = nstl::max(1, pf_inp_ops / jcp.reduce_block);
-        else
-            pf_inp_trigger = nstl::max(1, pf_inp_ops / ur);
-
-        int n_other_pf
-                = load_loop_blk * (n_pf_ker_l1 + n_pf_ker_l2 + n_pf_out_l1);
-        int n_other_pf_ops = n_ops - pf_inp_ops;
-        int other_pf_trigger
-                = n_other_pf ? nstl::max(1, n_other_pf_ops / n_other_pf) : 0;
-
-        if (i_op < pf_inp_ops && i_op % pf_inp_trigger == 0) {
-            // input prefetches have the highest priority b/c the
-            // first iteration of the kernel block touches all the
-            // cache lines
-            int i_pf = i_op / pf_inp_trigger;
-            auto pf_reg = wraparound && last_block
-                    ? reg_bcast_data
-                    : (last_block ? aux1_reg_bcast_data : aux_reg_bcast_data);
-            int offt = i_pf;
-            if (jcp.prop_kind == backward_weights) {
-                offt += wraparound && last_block
-                        ? 0
-                        : (last_block ? jcp.is : jcp.reduce_block);
-                offt *= jcp.bcast_block;
-            } else {
-                offt += wraparound && last_block
-                        ? 0
-                        : (last_block ? jcp.ur : jcp.bcast_dim);
-                offt *= jcp.reduce_block;
-            }
-            mic_prefetcht0(ptr[pf_reg + offt * jcp.typesize_in]);
-        } else if (i_op >= pf_inp_ops && n_other_pf) {
-            // remaining prefetches are spread among the rest of the
-            // operations; prefetches for output take priority
-            // TODO: spread L2 prefetches among L1 prefetches
-            i_op -= pf_inp_ops;
-            if (i_op % other_pf_trigger == 0) {
-                int i_pf = i_op / (load_loop_blk * other_pf_trigger);
-                if (i_pf < n_pf_ker_l2) {
-                    int offt = (i_pf + (i_load + 1) * jcp.reduce_dim)
-                            * jcp.load_block;
-                    mic_prefetcht1(
-                            ptr[aux_reg_load_data + offt * jcp.typesize_in]);
-                } else if (i_pf < n_pf_ker_l2 + n_pf_ker_l1) {
-                    i_pf -= n_pf_ker_l2;
-                    auto pf_reg
-                            = last_block ? reg_load_data : aux_reg_load_data;
-                    int offt = (i_pf + i_load * jcp.reduce_dim
-                                       + (last_block ? (wraparound
-                                                          ? jcp.reduce_dim
-                                                          : 0)
-                                                     : jcp.reduce_block))
-                            * jcp.load_block;
-                    mic_prefetcht0(ptr[pf_reg + offt * jcp.typesize_in]);
-                } else if (i_pf < n_pf_ker_l1 + n_pf_ker_l2 + n_pf_out_l1) {
-                    i_pf -= n_pf_ker_l1 + n_pf_ker_l2;
-                    int offt = i_pf * jcp.load_block;
-                    mic_prefetcht0(
-                            ptr[aux_reg_output_data + offt * jcp.typesize_out]);
-                }
-            }
-        }
-    };
-#endif
-
     auto fma_block = [=](bool last_block) {
         assert(jcp.reduce_loop_unroll % jcp.fma_step == 0);
 
@@ -540,39 +516,12 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         for (int i_reduce = 0; i_reduce < i_reduce_end;
                 i_reduce += reduce_step) { // IC
             for (int i_load = 0; i_load < load_loop_blk; ++i_load) { // OC
-                // if transposed input data used and if spatial size is
-                // not divided by transpose step (4) then for last reduce step
-                // we should load only needed load_registers data
-                // and clear remaining
-                if (jcp.transpose_src && jcp.is % jcp.fma_step && last_block
-                        && i_reduce == jcp.reduce_loop_unroll - reduce_step) {
-                    xa::LabelAArch64 load_all;
-                    xa::LabelAArch64 load_finish;
-                    CGA64::tst(reg_reduce_pos_flag, FLAG_SP_LAST);
-                    CGA64::b(xa::EQ, load_all);
-
-                    const int n_loads = jcp.is % jcp.fma_step;
-                    for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
-                        if (i_fma < n_loads)
-                            load_load(i_reduce + i_fma, i_load, i_fma);
-                        else
-                            CGA64::fmov(vreg_load_s(i_load, i_fma));
-                    }
-                    CGA64::b(load_finish);
-
-                    CGA64::L_aarch64(load_all);
-                    for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
-                        load_load(i_reduce + i_fma, i_load, i_fma);
-                    }
-                    CGA64::L_aarch64(load_finish);
-                } else {
-                    for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
+                for (int i_fma = 0; i_fma < jcp.fma_step; i_fma++) {
 #if 0
-                        if (i_load + 1 == load_loop_blk && load_dim_tail)
-                            vreg = vreg | k_load_dim_mask | T_z;
+                    if (i_load + 1 == load_loop_blk && load_dim_tail)
+                        vreg = vreg | k_load_dim_mask | T_z;
 #endif
-                        load_load(i_reduce + i_fma, i_load, i_fma);
-                    }
+                    load_load(i_reduce + i_fma, i_load, i_fma);
                 }
             }
 
@@ -585,7 +534,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
             }
 
             for (int i_ur = 0; i_ur < ur; ++i_ur) {
-                //prev_bcast_ofs = bcast_load(i_reduce, i_ur, prev_bcast_ofs, bcast_reg_ofs + (i_ur % num_bcast_regs));
+                if ((num_bcast_regs + i_ur) < ur)
+                    prev_bcast_ofs = bcast_prf(
+                            i_reduce, num_bcast_regs + i_ur, prev_bcast_ofs);
+
                 for (int i_load = 0; i_load < load_loop_blk; ++i_load) {
 #if 0
                     if (i_load + 1 == load_loop_blk && load_dim_tail)
@@ -596,7 +548,6 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                             vreg_bcast_s(bcast_reg_ofs
                                     + ((bcast_reg_startidx + i_ur)
                                             % num_bcast_regs)));
-                    //bcast_reg_ofs + (i_ur % num_bcast_regs)));
                 }
                 if ((num_bcast_regs + i_ur) < ur) {
                     prev_bcast_ofs = bcast_load(i_reduce, num_bcast_regs + i_ur,
@@ -934,9 +885,6 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     /* Channel blocking size is simd_w */
     jcp.ic_block = jcp.oc_block = simd_w;
 
-    jcp.transpose_src = false; // TODO: remove?
-    jcp.use_vmovntps = false; // TODO: remove?
-
     if (everyone_is(data_type::f32, src_d.data_type(), weights_d.data_type(),
                 dst_d.data_type())) {
         const int is_bwd_d = jcp.prop_kind == backward_data;
@@ -984,9 +932,10 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     jcp.load_grp_count = 1;
 
     // TODO: mov check funcs into platform files
-    const int L1_capacity = get_A64FX_cache_size(1, true) / sizeof(float);
-    const int L2_size
-            = get_A64FX_cache_size(2, false, nthreads) / sizeof(float);
+    const int L1_capacity
+            = platform::get_A64FX_cache_size(1, true, 1) / sizeof(float);
+    const int L2_size = platform::get_A64FX_cache_size(2, false, nthreads)
+            / sizeof(float);
     const int L2_capacity = (L2_size * 3) / 4;
 
     /* FWD, BWD data */
@@ -1021,11 +970,11 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         jcp.reduce_loop_bcast_step = jcp.reduce_loop_unroll
                 * (is_data_layout_nxc ? 1 : jcp.bcast_dim) * jcp.typesize_in;
 
-        /* Offset for moving 16o*16i on filter array */
+        /* Offset: 16o*16i (filter) */
         jcp.reduce_loop_load_step
                 = jcp.reduce_loop_unroll * jcp.load_block * jcp.typesize_in;
 
-        /* Offset for moving I/16 * 16o */
+        /* Offset: I/16 * 16o */
         jcp.load_loop_load_step
                 = (utils::rnd_up(jcp.reduce_dim, jcp.reduce_block))
                 * jcp.load_block * jcp.typesize_in;
@@ -1052,7 +1001,6 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         size_threshold = 14;
         ur_step = 1; // step size of ur_w param checking
         jcp.expl_bcast = true;
-        jcp.use_vmovntps = true;
         jcp.ur = 1;
 
         //// TODO: Optimize bellow params
@@ -1236,10 +1184,7 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
 
     } else if (jcp.prop_kind == backward_weights) { /* BWD weight */
 
-        if (jcp.transpose_src)
-            jcp.reduce_dim = jcp.tr_is;
-        else
-            jcp.reduce_dim = jcp.is;
+        jcp.reduce_dim = jcp.is;
 
         jcp.reduce_block = best_divider(jcp.reduce_dim, 7, 16, true);
         if (jcp.reduce_dim % jcp.reduce_block != 0)
@@ -1400,15 +1345,9 @@ void jit_aarch64_sve_512_1x1_conv_kernel::init_scratchpad(
         scratchpad.book(key_conv_wei_reduction, wei_size * (jcp.nthr_mb - 1),
                 jcp.typesize_out);
     }
-
-    if (jcp.transpose_src) {
-        const size_t tr_src_size
-                = (size_t)jcp.nthr_mb * jcp.ngroups * jcp.ic * jcp.tr_is;
-        scratchpad.book(key_conv_tr_src, tr_src_size, jcp.typesize_out);
-        scratchpad.book<simple_barrier::ctx_t>(key_conv_tr_src_bctx, jcp.nthr);
-    }
 }
 
+/* BWD W*/
 void jit_aarch64_sve_512_1x1_conv_kernel::balance(jit_1x1_conv_conf_t &jcp) {
     int nthreads = jcp.nthr;
     // initialize jcp reduction threading properties
@@ -1417,9 +1356,15 @@ void jit_aarch64_sve_512_1x1_conv_kernel::balance(jit_1x1_conv_conf_t &jcp) {
         /* simplification... fortunately it doesn't hurt much */
         return;
     }
-    const int nb_bcast = div_up(jcp.bcast_dim, jcp.bcast_block);
-    const int nb_load = div_up(jcp.load_dim, jcp.load_block);
-    const int nb_reduce = div_up(jcp.reduce_dim, jcp.reduce_block);
+    // bcast_dim: src H*W, bcast_block: ur (fwd, bwd_d)
+    const int nb_bcast
+            = div_up(jcp.bcast_dim, jcp.bcast_block); // # of H*W loop
+    // load_dim: dst channel, load_block: simd_w
+    const int nb_load
+            = div_up(jcp.load_dim, jcp.load_block); // # of dst channel loop
+    // reduce_dim: src channel, reduce_block: simd_w
+    const int nb_reduce
+            = div_up(jcp.reduce_dim, jcp.reduce_block); // # of src channel loop
 
     jcp.nthr_g = jcp.ngroups;
     const int nthr = nthreads / jcp.nthr_g;
@@ -1436,11 +1381,6 @@ void jit_aarch64_sve_512_1x1_conv_kernel::balance(jit_1x1_conv_conf_t &jcp) {
         int bcast_koeff = 1;
         int load_koeff = 1;
         int output_koeff = 12;
-        if (jcp.transpose_src) {
-            bcast_koeff = 5;
-            load_koeff = 1;
-            output_koeff = 8;
-        }
         return 0
                 + (size_t)bcast_koeff * div_up(jcp.mb * nb_reduce, nthr_mb)
                 * div_up(jcp.ngroups, jcp.nthr_g) * div_up(nb_bcast, nthr_ic_b)
