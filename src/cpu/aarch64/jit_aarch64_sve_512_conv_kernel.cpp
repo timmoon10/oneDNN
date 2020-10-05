@@ -3295,11 +3295,16 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
     CGA64::L_aarch64(zeroing_loop);
     {
         assert(jcp.oc_block * jcp.typesize_out == cpu_isa_traits<sve>::vlen);
+        CGA64::add(reg_ker_start_addr, reg_kernel, reg_tmp);
         for (int ic1 = 0; ic1 < jcp.ic_block; ic1++) {
-            CGA64::add(reg_add_tmp, reg_kernel, reg_tmp);
-            CGA64::add_imm(reg_add_tmp, reg_add_tmp,
-                    ic1 * jcp.oc_block * jcp.typesize_out, reg_tmp_imm);
-            CGA64::str(xa::ZReg(0), xa::ptr(reg_add_tmp));
+            if(str_imm_check(ic1 * jcp.oc_block * jcp.typesize_out)){
+                CGA64::str(xa::ZReg(0), xa::ptr(reg_ker_start_addr,
+                           static_cast<int32_t>(VL_OFS(ic1 * jcp.oc_block * jcp.typesize_out))));
+            }else{
+                CGA64::add_imm(reg_add_tmp, reg_ker_start_addr,
+                        ic1 * jcp.oc_block * jcp.typesize_out, reg_tmp_imm);
+                CGA64::str(xa::ZReg(0), xa::ptr(reg_add_tmp));
+            }
         }
 
         CGA64::add_imm(reg_tmp, reg_tmp,

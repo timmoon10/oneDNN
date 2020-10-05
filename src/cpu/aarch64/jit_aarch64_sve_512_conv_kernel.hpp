@@ -588,6 +588,7 @@ private:
     reg64_t reg_pre_addr_input  = x25;
     reg64_t reg_pre_addr_out    = x26;
     reg64_t reg_pre_addr_ker    = x26;
+    reg64_t reg_ker_start_addr  = x27;
 
 
     const xa::PReg reg_p_all_ones = p2;
