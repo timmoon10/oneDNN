@@ -26,11 +26,11 @@
 
 #define PRFMMIN 0
 #define PRFWMAX 31
-#define LDRMAX  255
+#define LDRMAX 255
 #define LDRWMAX 252
-#define ADDMAX  4095
+#define ADDMAX 4095
 #define PRFMMAX 32760
-#define MOVMAX  65535
+#define MOVMAX 65535
 
 namespace dnnl {
 namespace impl {
