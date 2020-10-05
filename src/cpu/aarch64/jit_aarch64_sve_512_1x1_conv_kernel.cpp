@@ -593,14 +593,15 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 #endif
                     CGA64::fmla(vreg_accum_s(i_load, i_ur), reg_p_all_ones,
                             vreg_load_s(i_load, 0),
-                            vreg_bcast_s(
-                                    bcast_reg_ofs + ((bcast_reg_startidx + i_ur) % num_bcast_regs)));
-                                    //bcast_reg_ofs + (i_ur % num_bcast_regs)));
+                            vreg_bcast_s(bcast_reg_ofs
+                                    + ((bcast_reg_startidx + i_ur)
+                                            % num_bcast_regs)));
+                    //bcast_reg_ofs + (i_ur % num_bcast_regs)));
                 }
-                if ((num_bcast_regs + i_ur) < ur){
-                    prev_bcast_ofs = bcast_load(i_reduce, 
-                                                num_bcast_regs + i_ur, prev_bcast_ofs,
-                                                bcast_reg_ofs + (bcast_reg_idx % num_bcast_regs));
+                if ((num_bcast_regs + i_ur) < ur) {
+                    prev_bcast_ofs = bcast_load(i_reduce, num_bcast_regs + i_ur,
+                            prev_bcast_ofs,
+                            bcast_reg_ofs + (bcast_reg_idx % num_bcast_regs));
                     bcast_reg_idx++;
                 }
             }
@@ -1040,8 +1041,8 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
 
         static const int max_ur_regs_list[] = {24, 14, 9, 6, 5, 2};
         max_regs = 1;
-        for(int ii = 6; ii > 0; ii--){
-            if((jcp.oc_block % ii) == 0){
+        for (int ii = 6; ii > 0; ii--) {
+            if ((jcp.oc_block % ii) == 0) {
                 max_regs = ii;
                 break;
             }
@@ -1063,7 +1064,7 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         //if (jcp.load_dim > 128 && jcp.load_dim < BIG_LOAD_DIM
         //        && spatial > SMALL_SPATIAL && spatial < BIG_SPATIAL
         //        && jcp.reduce_dim < 256) {
-        if (jcp.load_dim > 128 && spatial > SMALL_SPATIAL ) {
+        if (jcp.load_dim > 128 && spatial > SMALL_SPATIAL) {
             max_regs = 8;
             min_regs = 4;
         }
@@ -1080,10 +1081,10 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
                 break;
             }
         }
-        
+
         if (jcp.ur == 1) {
             // If ur = 1, then min(max_regs, H*W of dst)
-            jcp.ur = nstl::min(max_regs, jcp.os); 
+            jcp.ur = nstl::min(max_regs, jcp.os);
         }
         jcp.bcast_block = jcp.ur; // block size of bcast (input data)
         /* Number of steps for the dst address to output, used in bcast_loop() */

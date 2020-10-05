@@ -460,7 +460,6 @@ status_t jit_uni_dw_conv_bwd_weights_kernel<isa, kernel_dt>::init_conf(
     auto dat_tag = isa == sve ? nChw16c : nChw8c;
     auto wei_tag = isa == sve ? Goihw16g : Goihw8g;
 
-
     jcp.src_tag = src_d.matches_one_of_tag(dat_tag);
     jcp.wei_tag = diff_weights_d.matches_one_of_tag(wei_tag);
     jcp.dst_tag = diff_dst_d.matches_one_of_tag(dat_tag);

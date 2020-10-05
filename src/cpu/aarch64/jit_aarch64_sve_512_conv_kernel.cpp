@@ -530,22 +530,22 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
 
                     for (int jj = jj_start; jj < jj_end; jj++)
                         if (jcp.kernel_kind == expl_bcast) {
-                            if(ur_w >= 16){
+                            if (ur_w >= 16) {
                                 size_t aux_input_offset
                                         = get_input_offset(ki, ic, jj, pad_l);
                                 prev_bcast_ofs = bcast_load(0, nb_oc_block,
                                         aux_input_offset, prev_bcast_ofs);
-    
+
                                 CGA64::fmla(zreg_out_s(jj, ii), reg_p_all_ones,
                                         zreg_inp_s(0, nb_oc_block),
-                                        zreg_wei_s(
-                                                wei_reg_ofs + (ii % num_regs4wei)));
+                                        zreg_wei_s(wei_reg_ofs
+                                                + (ii % num_regs4wei)));
 
-                            }else{
+                            } else {
                                 CGA64::fmla(zreg_out_s(jj, ii), reg_p_all_ones,
                                         zreg_inp_s(jj, nb_oc_block),
-                                        zreg_wei_s(
-                                                wei_reg_ofs + (ii % num_regs4wei)));
+                                        zreg_wei_s(wei_reg_ofs
+                                                + (ii % num_regs4wei)));
                             }
                         } else {
                             assert(NULL);
@@ -1252,9 +1252,7 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
                     jcp.nb_oc_blocking = 1;
                     jcp.ur_w = nstl::min(jcp.ow, 31 / (jcp.nb_oc_blocking + 1));
                 }
-                if (jcp.l_pad >= 16) {
-                    jcp.ur_w = nstl::min(jcp.l_pad, 29);
-                }
+                if (jcp.l_pad >= 16) { jcp.ur_w = nstl::min(jcp.l_pad, 29); }
             }
         }
     }
@@ -2608,31 +2606,33 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     int idata_reg_offset = kw * ic_block_step + 4;
     int num_zregs4idata = 32 - idata_reg_offset;
 
-    auto load_input = [=](int i_iw, int i_ic, int input_offset, int pre_offset_input){
+    auto load_input = [=](int i_iw, int i_ic, int input_offset,
+                              int pre_offset_input) {
         size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
 
         assert(i_offset < (1LL << 31));
-        if(((i_offset & 0x3) == 0) 
-            && (i_offset <= LDRWMAX)
-            && (i_offset >= 0)){
-            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)), 
-                          reg_p_all_ones, xa::ptr(reg_input, 
-                          static_cast<int32_t>(i_offset)));
+        if (((i_offset & 0x3) == 0) && (i_offset <= LDRWMAX)
+                && (i_offset >= 0)) {
+            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
+                    reg_p_all_ones,
+                    xa::ptr(reg_input, static_cast<int32_t>(i_offset)));
 
-        }else if((pre_offset_input >= 0)
-                  && ((i_offset - pre_offset_input) <= LDRWMAX)
-                  && ((i_offset - pre_offset_input) >= 0)
-                  && (((i_offset - pre_offset_input) & 0x3) == 0) ){
-            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)), 
-                          reg_p_all_ones, xa::ptr(reg_pre_addr_input, 
-                          static_cast<int32_t>(i_offset - pre_offset_input)));
+        } else if ((pre_offset_input >= 0)
+                && ((i_offset - pre_offset_input) <= LDRWMAX)
+                && ((i_offset - pre_offset_input) >= 0)
+                && (((i_offset - pre_offset_input) & 0x3) == 0)) {
+            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
+                    reg_p_all_ones,
+                    xa::ptr(reg_pre_addr_input,
+                            static_cast<int32_t>(i_offset - pre_offset_input)));
 
-        }else{
-            
-            CGA64::add_imm(reg_pre_addr_input, reg_input, i_offset, reg_tmp_imm);
-        
-            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)), 
-                              reg_p_all_ones, xa::ptr(reg_pre_addr_input));
+        } else {
+
+            CGA64::add_imm(
+                    reg_pre_addr_input, reg_input, i_offset, reg_tmp_imm);
+
+            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
+                    reg_p_all_ones, xa::ptr(reg_pre_addr_input));
             pre_offset_input = i_offset;
         }
         return pre_offset_input;
@@ -2641,8 +2641,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     int pre_offset_input = -1;
     for (int i_ur = 0; i_ur < ur_w; i_ur++) {
         if (i_ur == 0) {
-            for(int ii = 0; ii < 4; ii++){
-                if(ur_w > ii){
+            for (int ii = 0; ii < 4; ii++) {
+                if (ur_w > ii) {
                     CGA64::add_imm(reg_add_tmp, reg_output,
                             typesize * (i_ur + ii) * oc_block + output_offset,
                             reg_tmp_imm);
@@ -2669,8 +2669,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
 
             int pre_loads = 0;
             for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
-                if((idata_reg_offset + i_ic) > 31) break;
-                pre_offset_input = load_input(i_iw, i_ic, input_offset, pre_offset_input);
+                if ((idata_reg_offset + i_ic) > 31) break;
+                pre_offset_input = load_input(
+                        i_iw, i_ic, input_offset, pre_offset_input);
                 pre_loads++;
             }
 
@@ -2683,8 +2684,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                         xa::ZRegS(kw * ic_block_step + i_ur % 4),
                         xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)));
 
-                if((i_ic + pre_loads) < ic_block_step){
-                    pre_offset_input = load_input(i_iw, i_ic + pre_loads, input_offset, pre_offset_input);
+                if ((i_ic + pre_loads) < ic_block_step) {
+                    pre_offset_input = load_input(i_iw, i_ic + pre_loads,
+                            input_offset, pre_offset_input);
                 }
             }
         }

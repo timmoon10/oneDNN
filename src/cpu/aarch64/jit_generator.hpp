@@ -135,7 +135,9 @@ private:
     const size_t xmm_to_preserve_start = 6;
     const size_t xmm_to_preserve = 10;
 #else
+#ifndef DNNL_INDIRECT_JIT_AARCH64
     const size_t xmm_to_preserve_start = 0;
+#endif
     const size_t xmm_to_preserve = 0;
 #endif
 
