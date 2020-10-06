@@ -2589,31 +2589,23 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     typesize * (i_kw * ic_block + i_ic) * jcp.oc_block
                             + kernel_offset,
                     pre_offset_ker);
-            //CGA64::add_imm(reg_add_tmp, reg_kernel,
-            //        typesize * (i_kw * ic_block + i_ic) * jcp.oc_block
-            //                + kernel_offset,
-            //        reg_tmp_imm);
-            //CGA64::ldr(xa::ZReg(i_kw * ic_block_step + i_ic),
-            //        xa::ptr(reg_add_tmp));
         }
     }
 
     int idata_reg_offset = kw * ic_block_step + 4;
     int num_zregs4idata = 32 - idata_reg_offset;
 
-    auto load_input = [=](int i_iw, int i_ic, int input_offset,
-                              int pre_offset_input) {
-        size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
+    auto load_input = [=](size_t i_offset, int zreg_idx, int pre_offset_input) {
 
         assert(i_offset < (1LL << 31));
         if (ld1rw_imm_check(i_offset)) {
-            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
+            ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
                     xa::ptr(reg_input, static_cast<int32_t>(i_offset)));
 
         } else if ((pre_offset_input >= 0)
                 && ld1rw_imm_check(i_offset - pre_offset_input)) {
-            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
+            ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
                     xa::ptr(reg_pre_addr_input,
                             static_cast<int32_t>(i_offset - pre_offset_input)));
@@ -2627,7 +2619,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                 CGA64::add_imm(
                         reg_pre_addr_input, reg_input, i_offset, reg_tmp_imm);
             }
-            ld1rw(xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)),
+            ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones, xa::ptr(reg_pre_addr_input));
             pre_offset_input = i_offset;
         }
@@ -2682,23 +2674,25 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
             int pre_loads = 0;
             for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
                 if ((idata_reg_offset + i_ic) > 31) break;
-                pre_offset_input = load_input(
-                        i_iw, i_ic, input_offset, pre_offset_input);
+                size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
+                int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
+                pre_offset_input = load_input(i_offset, zreg_idx, pre_offset_input);
                 pre_loads++;
             }
 
             for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
                 assert((i_kw * ic_block_step + i_ic) < 31);
                 assert((kw * ic_block_step + (i_ur % 4)) < 31);
-
+                int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
                 CGA64::fmla(xa::ZRegS(i_kw * ic_block_step + i_ic),
                         reg_p_all_ones,
                         xa::ZRegS(kw * ic_block_step + i_ur % 4),
-                        xa::ZRegS(idata_reg_offset + (i_ic % num_zregs4idata)));
+                        xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)));
 
                 if ((i_ic + pre_loads) < ic_block_step) {
-                    pre_offset_input = load_input(i_iw, i_ic + pre_loads,
-                            input_offset, pre_offset_input);
+                    size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
+                    zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step + pre_loads;
+                    pre_offset_input = load_input(i_offset, zreg_idx, pre_offset_input);
                 }
             }
         }
