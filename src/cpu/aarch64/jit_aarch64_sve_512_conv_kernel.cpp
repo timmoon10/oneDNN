@@ -2678,6 +2678,28 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
 
     int pre_offset_input = -1;
     int pre_offset_out = -1;
+    int pre_loads = 0;
+    int pre_loaded_ur = 0;
+    for (int i_ur = 0; i_ur < ur_w; i_ur++) {
+        if ((idata_reg_offset + ((i_ur + 1) * kw + 1) * ic_block_step) > 31) break;
+        for (int i_kw = 0; i_kw < kw; i_kw++) {
+            int i_iw = get_iw_idx(i_ur, i_kw, pad_l);
+            if (i_iw < 0 || i_iw > get_iw_idx(ur_w - 1, kw - 1, pad_l) - pad_r
+                    || get_iw_idx(i_ur, i_kw, jcp.l_pad) >= iw)
+                continue;
+
+            for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
+                if ((idata_reg_offset + i_ic) > 31) break;
+                size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
+                int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
+                pre_offset_input
+                        = load_input(i_offset, zreg_idx, pre_offset_input);
+                pre_loads++;
+            }
+        }
+    }
+    pre_loaded_ur = pre_loads / ic_block_step / kw;
+
     for (int i_ur = 0; i_ur < ur_w; i_ur++) {
         if (i_ur == 0) {
             for (int ii = 0; ii < 4; ii++) {
@@ -2698,18 +2720,35 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
         for (int i_kw = 0; i_kw < kw; i_kw++) {
 
             int i_iw = get_iw_idx(i_ur, i_kw, pad_l);
+            int i_iw4load = get_iw_idx(i_ur + pre_loaded_ur, i_kw, pad_l);
+            int unload_flag = (i_iw4load < 0 || i_iw4load > get_iw_idx(ur_w - 1, kw - 1, pad_l) - pad_r
+                    || get_iw_idx(i_ur + pre_loaded_ur, i_kw, jcp.l_pad) >= iw);
+
+            if(pre_loaded_ur > 0) {
+                for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
+                    if ((idata_reg_offset + i_ic) > 31) break;
+                    if (unload_flag || (i_ur + pre_loaded_ur) >= ur_w) break;
+                    size_t i_offset = get_full_src_offset(i_iw4load, i_ic, input_offset);
+                    int zreg_idx = i_ic + ((i_ur + pre_loaded_ur) * kw + i_kw) * ic_block_step;
+                    pre_offset_input
+                            = load_input(i_offset, zreg_idx, pre_offset_input);
+                }
+            }
+
             if (i_iw < 0 || i_iw > get_iw_idx(ur_w - 1, kw - 1, pad_l) - pad_r
                     || get_iw_idx(i_ur, i_kw, jcp.l_pad) >= iw)
                 continue;
 
-            int pre_loads = 0;
-            for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
-                if ((idata_reg_offset + i_ic) > 31) break;
-                size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
-                int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
-                pre_offset_input
-                        = load_input(i_offset, zreg_idx, pre_offset_input);
-                pre_loads++;
+            if(pre_loaded_ur == 0) {
+                pre_loads = 0;
+                for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
+                    if ((idata_reg_offset + i_ic) > 31) break;
+                    size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
+                    int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
+                    pre_offset_input
+                            = load_input(i_offset, zreg_idx, pre_offset_input);
+                    pre_loads++;
+                }
             }
 
             for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
@@ -2721,12 +2760,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                         xa::ZRegS(kw * ic_block_step + i_ur % 4),
                         xa::ZRegS(idata_reg_offset
                                 + (zreg_idx % num_zregs4idata)));
-
-                if ((i_ic + pre_loads) < ic_block_step) {
-                    size_t i_offset
-                            = get_full_src_offset(i_iw, i_ic, input_offset);
-                    zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step
-                            + pre_loads;
+                if((pre_loaded_ur == 0) && ((i_ic + pre_loads) < ic_block_step)){
+                    size_t i_offset = get_full_src_offset(i_iw, i_ic + pre_loads, input_offset);
+                    int zreg_idx = i_ic + pre_loads + (i_ur * kw + i_kw) * ic_block_step;
                     pre_offset_input
                             = load_input(i_offset, zreg_idx, pre_offset_input);
                 }
