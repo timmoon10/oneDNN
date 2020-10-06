@@ -2596,6 +2596,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     int num_zregs4idata = 32 - idata_reg_offset;
 
     auto load_input = [=](size_t i_offset, int zreg_idx, int pre_offset_input) {
+        unsigned int IMM_MASK12 = 0xfff;
+        unsigned long long int IMM_MASK24_12 = 0xfff000;
+        unsigned int IMM_MASK24 = 0xffffff;
 
         assert(i_offset < (1LL << 31));
         if (ld1rw_imm_check(i_offset)) {
@@ -2612,28 +2615,28 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     xa::ptr(reg_pre_addr_input,
                             static_cast<int32_t>(i_offset - pre_offset_input)));
 
-        } else if (ld1rw_imm_check(i_offset&0xfff)
-                    && !(i_offset & ~(static_cast<uint64_t>(0xffffff)))) {
+        } else if (ld1rw_imm_check(i_offset&IMM_MASK12)
+                    && !(i_offset & ~IMM_MASK24)) {
             // i_offset can be represented by ld1rw imm and a 12-23 bit vaule 
             CGA64::add_imm(reg_pre_addr_input, reg_input,
-                            (i_offset) & static_cast<uint64_t>(0xfff000), reg_tmp_imm);
+                            (i_offset) & IMM_MASK24_12, reg_tmp_imm);
             ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
                     xa::ptr(reg_pre_addr_input,
-                            static_cast<int32_t>(i_offset & 0xfff)));
-            pre_offset_input = i_offset - (i_offset & 0xfff);
+                            static_cast<int32_t>(i_offset & IMM_MASK12)));
+            pre_offset_input = i_offset - (i_offset & IMM_MASK12);
 
         } else if ((pre_offset_input >= 0)
-                    && ld1rw_imm_check((i_offset - pre_offset_input)&0xfff)
-                    && !((i_offset - pre_offset_input) & ~(static_cast<uint64_t>(0xffffff)))) {
+                    && ld1rw_imm_check((i_offset - pre_offset_input)&IMM_MASK12)
+                    && !((i_offset - pre_offset_input) & ~IMM_MASK24)) {
             // The offset from previous access address can be represented by ld1rw imm and a 12-23 bit value
             CGA64::add_imm(reg_pre_addr_input, reg_pre_addr_input,
-                            (i_offset - pre_offset_input) & static_cast<uint64_t>(0xfff000), reg_tmp_imm);
+                            (i_offset - pre_offset_input) & IMM_MASK24_12, reg_tmp_imm);
             ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
                     xa::ptr(reg_pre_addr_input,
-                            static_cast<int32_t>((i_offset - pre_offset_input) & 0xfff)));
-            pre_offset_input = i_offset - ((i_offset - pre_offset_input) & 0xfff);
+                            static_cast<int32_t>((i_offset - pre_offset_input) & IMM_MASK12)));
+            pre_offset_input = i_offset - ((i_offset - pre_offset_input) & IMM_MASK12);
 
         } else {
             // other cases
