@@ -1364,10 +1364,50 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                 load(reg_idx(inpr_i), aux_xreg_input, input_offset,
                         is_tail_processing(bci));
                 if (isa == sse41) {
-                    movups(vmm_mask, accvr);
-                    cmpps(vmm_mask, inpvr, _cmp_lt_os);
-                    blendvps(accvr, inpvr);
-                    if (jpp.is_training) blendvps(indvr, vmm_k_offset);
+		  //movups(vmm_mask, accvr);
+		    CG::not_(p_tmp0.b, P_ALL_ONE, P_MSB_384.b);
+                    CG::mov(xa::ZRegD(IDX(vmm_mask)), p_tmp0/xa::T_m, xa::ZRegD(IDX(accvr)));
+                    //cmpps(vmm_mask, inpvr, _cmp_lt_os);
+		    CG::not_(p_tmp0.b, P_ALL_ONE/xa::T_z, P_MSB_384.b);
+                    uint cmpDstIdx = p_tmp0.getIdx();
+                    uint cmpMaskIdx = p_tmp0.getIdx();
+                    uint cmpSrcIdx = IDX(vmm_mask);
+                    uint cmpSrc2Idx = IDX(inpvr);
+                    switch(_cmp_lt_os) {
+                    case 0: CG::fcmeq(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx))\
+; break; //EQ_OQ
+                    case 1:CG::fcmlt(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));\
+ break; //LT_OS
+                    case 2:CG::fcmle(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));\
+ break; //LE_OS
+                    case 4:CG::fcmne(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));\
+ break; //NEQ_UQ
+                    case 5:CG::fcmge(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));\
+ break; //NLT_US
+                    case 6:CG::fcmgt(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));\
+ break; //NLE_US
+                    case 3: //UNORD_Q
+                    case 7: //ORD_Q
+                    default: assert(!"unreachable"); break;
+                      break;
+                    }
+                    CG::cpy(z_tmp0.s, p_tmp0/xa::T_z, 255);
+                    CG::not_(p_tmp0.b, P_ALL_ONE/xa::T_z, P_MSB_384.b);
+                    CG::mov(xa::ZRegS(IDX(vmm_mask)), p_tmp0/xa::T_m, z_tmp0.s);
+                    //blendvps(accvr, inpvr);
+		    CG::movs(p_tmp0.b, P_ALL_ONE.b);
+                    CG::cmplt(P_TMP_0.s, p_tmp0/xa::T_z, xa::ZReg(0).s, 0);
+                    CG::not_(p_tmp0.b, P_ALL_ONE, P_MSB_384.b);
+                    CG::and_(P_TMP_0.b, P_ALL_ONE, P_TMP_0.b, p_tmp0.b);
+                    CG::mov(xa::ZReg(IDX(accvr)).s, P_TMP_0/xa::T_m, xa::ZReg(IDX(inpvr)).s);
+                    if (jpp.is_training) {
+		      //blendvps(indvr, vmm_k_offset);
+		      CG::movs(p_tmp0.b, P_ALL_ONE.b);
+                      CG::cmplt(P_TMP_0.s, p_tmp0/xa::T_z, xa::ZReg(0).s, 0);
+                      CG::not_(p_tmp0.b, P_ALL_ONE, P_MSB_384.b);
+                      CG::and_(P_TMP_0.b, P_ALL_ONE, P_TMP_0.b, p_tmp0.b);
+                      CG::mov(xa::ZReg(IDX(indvr)).s, P_TMP_0/xa::T_m, xa::ZReg(IDX(vmm_k_offset)).s);
+		    }
                 } else if (isa == avx) {
                     vcmpps(cvtvr, accvr, inpvr, _cmp_lt_os);
                     vblendvps(accvr, accvr, inpvr, cvtvr);
