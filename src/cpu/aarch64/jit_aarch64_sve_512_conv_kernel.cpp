@@ -2615,11 +2615,11 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     xa::ptr(reg_pre_addr_input,
                             static_cast<int32_t>(i_offset - pre_offset_input)));
 
-        } else if (ld1rw_imm_check(i_offset&IMM_MASK12)
-                    && !(i_offset & ~IMM_MASK24)) {
-            // i_offset can be represented by ld1rw imm and a 12-23 bit vaule 
+        } else if (ld1rw_imm_check(i_offset & IMM_MASK12)
+                && !(i_offset & ~IMM_MASK24)) {
+            // i_offset can be represented by ld1rw imm and a 12-23 bit vaule
             CGA64::add_imm(reg_pre_addr_input, reg_input,
-                            (i_offset) & IMM_MASK24_12, reg_tmp_imm);
+                    (i_offset)&IMM_MASK24_12, reg_tmp_imm);
             ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
                     xa::ptr(reg_pre_addr_input,
@@ -2627,16 +2627,18 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
             pre_offset_input = i_offset - (i_offset & IMM_MASK12);
 
         } else if ((pre_offset_input >= 0)
-                    && ld1rw_imm_check((i_offset - pre_offset_input)&IMM_MASK12)
-                    && !((i_offset - pre_offset_input) & ~IMM_MASK24)) {
+                && ld1rw_imm_check((i_offset - pre_offset_input) & IMM_MASK12)
+                && !((i_offset - pre_offset_input) & ~IMM_MASK24)) {
             // The offset from previous access address can be represented by ld1rw imm and a 12-23 bit value
             CGA64::add_imm(reg_pre_addr_input, reg_pre_addr_input,
-                            (i_offset - pre_offset_input) & IMM_MASK24_12, reg_tmp_imm);
+                    (i_offset - pre_offset_input) & IMM_MASK24_12, reg_tmp_imm);
             ld1rw(xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
                     xa::ptr(reg_pre_addr_input,
-                            static_cast<int32_t>((i_offset - pre_offset_input) & IMM_MASK12)));
-            pre_offset_input = i_offset - ((i_offset - pre_offset_input) & IMM_MASK12);
+                            static_cast<int32_t>((i_offset - pre_offset_input)
+                                    & IMM_MASK12)));
+            pre_offset_input
+                    = i_offset - ((i_offset - pre_offset_input) & IMM_MASK12);
 
         } else {
             // other cases
@@ -2705,7 +2707,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                 if ((idata_reg_offset + i_ic) > 31) break;
                 size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
                 int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
-                pre_offset_input = load_input(i_offset, zreg_idx, pre_offset_input);
+                pre_offset_input
+                        = load_input(i_offset, zreg_idx, pre_offset_input);
                 pre_loads++;
             }
 
@@ -2716,12 +2719,16 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                 CGA64::fmla(xa::ZRegS(i_kw * ic_block_step + i_ic),
                         reg_p_all_ones,
                         xa::ZRegS(kw * ic_block_step + i_ur % 4),
-                        xa::ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)));
+                        xa::ZRegS(idata_reg_offset
+                                + (zreg_idx % num_zregs4idata)));
 
                 if ((i_ic + pre_loads) < ic_block_step) {
-                    size_t i_offset = get_full_src_offset(i_iw, i_ic, input_offset);
-                    zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step + pre_loads;
-                    pre_offset_input = load_input(i_offset, zreg_idx, pre_offset_input);
+                    size_t i_offset
+                            = get_full_src_offset(i_iw, i_ic, input_offset);
+                    zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step
+                            + pre_loads;
+                    pre_offset_input
+                            = load_input(i_offset, zreg_idx, pre_offset_input);
                 }
             }
         }
