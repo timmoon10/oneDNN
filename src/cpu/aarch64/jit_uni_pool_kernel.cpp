@@ -1410,9 +1410,38 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
 		    }
                 } else if (isa == avx) {
                     vcmpps(cvtvr, accvr, inpvr, _cmp_lt_os);
-                    vblendvps(accvr, accvr, inpvr, cvtvr);
-                    if (jpp.is_training)
-                        vblendvps(indvr, indvr, vmm_k_offset, cvtvr);
+		      //vblendvps(accvr, accvr, inpvr, cvtvr);
+		    CG::not_(p_tmp0.b, P_ALL_ONE, P_MSB_256.b);
+		    CG::lsr(z_tmp0.s, xa::ZReg(IDX(cvtvr)).s, 31);
+		    CG::cmpgt(p10.s, p_tmp0/xa::T_z, z_tmp0.s, 0);
+		    CG::mov(xa::ZReg(IDX(accvr)).s, p10/xa::T_m, xa::ZReg(IDX(inpvr)).s);
+		    CG::not_(p_tmp0.b, P_ALL_ONE, p10.b);
+		    CG::mov(xa::ZReg(IDX(accvr)).s, p_tmp0/xa::T_m, xa::ZReg(IDX(accvr)).s);
+		    CG::mov(xa::ZReg(IDX(accvr)).s, P_MSB_256/xa::T_m, 0);
+                    if (jpp.is_training) {
+		      //vblendvps(indvr, indvr, vmm_k_offset, cvtvr);
+			if ( vlen == 64) {
+                          assert(!"unreachable");
+                        } else if ( vlen == 32 ){
+                          CG::not_(p_tmp0.b, P_ALL_ONE, P_MSB_256.b);
+                          CG::lsr(z_tmp0.s, xa::ZReg(IDX(cvtvr)).s, 31);
+                          CG::cmpgt(p10.s, p_tmp0/xa::T_z, z_tmp0.s, 0);
+                          CG::mov(xa::ZReg(IDX(indvr)).s, p10/xa::T_m, xa::ZReg(IDX(vmm_k_offset)).s);
+                          CG::not_(p_tmp0.b, P_ALL_ONE, p10.b);
+                          CG::mov(xa::ZReg(IDX(indvr)).s, p_tmp0/xa::T_m, xa::ZReg(IDX(indvr)).s);
+                          CG::mov(xa::ZReg(IDX(indvr)).s, P_MSB_256/xa::T_m, 0);
+                        } else if ( vlen == 16 ){
+                          CG::not_(p_tmp0.b, P_ALL_ONE, P_MSB_384.b);
+                          CG::lsr(z_tmp0.s, xa::ZReg(IDX(cvtvr)).s, 31);
+                          CG::cmpgt(p10.s, p_tmp0/xa::T_z, z_tmp0.s, 0);
+                          CG::mov(xa::ZReg(IDX(indvr)).s, p10/xa::T_m, xa::ZReg(IDX(vmm_k_offset)).s);
+                          CG::not_(p_tmp0.b, P_ALL_ONE, p10.b);
+                          CG::mov(xa::ZReg(IDX(indvr)).s, p_tmp0/xa::T_m, xa::ZReg(IDX(indvr)).s);
+                          CG::mov(xa::ZReg(IDX(indvr)).s, P_MSB_384/xa::T_m, 0);
+                        } else {
+                          assert(!"unreachable");
+                        }
+		    }
                 } else {
                     vcmpps(k_store_mask, accvr, inpvr, _cmp_lt_os);
                     vblendmps(accvr | k_store_mask, accvr, inpvr);
