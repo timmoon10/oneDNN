@@ -467,9 +467,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
 
             CGA64::add_imm(aux1_reg_kernel, aux1_reg_kernel,
                     ch_blk * stride_w * sizeof(float), reg_tmp_imm);
-            CGA64::sub_imm(aux1_reg_ddst, aux1_reg_ddst, ch_blk * sizeof(float),
+            CGA64::sub_imm(aux1_reg_ddst, aux1_reg_ddst, ch_blk * (jcp.dilate_w + 1) * sizeof(float),
                     reg_tmp_imm);
-
             CGA64::sub_imm(iter_kw, iter_kw, stride_w, reg_tmp_imm);
             CGA64::cmp(iter_kw, 0);
             CGA64::b(xa::GT, kw_label);
@@ -477,9 +476,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
 
         CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
                 kw * ch_blk * stride_h * sizeof(float), reg_tmp_imm);
-        CGA64::sub_imm(aux_reg_ddst, aux_reg_ddst, ow * ch_blk * sizeof(float),
+        CGA64::sub_imm(aux_reg_ddst, aux_reg_ddst, ow * ch_blk * (jcp.dilate_h + 1) * sizeof(float),
                 reg_tmp_imm);
-
         CGA64::sub_imm(iter_kh, iter_kh, stride_h, reg_tmp_imm);
         CGA64::cmp(iter_kh, 0);
         CGA64::b(xa::GT, kh_label);
