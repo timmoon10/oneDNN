@@ -1285,7 +1285,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                     uint cmpMaskIdx = p_tmp0.getIdx();
                     uint cmpSrcIdx = IDX(vmm_mask);
                     uint cmpSrc2Idx = IDX(inpvr);
-                    switch(_cmp_lt_os) {
+                    switch(int(_cmp_lt_os)) {
                     case 0:
 		      CG::fcmeq(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));
 		      break; //EQ_OQ
@@ -1334,7 +1334,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                       uint cmpMaskIdx = p_tmp0.getIdx();
                       uint cmpSrcIdx = IDX(accvr);
                       uint cmpSrc2Idx = IDX(inpvr);
-                      switch(_cmp_lt_os) {
+                      switch(int(_cmp_lt_os)) {
                       case 0:
 			CG::fcmeq(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));
 			break; //EQ_OQ
@@ -1454,7 +1454,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                       uint cmpMaskIdx = p_tmp0.getIdx();
                       uint cmpSrcIdx = IDX(accvr);
                       uint cmpSrc2Idx = IDX(inpvr);
-                      switch(_cmp_lt_os) {
+                      switch(int(_cmp_lt_os)) {
                       case 0:
 			CG::fcmeq(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));
 			break; //EQ_OQ
@@ -1582,7 +1582,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
 		    uint cmpMaskIdx = p_tmp0.getIdx();
 		    uint cmpSrcIdx = IDX(accvr);
 		    uint cmpSrc2Idx = IDX(inpvr);
-		    switch(_cmp_lt_os) {
+		    switch(int(_cmp_lt_os)) {
 		    case 0:
 		      CG::fcmeq(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));
 		      break; //EQ_OQ
@@ -1673,7 +1673,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
 		    uint cmpMaskIdx = p_tmp0.getIdx();
 		    uint cmpSrcIdx = IDX(accvr);
 		    uint cmpSrc2Idx = IDX(inpvr);
-		    switch(_cmp_lt_os) {
+		    switch(int(_cmp_lt_os)) {
 		    case 0:
 		      CG::fcmeq(xa::PRegS(cmpDstIdx), xa::PReg(cmpMaskIdx)/xa::T_z, xa::ZRegS(cmpSrcIdx), xa::ZRegS(cmpSrc2Idx));
 		      break; //EQ_OQ
