@@ -295,18 +295,18 @@ struct jit_bnorm_t : public jit_generator {
     (static_cast<int32_t>(PARAM_OFF(x)) - static_cast<int32_t>(PARAM_OFF(y)))
 #define LDR_PARAM(r, x, y) \
     assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
-    CG::ldr(xa::XReg(IDX(r)), xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(x, y)))
+    CG::ldr(xa::XReg(IDX(r)), xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(x, y)))
 #define LDR_PARAM_TMP(x, y) \
     assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
-    CG::ldr(X_TMP_0, xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(x, y)));
+    CG::ldr(X_TMP_0, xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(x, y)));
 #define STR_PARAM_TMP(x, y) \
     assert(-256 <= static_cast<int32_t>(x) - static_cast<int32_t>(y) \
             && static_cast<int32_t>(x) - static_cast<int32_t>(y) <= 256); \
     CG::str(X_TMP_0, xa::pre_ptr(x_tmp_sp, x - y));
 
-        CG::mov(X_TMP_ADDR, xa::XReg(IDX(reg_param)));
+        CG::mov(X_DEFAULT_ADDR, xa::XReg(IDX(reg_param)));
         CG::ldr(xa::XReg(IDX(reg_rbuf1)),
-                xa::pre_ptr(X_TMP_ADDR, PARAM_OFF(rbuf1)));
+                xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF(rbuf1)));
         if (bdesc_->is_bwd()) {
             LDR_PARAM(reg_rbuf2, rbuf2, rbuf1);
             LDR_PARAM(reg_coff_max, coff_max, rbuf2);
@@ -321,11 +321,11 @@ struct jit_bnorm_t : public jit_generator {
         LDR_PARAM(reg_scale_shift, scale_shift, mean);
 
         CG::ldr(W_TMP_1,
-                xa::pre_ptr(
-                        X_TMP_ADDR, PARAM_OFF_DIFF(chan_size, scale_shift)));
+                xa::pre_ptr(X_DEFAULT_ADDR,
+                        PARAM_OFF_DIFF(chan_size, scale_shift)));
         CG::ldr(W_TMP_2,
-                xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(one, chan_size)));
-        CG::ldr(W_TMP_3, xa::pre_ptr(X_TMP_ADDR, PARAM_OFF_DIFF(eps, one)));
+                xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(one, chan_size)));
+        CG::ldr(W_TMP_3, xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(eps, one)));
 
         if (vchan_size.isYMM() || vchan_size.isZMM()) {
             CG::dup(xa::ZRegS(IDX(vchan_size)), W_TMP_1);
@@ -373,8 +373,8 @@ struct jit_bnorm_t : public jit_generator {
 
         if (is_spatial_thr_) {
             CG::ldr(X_TMP_0,
-                    xa::pre_ptr(
-                            X_TMP_ADDR, PARAM_OFF(spat_size_loc) - tmpSize));
+                    xa::pre_ptr(X_DEFAULT_ADDR,
+                            PARAM_OFF(spat_size_loc) - tmpSize));
             STR_PARAM_TMP(stack_off_spat_size_loc, tmpStack);
             LDR_PARAM_TMP(S_s, spat_size_loc);
             STR_PARAM_TMP(stack_off_s_s, stack_off_spat_size_loc);
@@ -385,18 +385,20 @@ struct jit_bnorm_t : public jit_generator {
         }
         if (is_c_padded()) {
             CG::ldr(X_TMP_0,
-                    xa::pre_ptr(X_TMP_ADDR, PARAM_OFF(is_cblk_tail) - tmpSize));
+                    xa::pre_ptr(
+                            X_DEFAULT_ADDR, PARAM_OFF(is_cblk_tail) - tmpSize));
             STR_PARAM_TMP(stack_off_is_cblk_tail, tmpStack);
             tmpSize = PARAM_OFF(is_cblk_tail);
             tmpStack = stack_off_is_cblk_tail;
         }
         if (bdesc_->is_fwd()) {
-            CG::ldr(X_TMP_0, xa::pre_ptr(X_TMP_ADDR, PARAM_OFF(var) - tmpSize));
+            CG::ldr(X_TMP_0,
+                    xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF(var) - tmpSize));
             CG::mov(xa::XReg(IDX(reg_var)), X_TMP_0);
         } else {
             CG::ldr(X_TMP_0,
-                    xa::pre_ptr(
-                            X_TMP_ADDR, PARAM_OFF(diff_scale_shift) - tmpSize));
+                    xa::pre_ptr(X_DEFAULT_ADDR,
+                            PARAM_OFF(diff_scale_shift) - tmpSize));
             STR_PARAM_TMP(stack_off_diff_scale_shift, tmpStack);
             LDR_PARAM_TMP(var, diff_scale_shift);
             CG::mov(xa::XReg(IDX(reg_var)), X_TMP_0);
@@ -864,28 +866,31 @@ struct jit_bnorm_t : public jit_generator {
     void uni_vmovntps_aarch64(const Reg64 &base, const Reg64 &off,
             const int disp, const Xmm &v, const xa::PReg &p512,
             const xa::PReg &p256, const xa::PReg &p128) {
-        CG::add(X_TMP_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
-        if (disp != 0) CG::add_imm(X_TMP_ADDR, X_TMP_ADDR, disp, X_TMP_0);
+        CG::add(X_DEFAULT_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
+        if (disp != 0)
+            CG::add_imm(X_DEFAULT_ADDR, X_DEFAULT_ADDR, disp, X_TMP_0);
 
-        CG::stnt1w(xa::ZRegS(IDX(v)), p128, xa::ptr(X_TMP_ADDR));
+        CG::stnt1w(xa::ZRegS(IDX(v)), p128, xa::ptr(X_DEFAULT_ADDR));
     }
 
     void uni_vmovntps_aarch64(const Reg64 &base, const Reg64 &off,
             const int disp, const Ymm &v, const xa::PReg &p512,
             const xa::PReg &p256, const xa::PReg &p128) {
-        CG::add(X_TMP_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
-        if (disp != 0) CG::add_imm(X_TMP_ADDR, X_TMP_ADDR, disp, X_TMP_0);
+        CG::add(X_DEFAULT_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
+        if (disp != 0)
+            CG::add_imm(X_DEFAULT_ADDR, X_DEFAULT_ADDR, disp, X_TMP_0);
 
-        CG::stnt1w(xa::ZRegS(IDX(v)), p256, xa::ptr(X_TMP_ADDR));
+        CG::stnt1w(xa::ZRegS(IDX(v)), p256, xa::ptr(X_DEFAULT_ADDR));
     }
 
     void uni_vmovntps_aarch64(const Reg64 &base, const Reg64 &off,
             const int disp, const Zmm &v, const xa::PReg &p512,
             const xa::PReg &p256, const xa::PReg &p128) {
-        CG::add(X_TMP_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
-        if (disp != 0) CG::add_imm(X_TMP_ADDR, X_TMP_ADDR, disp, X_TMP_0);
+        CG::add(X_DEFAULT_ADDR, xa::XReg(IDX(base)), xa::XReg(IDX(off)));
+        if (disp != 0)
+            CG::add_imm(X_DEFAULT_ADDR, X_DEFAULT_ADDR, disp, X_TMP_0);
 
-        CG::stnt1w(xa::ZRegS(IDX(v)), p_512, xa::ptr(X_TMP_ADDR));
+        CG::stnt1w(xa::ZRegS(IDX(v)), p_512, xa::ptr(X_DEFAULT_ADDR));
     }
 
     void uni_vmovups_aarch64(const Xmm &x, const Operand &op) {
