@@ -144,10 +144,11 @@ private:
     Opmask k_store_mask = Opmask(6);
 
   /* Caution: Chose predicate registers not used by x64's implementation. */
-  xa::PReg p_lsb_256 = p1;
+  xa::PReg p_256 = p1;
   xa::PReg p_512 = p2;
   xa::PReg p_tmp0 = p3;
-  xa::PReg p_lsb_32 = p7;
+  xa::PReg p_128 = p7;
+  xa::PReg p_lsb = p2;
 
     // Here be some (tame) dragons. This kernel does not follow the regular
     // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu
