@@ -239,15 +239,36 @@ template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::prepare_tail_mask() {
     if (isa >= avx512_common) {
         size_t c_tail_mask = (1ULL << jpp.c_tail) - 1ULL;
+#ifdef DNNL_X64_IMPLEMENTATION
         mov(tmp_gpr.cvt32(), c_tail_mask);
         // The kmovw instrucion here can be translated correctly by translator
-        kmovw(k_c_tail_mask, tmp_gpr.cvt32());
+        kmovw(k_c_tail_mask, tmp_gpr.cvt32());            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        //mov(tmp_gpr.cvt32(), c_tail_mask);
+	CG::mov_imm(xa::WReg(IDX(tmp_gpr)), c_tail_mask);
+        // The kmovw instrucion here can be translated correctly by translator
+        //kmovw(k_c_tail_mask, tmp_gpr.cvt32());
+	CG::index(z_tmp0.s, 0, 1);
+	CG::mov(z_tmp1.s, 1);
+	CG::lsl(z_tmp1.s, p_512/xa::T_m, z_tmp0.s);
+	CG::dup(z_tmp0.s, xa::WReg(IDX(tmp_gpr)));
+	CG::and_(z_tmp0.d, z_tmp0.d, z_tmp1.d);
+	CG::cmpne(xa::PRegS(IDX(k_c_tail_mask)), p_512, z_tmp0.s, 0);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION	
     } else if (isa == avx) {
         static const uint32_t mask[16] = {0xffffffff, 0xffffffff, 0xffffffff,
                 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0,
                 0, 0, 0, 0, 0, 0, 0};
+#ifdef DNNL_X64_IMPLEMENTATION
         mov(tmp_gpr, reinterpret_cast<size_t>(&mask[8 - jpp.c_tail]));
         vmovups(vmm_c_tail_mask, ptr[tmp_gpr]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        //mov(tmp_gpr, reinterpret_cast<size_t>(&mask[8 - jpp.c_tail]));
+	CG::mov_imm(xa::XReg(IDX(tmp_gpr)), reinterpret_cast<size_t>(&mask[8 - jpp.c_tail]));
+        //vmovups(vmm_c_tail_mask, ptr[tmp_gpr]);
+	CG::ld1w(xa::ZRegS(IDX(vmm_c_tail_mask)), p_lsb/xa::T_z, xa::ptr(xa::XReg(IDX(tmp_gpr))));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION	
+
     }
 }
 
