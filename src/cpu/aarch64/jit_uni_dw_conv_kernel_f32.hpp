@@ -34,8 +34,9 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_fwd_kernel_f32)
 
     jit_uni_dw_conv_fwd_kernel_f32(jit_conv_conf_t ajcp)
-    : jit_generator(nullptr, 1024 * 1024),
-    jcp(ajcp), eltwise_injector_(nullptr) {
+        : jit_generator(nullptr, 1024 * 1024)
+        , jcp(ajcp)
+        , eltwise_injector_(nullptr) {
         if (jcp.with_eltwise)
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
