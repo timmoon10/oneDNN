@@ -420,16 +420,14 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 assert(unroll == 8);
                 assert(is(0) * itype_sz < 255);
 
-                //		std::cout << "LINE:" << __LINE__ << std::endl;
-
-                CG::add_imm(X_DEFAULT_ADDR, xa::XReg(x_ptr_in_off),
-                        i_off * itype_sz, X_TMP_0);
+                CG::add_imm(X_TMP_0, xa::XReg(x_ptr_in_off), i_off * itype_sz,
+                        X_DEFAULT_ADDR);
                 for (int i = 0; i < unroll; i++) {
                     if (unroll * itype_sz == 16) {
                         CG::ldr(xa::QReg(i),
                                 xa::post_ptr(X_TMP_0, is(0) * itype_sz));
                     } else {
-                        CG::ldr(xa::DReg(i), xa::ptr(X_DEFAULT_ADDR));
+                        CG::ldr(xa::DReg(i), xa::ptr(X_TMP_0));
                     }
                 }
 
@@ -1064,7 +1062,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 for (int ur = 0; ur < reg_unroll; ur += load_step) {
                     for (int r = 0; r < load_step; ++r) {
                         CG::add_imm(x_tmp_vec[r], x_ptr_out_off,
-                                o_off[ur + r] * otype_sz, X_TMP_0);
+                                o_off[ur + r] * otype_sz, X_DEFAULT_ADDR);
                     }
 
                     for (int r = 0; r < load_step; ++r) {
