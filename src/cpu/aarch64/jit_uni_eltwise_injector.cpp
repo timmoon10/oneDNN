@@ -121,13 +121,13 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
                 i++;
             } while (i < preserved_vecs_count && i < x_tmp_vec_size);
 
-            if (vlen != 128)
+            if (vlen != 32)
                 for (int j = 0; j < count; j++)
-                    CG::st1w(xa::ZRegS(preserved_vec_idxs[i]), p_lsb / xa::T_z,
+                    CG::st1w(xa::ZRegS(preserved_vec_idxs[j]), p_lsb,
                             xa::ptr(x_tmp_vec[j]));
             else
                 for (int j = 0; j < count; j++)
-                    CG::str(xa::QReg(preserved_vec_idxs[i]),
+                    CG::str(xa::QReg(preserved_vec_idxs[j]),
                             xa::ptr(x_tmp_vec[j]));
 
             i += count;
@@ -167,7 +167,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
                 i++;
             } while (i < tail_vecs_to_preserve && i < x_tmp_vec_size);
 
-            if (vlen != 128)
+            if (vlen != 32)
                 for (int j = 0; j < count; j++)
                     CG::ld1w(xa::ZRegS(preserved_vec_idxs[idx_off + i]),
                             p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
@@ -201,13 +201,13 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
                 i++;
             } while (i < tail_vecs_to_preserve && i < x_tmp_vec_size);
 
-            if (vlen != 128)
+            if (vlen != 32)
                 for (int j = 0; j < count; j++)
-                    CG::st1w(xa::ZRegS(preserved_vec_idxs[idx_off + i]),
+                    CG::st1w(xa::ZRegS(preserved_vec_idxs[idx_off + j]),
                             p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
             else
                 for (int j = 0; j < count; j++)
-                    CG::str(xa::QReg(preserved_vec_idxs[idx_off + i]),
+                    CG::str(xa::QReg(preserved_vec_idxs[idx_off + j]),
                             xa::ptr(x_tmp_vec[j]));
 
             i += count;
