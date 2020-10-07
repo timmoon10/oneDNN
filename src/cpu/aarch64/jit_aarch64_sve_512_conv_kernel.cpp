@@ -2591,8 +2591,12 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     pre_offset_ker);
         }
     }
-
-    int idata_reg_offset = kw * ic_block_step + 4;
+    int num_zregs4ker = kw * ic_block_step;
+    int num_zregs4out = 4;
+    num_zregs4out = (28 - num_zregs4ker) / num_zregs4ker ?
+                          nstl::max((28 - num_zregs4ker) % (num_zregs4ker), 4) :
+                          nstl::max(32 - (num_zregs4ker + ic_block_step), 4);
+    int idata_reg_offset = num_zregs4ker + num_zregs4out;
     int num_zregs4idata = 32 - idata_reg_offset;
 
     auto load_input = [=](size_t i_offset, int zreg_idx, int pre_offset_input) {
@@ -2708,18 +2712,18 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
          * The first iteration produces ldr instructions for the next iteration.
          */
         if (i_ur == 0) {
-            for (int ii = 0; ii < 4; ii++) {
+            for (int ii = 0; ii < num_zregs4out; ii++) {
                 if (ur_w > ii) {
 
                     pre_offset_out = load_out(
-                            kw * ic_block_step + (i_ur + ii) % 4,
+                            kw * ic_block_step + (i_ur + ii) % num_zregs4out,
                             typesize * (i_ur + ii) * oc_block + output_offset,
                             pre_offset_out);
                 }
             }
-        } else if (i_ur + 3 < ur_w) {
-            pre_offset_out = load_out(kw * ic_block_step + (i_ur + 3) % 4,
-                    typesize * (i_ur + 3) * oc_block + output_offset,
+        } else if ((i_ur + num_zregs4out - 1) < ur_w) {
+            pre_offset_out = load_out(kw * ic_block_step + (i_ur + num_zregs4out - 1) % num_zregs4out,
+                    typesize * (i_ur + num_zregs4out - 1) * oc_block + output_offset,
                     pre_offset_out);
         }
 
@@ -2747,11 +2751,11 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
 
                 for (int i_ic = 0; i_ic < ic_block_step; i_ic++) {
                     assert((i_kw * ic_block_step + i_ic) < 31);
-                    assert((kw * ic_block_step + (i_ur % 4)) < 31);
+                    assert((kw * ic_block_step + (i_ur % num_zregs4out)) < 31);
                     int zreg_idx = i_ic + (i_ur * kw + i_kw) * ic_block_step;
                     CGA64::fmla(xa::ZRegS(i_kw * ic_block_step + i_ic),
                             reg_p_all_ones,
-                            xa::ZRegS(kw * ic_block_step + i_ur % 4),
+                            xa::ZRegS(kw * ic_block_step + i_ur % num_zregs4out),
                             xa::ZRegS(idata_reg_offset
                                     + (zreg_idx % num_zregs4idata)));
                     if((pre_loaded_ur == 0) && ((i_ic + pre_loaded_ic) < ic_block_step)){
