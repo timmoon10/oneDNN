@@ -2707,6 +2707,7 @@ void jit_uni_pool_kernel<isa>::generate() {
     
     if (!isa_has_bf16(jpp.isa) && jpp.is_bf16) bf16_emu_->init_vcvtneps2bf16();
 
+#ifdef DNNL_X64_IMPLEMENTATION
     mov(reg_input, ptr[reg_param + GET_OFF(src)]);
     mov(reg_output, ptr[reg_param + GET_OFF(dst)]);
     if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward))
@@ -2714,7 +2715,46 @@ void jit_uni_pool_kernel<isa>::generate() {
     mov(reg_kh, ptr[reg_param + GET_OFF(kh_padding)]);
     mov(reg_k_shift, ptr[reg_param + GET_OFF(kh_padding_shift)]);
     mov(reg_ker_area_h, ptr[reg_param + GET_OFF(ker_area_h)]);
-    mov(reg_nbc, ptr[reg_param + GET_OFF(ur_bc)]);
+    mov(reg_nbc, ptr[reg_param + GET_OFF(ur_bc)]);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    //mov(reg_input, ptr[reg_param + GET_OFF(src)]);
+    //get mem address
+    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		GET_OFF(src), X_TMP_0);
+    CG::ldr(xa::XReg(IDX(reg_input)), xa::ptr(x_tmp));
+    //mov(reg_output, ptr[reg_param + GET_OFF(dst)]);
+    //get mem address
+    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		GET_OFF(dst), X_TMP_0);
+    CG::ldr(xa::XReg(IDX(reg_output)), xa::ptr(x_tmp));    
+    if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward)){
+      //mov(reg_index, ptr[reg_param + GET_OFF(indices)]);
+	//get mem address
+	CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		    GET_OFF(indices), X_TMP_0);
+	CG::ldr(xa::XReg(IDX(reg_index)), xa::ptr(x_tmp));    
+    }
+    //mov(reg_kh, ptr[reg_param + GET_OFF(kh_padding)]);
+    //get mem address
+    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		GET_OFF(kh_padding), X_TMP_0);
+    CG::ldr(xa::XReg(IDX(reg_kh)), xa::ptr(x_tmp));    
+    //mov(reg_k_shift, ptr[reg_param + GET_OFF(kh_padding_shift)]);
+    //get mem address
+    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		GET_OFF(kh_padding_shift), X_TMP_0);
+    CG::ldr(xa::XReg(IDX(reg_k_shift)), xa::ptr(x_tmp));    
+    //mov(reg_ker_area_h, ptr[reg_param + GET_OFF(ker_area_h)]);
+    //get mem address
+    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		GET_OFF(ker_area_h), X_TMP_0);
+    CG::ldr(xa::XReg(IDX(reg_ker_area_h)), xa::ptr(x_tmp));    
+    //mov(reg_nbc, ptr[reg_param + GET_OFF(ur_bc)]);
+    //get mem address
+    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		GET_OFF(ur_bc), X_TMP_0);
+    CG::ldr(xa::XReg(IDX(reg_nbc)), xa::ptr(x_tmp));        
+#endif //#ifdef DNNL_X64_IMPLEMENTATION    
 
     if (jpp.is_bf16) {
         mov(tmp_gpr.cvt32(), 0xAAAAAAAA);
@@ -2749,12 +2789,24 @@ void jit_uni_pool_kernel<isa>::generate() {
 
         auto dt_size = jpp.dt_size;
         auto shift = (isa == sse41) ? vlen : 0;
+#ifdef DNNL_X64_IMPLEMENTATION
         add(reg_input, dt_size * (ur_w * stride_w - lpad) * c_off - shift);
-        add(reg_output, dt_size * ur_w * c_off - shift);
+        add(reg_output, dt_size * ur_w * c_off - shift);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        //add(reg_input, dt_size * (ur_w * stride_w - lpad) * c_off - shift);
+	CG::add_imm(xa::XReg(IDX(reg_input)), xa::XReg(IDX(reg_input)), (dt_size * (ur_w * stride_w - lpad) * c_off - shift), X_TMP_0);
+        //add(reg_output, dt_size * ur_w * c_off - shift);
+	CG::add_imm(xa::XReg(IDX(reg_output)), xa::XReg(IDX(reg_output)), (dt_size * ur_w * c_off - shift), X_TMP_0);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION	
         if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward)) {
             auto ishift = (isa == sse41) ? jpp.c_block / 2 : 0;
             auto ind_dt_size = types::data_type_size(jpp.ind_dt);
-            add(reg_index, (ur_w * c_off - ishift) * ind_dt_size);
+#ifdef DNNL_X64_IMPLEMENTATION
+            add(reg_index, (ur_w * c_off - ishift) * ind_dt_size);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            //add(reg_index, (ur_w * c_off - ishift) * ind_dt_size);
+	    CG::add_imm(xa::XReg(IDX(reg_index)), xa::XReg(IDX(reg_index)), ((ur_w * c_off - ishift) * ind_dt_size), X_TMP_0);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION	    
         }
     };
 
@@ -2775,9 +2827,32 @@ void jit_uni_pool_kernel<isa>::generate() {
         }
 
         if (jpp.alg == pooling_avg_include_padding) {
+#ifdef DNNL_X64_IMPLEMENTATION
             mov(tmp_gpr, float2int((float)(kw * kh * jpp.kd)));
             movq(xmm_tmp, tmp_gpr);
-            uni_vpbroadcastd(vmm_tmp, xmm_tmp);
+            uni_vpbroadcastd(vmm_tmp, xmm_tmp);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            //mov(tmp_gpr, float2int((float)(kw * kh * jpp.kd)));
+	    CG::mov_imm(xa::XReg(IDX(tmp_gpr)), float2int((float)(kw * kh * jpp.kd)));
+            //movq(xmm_tmp, tmp_gpr);
+	    CG::ptrue(p_tmp0.d, xa::VL2);
+	    CG::mov(xa::ZRegD(IDX(xmm_tmp)), p_tmp0/xa::T_m, 0);
+	    CG::ptrue(p_tmp0.d, xa::VL1);
+	    CG::mov(xa::ZRegD(IDX(xmm_tmp)), p_tmp0/xa::T_m, xa::XReg(IDX(tmp_gpr)));
+            //uni_vpbroadcastd(vmm_tmp, xmm_tmp);
+	    int vlen = cpu_isa_traits<isa>::vlen;
+	    if ( vlen == 64) {
+	      CG::dup(xa::ZRegS(IDX(vmm_tmp)), xa::ZRegS(IDX(xmm_tmp))[0]);
+	    } else if ( vlen == 32 ){
+	      CG::dup(xa::ZRegS(IDX(vmm_tmp)), xa::ZRegS(IDX(xmm_tmp))[0]);
+	      CG::mov(xa::ZRegS(IDX(vmm_tmp)), P_MSB_256/xa::T_m, 0);
+	    } else if ( vlen == 16 ){
+	      CG::dup(xa::VReg4S(IDX(vmm_tmp)), xa::VReg4S(IDX(xmm_tmp))[0]);
+	      CG::mov(xa::ZRegS(IDX(vmm_tmp)), P_MSB_384/xa::T_m, 0);
+	    } else {
+	      assert(!"unreachable");
+	    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION	  
         }
 
         if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward)) {
@@ -2813,9 +2888,19 @@ void jit_uni_pool_kernel<isa>::generate() {
             {
                 process_oi(ur_w, ur_bc, 0, 0, with_c_tail_processing);
 
+#ifdef DNNL_X64_IMPLEMENTATION
                 inc(oi_iter);
                 cmp(oi_iter, n_oi);
-                jl(ow_loop, T_NEAR);
+                jl(ow_loop, T_NEAR);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                //inc(oi_iter);
+		CG::adds(xa::XReg(IDX(oi_iter)), xa::XReg(IDX(oi_iter)), 1);		
+                //cmp(oi_iter, n_oi);
+		CG::mov_imm(X_TMP_0, n_oi);
+		CG::cmp(xa::XReg(IDX(oi_iter)), X_TMP_0);
+                //jl(ow_loop, T_NEAR);
+		CG::b(xa::LT, ow_loop);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION		
             }
         }
 
@@ -2829,23 +2914,46 @@ void jit_uni_pool_kernel<isa>::generate() {
     Label ur_bc_tail_label, c_tail_processing_label, finish_label;
 
     if (jpp.ur_bc_tail > 0) {
+#ifdef DNNL_X64_IMPLEMENTATION
         cmp(reg_nbc, jpp.ur_bc);
-        jne(ur_bc_tail_label, T_NEAR);
+        jne(ur_bc_tail_label, T_NEAR);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        //cmp(reg_nbc, jpp.ur_bc);
+	CG::mov_imm(X_TMP_0, jpp.ur_bc);
+        CG::cmp(xa::XReg(IDX(reg_nbc)), X_TMP_0);
+        //jne(ur_bc_tail_label, T_NEAR);
+	b(xa::NE, ur_bc_tail_label);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION      
     } else if (jpp.c_tail != 0) {
         // ur_bc contains number of channel blocks to processing
         // b_c contains number of channel blocks already processed
         // If reg_nbc + tmp_gpr == jpp.nb_c then this is
         // information that probably channel tail processing will be needed.
+#ifdef DNNL_X64_IMPLEMENTATION
         mov(tmp_gpr, ptr[reg_param + GET_OFF(b_c)]);
         add(tmp_gpr, reg_nbc);
         cmp(tmp_gpr, jpp.nb_c);
         je(c_tail_processing_label, T_NEAR);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+      //mov(tmp_gpr, ptr[reg_param + GET_OFF(b_c)]);
+	//get mem address
+	CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
+		    GET_OFF(b_c), X_TMP_0);
+	CG::ldr(xa::XReg(IDX(tmp_gpr)), xa::ptr(x_tmp));    
+        //add(tmp_gpr, reg_nbc);
+	CG::add(xa::XReg(IDX(tmp_gpr)), xa::XReg(IDX(tmp_gpr)), xa::XReg(IDX(reg_nbc)));
+        //cmp(tmp_gpr, jpp.nb_c);
+	CG::mov_imm(X_TMP_0, jpp.nb_c);
+        CG::cmp(xa::XReg(IDX(tmp_gpr)), X_TMP_0);
+        //je(c_tail_processing_label, T_NEAR);
+	b(Xbyak_aarch64::EQ, c_tail_processing_label);	
+#endif //#ifdef DNNL_X64_IMPLEMENTATION      
     }
 
     perform_ker(jpp.ur_bc, false);
 
     if (jpp.ur_bc_tail > 0) {
-        jmp(finish_label, T_NEAR);
+        jmp(finish_label, T_NEAR);            
 
         // If ur_bc_tail exists then we know that this is
         // last set of blocks to process and we need
@@ -2857,7 +2965,7 @@ void jit_uni_pool_kernel<isa>::generate() {
 
         L(finish_label);
     } else if (jpp.c_tail != 0) {
-        jmp(finish_label, T_NEAR);
+        jmp(finish_label, T_NEAR);            
 
         L(c_tail_processing_label);
         prepare_tail_mask();
