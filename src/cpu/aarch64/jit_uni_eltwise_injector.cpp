@@ -1,20 +1,6 @@
 /*******************************************************************************
-* Copyright 2020 FUJITSU LIMITED
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
-/*******************************************************************************
 * Copyright 2019-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -138,6 +124,17 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     }
 
     assign_regs();
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    CG::ptrue(p_512.b);
+    CG::ptrue(p_256.b, xa::VL32);
+    CG::ptrue(p_128.b, xa::VL16);
+    if (vlen == 32) {
+        p_lsb = p_256;
+    } else if (vlen == 16) {
+        p_lsb = p_128;
+    }
+#endif
 }
 
 template <cpu_isa_t isa>
@@ -169,11 +166,11 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
 
             if (vlen != 32)
                 for (int j = 0; j < count; j++)
-                    CG::ld1w(xa::ZRegS(preserved_vec_idxs[idx_off + i]),
+                    CG::ld1w(xa::ZRegS(preserved_vec_idxs[idx_off + j]),
                             p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
             else
                 for (int j = 0; j < count; j++)
-                    CG::ldr(xa::QReg(preserved_vec_idxs[idx_off + i]),
+                    CG::ldr(xa::QReg(preserved_vec_idxs[idx_off + j]),
                             xa::ptr(x_tmp_vec[j]));
 
             i += count;
@@ -218,17 +215,6 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
     }
 
     assign_regs();
-
-#ifndef DNNL_X64_IMPLEMENTATION
-    CG::ptrue(p_512.b);
-    CG::ptrue(p_256.b, xa::VL32);
-    CG::ptrue(p_128.b, xa::VL16);
-    if (vlen == 32) {
-        p_lsb = p_256;
-    } else if (vlen == 16) {
-        p_lsb = p_128;
-    }
-#endif
 }
 
 template <cpu_isa_t isa>
@@ -943,7 +929,7 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_le_os);
     std::cout << "log" << std::endl;
 
-#ifndef DNNL_INDIRECT_JIT_AARCH64
+#ifdef DNNL_INDIRECT_JIT_AARCH64
     test_mask();
 #else
     h->CodeGeneratorAArch64::orrs(h->P_TMP_0.b,
