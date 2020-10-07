@@ -394,20 +394,20 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 assert(unroll == 8);
 
                 CG::add_imm(X_TMP_0, xa::XReg(x_ptr_in_off), i_off * itype_sz,
-                        X_TMP_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_TMP_ADDR);
+                        X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_DEFAULT_ADDR);
 
                 CG::ld1w(xa::ZRegS(0), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
                 CG::ld1w(xa::ZRegS(1), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
                 CG::ld1w(xa::ZRegS(2), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_2));
                 CG::ld1w(xa::ZRegS(3), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_3));
 
-                CG::add_imm(X_TMP_0, X_TMP_3, is(0) * itype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_TMP_ADDR);
+                CG::add_imm(X_TMP_0, X_TMP_3, is(0) * itype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_DEFAULT_ADDR);
 
                 CG::ld1w(xa::ZRegS(4), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
                 CG::ld1w(xa::ZRegS(5), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
@@ -422,14 +422,14 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                 //		std::cout << "LINE:" << __LINE__ << std::endl;
 
-                CG::add_imm(X_TMP_ADDR, xa::XReg(x_ptr_in_off),
+                CG::add_imm(X_DEFAULT_ADDR, xa::XReg(x_ptr_in_off),
                         i_off * itype_sz, X_TMP_0);
                 for (int i = 0; i < unroll; i++) {
                     if (unroll * itype_sz == 16) {
                         CG::ldr(xa::QReg(i),
                                 xa::post_ptr(X_TMP_0, is(0) * itype_sz));
                     } else {
-                        CG::ldr(xa::DReg(i), xa::ptr(X_TMP_ADDR));
+                        CG::ldr(xa::DReg(i), xa::ptr(X_DEFAULT_ADDR));
                     }
                 }
 
@@ -551,20 +551,20 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 assert(unroll == 8);
 
                 CG::add_imm(X_TMP_0, xa::XReg(x_ptr_out_off), o_off * otype_sz,
-                        X_TMP_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_TMP_ADDR);
+                        X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_DEFAULT_ADDR);
 
                 CG::st1w(xa::ZRegS(0), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
                 CG::st1w(xa::ZRegS(1), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
                 CG::st1w(xa::ZRegS(2), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_2));
                 CG::st1w(xa::ZRegS(3), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_3));
 
-                CG::add_imm(X_TMP_0, X_TMP_3, os(1) * otype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_TMP_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_TMP_ADDR);
+                CG::add_imm(X_TMP_0, X_TMP_3, os(1) * otype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_DEFAULT_ADDR);
+                CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_DEFAULT_ADDR);
 
                 CG::st1w(xa::ZRegS(4), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
                 CG::st1w(xa::ZRegS(5), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
@@ -576,13 +576,13 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             case 8:
                 assert(unroll == 8);
 
-                CG::add_imm(X_TMP_ADDR, xa::XReg(x_ptr_out_off),
+                CG::add_imm(X_DEFAULT_ADDR, xa::XReg(x_ptr_out_off),
                         o_off * otype_sz, X_TMP_0);
                 for (int i = 0; i < unroll; i++) {
                     if (unroll * otype_sz == 16) {
-                        CG::str(xa::QReg(0), xa::ptr(X_TMP_ADDR));
+                        CG::str(xa::QReg(0), xa::ptr(X_DEFAULT_ADDR));
                     } else {
-                        CG::str(xa::DReg(0), xa::ptr(X_TMP_ADDR));
+                        CG::str(xa::DReg(0), xa::ptr(X_DEFAULT_ADDR));
                     }
                 }
                 break;
@@ -654,7 +654,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                 do {
                     CG::add_imm(x_tmp_vec[count++], x_ptr_in_off,
-                            (off + ur * simd_w) * itype_sz, X_TMP_ADDR);
+                            (off + ur * simd_w) * itype_sz, X_DEFAULT_ADDR);
                     ur++;
                 } while (ur < unroll && count < x_tmp_vec_size);
 
@@ -726,7 +726,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                 do {
                     CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
-                            (off + ur * simd_w) * otype_sz, X_TMP_ADDR);
+                            (off + ur * simd_w) * otype_sz, X_DEFAULT_ADDR);
                     ur++;
                 } while (ur < unroll && count < x_tmp_vec_size);
 
@@ -947,7 +947,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 		 Do not use X_TMP_? as the last arg. */
                 for (int r = 0; r < ur_step; ++r) {
                     CG::add_imm(x_tmp_vec[r], x_ptr_in_off,
-                            i_off[ur + r] * itype_sz, X_TMP_ADDR);
+                            i_off[ur + r] * itype_sz, X_DEFAULT_ADDR);
                 }
 
                 for (int r = 0; r < ur_step; ++r) {
@@ -972,7 +972,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                     do {
                         CG::add_imm(x_tmp_vec[count++], x_ptr_in_off,
-                                i_off[ur] * itype_sz, X_TMP_ADDR);
+                                i_off[ur] * itype_sz, X_DEFAULT_ADDR);
                         ur += load_step;
                     } while (ur < reg_unroll && count < x_tmp_vec_size);
 
@@ -1124,7 +1124,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                                 static_cast<uint32_t>(xmm_scale.getIdx())};
                         xa::VReg4S v_dst {static_cast<uint32_t>(ur)};
                         CG::add_imm(X_TMP_0, x_ptr_scale_off,
-                                s_off[ur] * otype_sz, X_TMP_ADDR);
+                                s_off[ur] * otype_sz, X_DEFAULT_ADDR);
                         CG::ldr(W_TMP_0, xa::ptr(X_TMP_0));
                         CG::dup(v, W_TMP_0);
                         CG::fmul(v_dst, v_dst, v);
@@ -1146,7 +1146,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         uint32_t idx = xmm_scale.getIdx();
                         xa::VReg4S v_dst {static_cast<uint32_t>(ur)};
                         CG::add_imm(X_TMP_0, x_ptr_scale_off,
-                                s_off[ur] * otype_sz, X_TMP_ADDR);
+                                s_off[ur] * otype_sz, X_DEFAULT_ADDR);
                         CG::ldr(xa::QReg {idx}, xa::ptr(X_TMP_0));
                         CG::fmul(v_dst, v_dst, xa::VReg4S {idx});
                         continue;
@@ -1164,7 +1164,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         /* x_tmp_vec = X_TMP_0 - X_TMP_4 
 			 Do not use X_TMP_? as the last arg. */
                         CG::add_imm(x_tmp_vec[r - ur], x_ptr_scale_off,
-                                s_off[r] * stype_sz, X_TMP_ADDR);
+                                s_off[r] * stype_sz, X_DEFAULT_ADDR);
                     }
                     for (int r = ur; r < ur + ur_step; ++r) {
                         xa::VReg4S v {
@@ -1205,7 +1205,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                     do {
                         CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
-                                o_off[ur] * otype_sz, X_TMP_ADDR);
+                                o_off[ur] * otype_sz, X_DEFAULT_ADDR);
                         ur += ur_step;
                     } while (ur < reg_unroll && count < x_tmp_vec_size);
 
@@ -1261,7 +1261,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                     do {
                         CG::add_imm(x_tmp_vec[count++], x_ptr_scale_off,
-                                s_off[ur] * stype_sz, X_TMP_ADDR);
+                                s_off[ur] * stype_sz, X_DEFAULT_ADDR);
                         ur += ur_step;
                     } while (ur < reg_unroll && count < x_tmp_vec_size);
 
@@ -1305,7 +1305,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 
                     do {
                         CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
-                                o_off[ur] * otype_sz, X_TMP_ADDR);
+                                o_off[ur] * otype_sz, X_DEFAULT_ADDR);
                         ur += ur_step;
                     } while (ur < reg_unroll && count < (x_tmp_vec_size / 2));
 
@@ -1382,7 +1382,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 do {
                     //		std::cout << "o_off:" << o_off[ur] * otype_sz << std::endl;
                     CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
-                            o_off[ur] * otype_sz, X_TMP_ADDR);
+                            o_off[ur] * otype_sz, X_DEFAULT_ADDR);
                     ur += ur_step;
                 } while (ur < reg_unroll && count < x_tmp_vec_size);
 
