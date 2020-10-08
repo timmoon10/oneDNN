@@ -333,9 +333,7 @@ status_t jit_uni_dw_conv_bwd_data_kernel<isa, kernel_dt>::init_conf(
     bool kernel_outside_src = false || ext_kw <= jcp.l_pad
             || ext_kw <= jcp.r_pad || ext_kh <= jcp.t_pad
             || ext_kh <= jcp.b_pad;
-    if (kernel_outside_src) {
-		return status::unimplemented;
-	}
+    if (kernel_outside_src) { return status::unimplemented; }
 
     jcp.ihp = jcp.ih + jcp.t_pad + jcp.b_pad;
     jcp.iwp = jcp.iw + jcp.l_pad + jcp.r_pad;
