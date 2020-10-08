@@ -833,7 +833,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
         mov(ki, ptr[reg_param + GET_OFF(kd_padding)]);
         L(kd_label);
         mov(aux_reg_input, aux_reg_input_d);
-#else //#ifdef DNNL_X64_IMPLEMENTATION
+#else //#ifdef DNNL_X64_IMPLEMENTATION \
         //push(reg_input);
         CG::str(xa::XReg(IDX(reg_input)), xa::pre_ptr(X_TRANSLATOR_STACK, -8));
         //push(reg_output);
@@ -3006,7 +3006,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
     }
 
     xor_(kj, kj);
-#else //#ifdef DNNL_X64_IMPLEMENTATION
+#else //#ifdef DNNL_X64_IMPLEMENTATION \
         //mov(aux_reg_input_d, reg_input);
         CG::mov(xa::XReg(IDX(aux_reg_input_d)), xa::XReg(IDX(reg_input)));
         //mov(ki, ptr[reg_param + GET_OFF(kd_padding)]);
@@ -3209,7 +3209,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         }
         pop(reg_output);
         pop(reg_input);
-#else //#ifdef DNNL_X64_IMPLEMENTATION
+#else //#ifdef DNNL_X64_IMPLEMENTATION \
         //add(aux_reg_input, jpp.dt_size * iw * c_off);
         CG::add_imm(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input)),
                 (jpp.dt_size * iw * c_off), X_TMP_0);
@@ -3427,8 +3427,8 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
         dec(reg_zero_id);
         jnz(l_id_loop, T_NEAR);
     }
-#else //#ifdef DNNL_X64_IMPLEMENTATION
-            //add(reg_zero_ptr, width_size);
+#else //#ifdef DNNL_X64_IMPLEMENTATION \
+        //add(reg_zero_ptr, width_size);
             CG::add_imm(xa::XReg(IDX(reg_zero_ptr)),
                     xa::XReg(IDX(reg_zero_ptr)), width_size, X_TMP_0);
             //dec(aux_reg_zero_ih);
@@ -3718,7 +3718,7 @@ void jit_uni_pool_kernel<isa>::generate() {
         cmp(tmp_gpr, jpp.nb_c);
         je(c_tail_processing_label, T_NEAR);
 #else //#ifdef DNNL_X64_IMPLEMENTATION \
-        //mov(tmp_gpr, ptr[reg_param + GET_OFF(b_c)]);
+        //mov(tmp_gpr, ptr[reg_param + GET_OFF(b_c)]); \
         //get mem address
         CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(b_c), X_TMP_0);
         CG::ldr(xa::XReg(IDX(tmp_gpr)), xa::ptr(x_tmp));
