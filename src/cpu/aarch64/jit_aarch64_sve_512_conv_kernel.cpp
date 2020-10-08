@@ -1538,15 +1538,32 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                         - nstl::max(
                                                 0, r_overflow - ki * dilate_w));
 
+                int bcast_idx = 0;
                 for (int jj = jj_start; jj < jj_end; jj += stride_w) {
-                    assert((jj + l_pad - ki * dilate_w) % stride_w == 0);
-                    int aux_dst_offset = typesize
-                            * (((jj + l_pad - ki * dilate_w) / stride_w)
-                                            * jcp.oc_block
-                                    + oc);
-                    prev_ofs = bcast_load(aux_dst_offset, prev_ofs, jj);
+                    if (jj == jj_start) {
+                        for (int i = 0; i < ker_pipeline_depth; i++) {
+                            int jj_skip = jj + stride_w * i;
+                            int aux_dst_offset = typesize
+                                    * (((jj_skip + l_pad - ki * dilate_w)
+                                               / stride_w)
+                                                    * jcp.oc_block
+                                            + oc);
+                            prev_ofs = bcast_load(
+                                    aux_dst_offset, prev_ofs, bcast_idx + i);
+                        }
+                    } else if (jj < jj_end - ker_pipeline_depth + 1) {
+                        int jj_skip = jj + stride_w * (ker_pipeline_depth - 1);
+                        int aux_dst_offset = typesize
+                                * (((jj_skip + l_pad - ki * dilate_w)
+                                           / stride_w)
+                                                * jcp.oc_block
+                                        + oc);
+                        prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
+                                bcast_idx + (ker_pipeline_depth - 1));
+                    }
                     CGA64::fmla(zreg_out_s(jj, 0), reg_p_all_ones,
-                            zreg_kernel_s, zreg_in_s(jj));
+                            zreg_kernel_s, zreg_in_s(bcast_idx));
+                    bcast_idx++;
                 }
                 step++;
             }
