@@ -1562,27 +1562,41 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                                 0, r_overflow - ki * dilate_w));
 
                 int bcast_idx = 0;
+                int num_ker_pipeline = nstl::min(
+                        ((jj_end - jj_start) / stride_w), ker_pipeline_depth);
                 for (int jj = jj_start; jj < jj_end; jj += stride_w) {
-                    if (jj == jj_start) {
-                        for (int i = 0; i < ker_pipeline_depth; i++) {
-                            int jj_skip = jj + stride_w * i;
+                    assert((jj + l_pad - ki * dilate_w) % stride_w == 0);
+                    if (num_ker_pipeline > 1) {
+                        if (jj == jj_start) {
+                            for (int i = 0; i < num_ker_pipeline; i++) {
+                                int jj_skip = jj + stride_w * i;
+                                int aux_dst_offset = typesize
+                                        * (((jj_skip + l_pad - ki * dilate_w)
+                                                   / stride_w)
+                                                        * jcp.oc_block
+                                                + oc);
+                                prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
+                                        bcast_idx + i);
+                            }
+                        } else if (jj
+                                < jj_end - (num_ker_pipeline - 1) * stride_w) {
+                            int jj_skip
+                                    = jj + (num_ker_pipeline - 1) * stride_w;
                             int aux_dst_offset = typesize
                                     * (((jj_skip + l_pad - ki * dilate_w)
                                                / stride_w)
                                                     * jcp.oc_block
                                             + oc);
-                            prev_ofs = bcast_load(
-                                    aux_dst_offset, prev_ofs, bcast_idx + i);
+                            prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
+                                    bcast_idx + (num_ker_pipeline - 1));
                         }
-                    } else if (jj < jj_end - ker_pipeline_depth + 1) {
-                        int jj_skip = jj + stride_w * (ker_pipeline_depth - 1);
+                    } else {
                         int aux_dst_offset = typesize
-                                * (((jj_skip + l_pad - ki * dilate_w)
-                                           / stride_w)
+                                * (((jj + l_pad - ki * dilate_w) / stride_w)
                                                 * jcp.oc_block
                                         + oc);
-                        prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
-                                bcast_idx + (ker_pipeline_depth - 1));
+                        prev_ofs = bcast_load(
+                                aux_dst_offset, prev_ofs, bcast_idx);
                     }
                     CGA64::fmla(zreg_out_s(jj, 0), reg_p_all_ones,
                             zreg_kernel_s, zreg_in_s(bcast_idx));
@@ -1812,17 +1826,24 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                 int wei_count = 0;
                 for (int ii = 0; ii < nb_ic_block; ii++) {
                     if (jj_end - jj_start > 0) {
-                        if (ii == 0) {
-                            for (int t = 0; t < num_wei_reg; t++) {
-                                int aux_kernel_offset = kernel_offset(
-                                        ii + t, oc, ki + k_offset);
-                                wei_load(aux_kernel_offset, t);
+                        if (nb_ic_block > 1) {
+                            if (ii == 0) {
+                                for (int t = 0; t < num_wei_reg; t++) {
+                                    int aux_kernel_offset = kernel_offset(
+                                            ii + t, oc, ki + k_offset);
+                                    wei_load(aux_kernel_offset, t);
+                                }
+                            } else if (ii < nb_ic_block - num_wei_reg + 1) {
+                                int aux_kernel_offset
+                                        = kernel_offset(ii + num_wei_reg - 1,
+                                                oc, ki + k_offset);
+                                wei_load(aux_kernel_offset,
+                                        wei_count + num_wei_reg - 1);
                             }
-                        } else if (ii < nb_ic_block - num_wei_reg + 1) {
-                            int aux_kernel_offset = kernel_offset(
-                                    ii + num_wei_reg, oc, ki + k_offset);
-                            wei_load(aux_kernel_offset,
-                                    wei_count + num_wei_reg - 1);
+                        } else {
+                            int aux_kernel_offset
+                                    = kernel_offset(ii, oc, ki + k_offset);
+                            wei_load(aux_kernel_offset, wei_count);
                         }
                     }
                     for (int jj = jj_start; jj < jj_end; jj += stride_w) {
