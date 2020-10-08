@@ -2553,7 +2553,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     }
 }
 
-//[info]v0.21のコードを展開
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
         int ur_w, int pad_l, int pad_r, int ic_block_step, int input_offset,
         int kernel_offset, int output_offset, bool input_wraparound) {
@@ -2594,7 +2593,10 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     int num_zregs4ker = kw * ic_block_step;
     int num_zregs4out = 4;
     num_zregs4out = (28 - num_zregs4ker) / num_zregs4ker
-            ? nstl::max((28 - num_zregs4ker) % (num_zregs4ker), 4)
+            ? nstl::max(num_zregs4out
+                            + ((32 - num_zregs4out - num_zregs4ker)
+                                    % (num_zregs4ker)),
+                    4)
             : nstl::max(32 - (num_zregs4ker + ic_block_step), 4);
     int idata_reg_offset = num_zregs4ker + num_zregs4out;
     int num_zregs4idata = 32 - idata_reg_offset;
@@ -2688,7 +2690,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
      * before the loop that generates the fmla instruction.
      */
     for (int i_ur = 0; i_ur < ur_w; i_ur++) {
-        if ((idata_reg_offset + ((i_ur + 1) * kw + 1) * ic_block_step) > 31)
+        if ((idata_reg_offset - 1 + (i_ur + 1) * kw * ic_block_step) > 31)
             break;
         for (int i_kw = 0; i_kw < kw; i_kw++) {
             int i_iw = get_iw_idx(i_ur, i_kw, pad_l);
