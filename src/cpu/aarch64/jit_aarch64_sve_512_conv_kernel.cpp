@@ -1324,28 +1324,39 @@ template <typename Vmm>
 void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         int ur_w) {
 
-    auto zreg_tmp = [=]() { return xa::ZReg(31); };
-    auto zreg_tmp_s = [=]() { return xa::ZRegS(31); };
+    int num_used_zreg = 32 - ker_reg_base_idx;
+
+    auto zreg_tmp = [=](int idx) {
+        int zreg_idx = (idx % num_used_zreg) + ker_reg_base_idx;
+        return xa::ZReg(zreg_idx);
+    };
+
+    auto zreg_tmp_s = [=](int idx) {
+        int zreg_idx = (idx % num_used_zreg) + ker_reg_base_idx;
+        return xa::ZRegS(zreg_idx);
+    };
 
     auto zreg_out = [=](int i_ur, int i_oc) {
         int idx = i_ur + i_oc * jcp.ur_w;
         assert(idx < ker_reg_base_idx);
         return xa::ZReg(idx);
     };
+
     auto zreg_out_s = [=](int i_ur, int i_oc) {
         int idx = i_ur + i_oc * jcp.ur_w;
         assert(idx < ker_reg_base_idx);
         return xa::ZRegS(idx);
     };
-    auto out_load = [=](int aux_output_offset) {
+
+    auto out_load = [=](int aux_output_offset, int idx) {
         int ofs = aux_output_offset;
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
-            CGA64::ldr(zreg_tmp(),
+            CGA64::ldr(zreg_tmp(idx),
                     xa::ptr(reg_src, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
-            CGA64::ldr(zreg_tmp(), xa::ptr(reg_tmp_addr));
+            CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_tmp_addr));
         }
     };
 
@@ -1369,10 +1380,22 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
     CGA64::b(xa::EQ, no_update_label);
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
-            size_t aux_src_offset = (size_t)typesize
-                    * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j) * jcp.ic_block;
-            out_load(aux_src_offset);
-            CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s());
+            int num_ldr = nstl::min(ur_w, num_used_zreg);
+            if (j == 0) {
+                for (int t = 0; t < num_ldr; t++) {
+                    size_t aux_src_offset = (size_t)typesize
+                            * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j + t)
+                            * jcp.ic_block;
+                    out_load(aux_src_offset, t);
+                }
+            } else if (j < ur_w - num_ldr + 1) {
+                size_t aux_src_offset = (size_t)typesize
+                        * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j + num_ldr
+                                - 1)
+                        * jcp.ic_block;
+                out_load(aux_src_offset, j + num_ldr - 1);
+            }
+            CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(j));
         }
     }
 
