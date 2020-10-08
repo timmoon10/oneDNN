@@ -28,6 +28,10 @@
 #include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
+#define CG CodeGeneratorAArch64
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+namespace xa = Xbyak::Xbyak_aarch64;
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -64,6 +68,8 @@ private:
     using Reg32 = Xbyak::Reg32;
     using Reg64 = Xbyak::Reg64;
 
+  using XReg = xa::XReg;
+
     using Vmm = typename utils::conditional3<isa == sse41, Xmm, isa == avx, Ymm,
             Zmm>::type;
     int reg_idx(int idx) {
@@ -96,12 +102,21 @@ private:
     Vmm vmm_k_offset = Vmm(1);
 
     // Used only for avx512 when bf16 is present
+
     inline Vmm vmm_idx() {
         if (!jpp.is_backward) {
             return (jpp.is_training) ? Vmm(4) : Vmm(1);
         } else
             return Vmm(4);
     }
+#ifndef DNNL_X64_IMPLEMENTATION
+    inline uint32_t reg_idx() {
+        if (!jpp.is_backward) {
+            return (jpp.is_training) ? 4 : 1;
+        } else
+            return 4;
+    }
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
 
     Zmm bf16_emu_reserv_1 = Zmm(5);
     Zmm bf16_emu_reserv_2 = Zmm(6);
@@ -109,9 +124,31 @@ private:
     Reg64 bf16_emu_reserv_4 = r11;
     Zmm bf16_emu_reserv_5 = Zmm(8);
 
+  const std::vector<uint32_t> tmp_vec_idx
+  //  = {20, 21, 22, 23, 24, 25, 26, 27};
+    = {4, 5, 6, 7};
+  xa::ZReg z_tmp0 = z4;
+  xa::ZReg z_tmp1 = z5;
+  xa::ZReg z_tmp2 = z6;
+  xa::ZReg z_tmp3 = z7;
+  /*
+  xa::ZReg z_tmp4 = z24;
+  xa::ZReg z_tmp5 = z25;
+  xa::ZReg z_tmp6 = z26;
+  xa::ZReg z_tmp7 = z27;
+  xa::ZReg z_tmp = z31;
+  */
+
     Opmask k_c_tail_mask = Opmask(4);
     Opmask k_mask_cvt = Opmask(5);
     Opmask k_store_mask = Opmask(6);
+
+  /* Caution: Chose predicate registers not used by x64's implementation. */
+  xa::PReg p_256 = p1;
+  xa::PReg p_512 = p2;
+  xa::PReg p_tmp0 = p3;
+  xa::PReg p_128 = p7;
+  xa::PReg p_lsb = p2;
 
     // Here be some (tame) dragons. This kernel does not follow the regular
     // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu
@@ -146,6 +183,14 @@ private:
     reg64_t ki = r12;
     reg64_t aux_reg_input_d = r8;
 
+  using xreg_t = const XReg;
+  xreg_t aux_xreg_input = x9;
+  xreg_t xreg_output = x12;
+  xreg_t xreg_index = x10;
+  xreg_t xreg_zero_ptr = x9;
+  xreg_t x_tmp = x28;  
+  
+
     Reg32 reg_shuf_mask = esi;
 
     bool sse_high_half = false;
@@ -158,10 +203,22 @@ private:
     void uni_broadcast_reg_val(const int reg_idx, const int vmm_idx);
     void push_vmm_val(const int idx);
     void pop_vmm_val(const int idx);
+#ifdef DNNL_X64_IMPLEMENTATION
     void load(const int idx, const reg64_t &reg_ptr, const int offset,
             const bool is_c_tail_proccessing);
-    void store(const int idx, const reg64_t &reg_ptr, const int offset,
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    void load(const int idx, const xreg_t &reg_ptr, const int offset,
             const bool is_c_tail_proccessing);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
+#ifdef DNNL_X64_IMPLEMENTATION
+    void store(const int idx, const reg64_t &reg_ptr, const int offset,
+            const bool is_c_tail_proccessing);  
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    void store(const int idx, const xreg_t &reg_ptr, const int offset,
+            const bool is_c_tail_proccessing);    
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
 
     void maybe_recalculate_divisor(int jj, int ur_w, int pad_l, int pad_r,
             bool with_c_tail_proccessing);
@@ -202,12 +259,37 @@ private:
 
     void avx_vpadd1(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
         assert(y0.getIdx() != x1.getIdx());
+#ifdef DNNL_X64_IMPLEMENTATION
         vextractf128(xtmp, y0, 0);
         vpaddd(xtmp, xtmp, x1);
         vinsertf128(y0, y0, xtmp, 0);
         vextractf128(xtmp, y0, 1);
         vpaddd(xtmp, xtmp, x1);
-        vinsertf128(y0, y0, xtmp, 1);
+        vinsertf128(y0, y0, xtmp, 1);            
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        //vextractf128(xtmp, y0, 0);
+	CG::mov(xa::VReg(IDX(xtmp)).b16, xa::VReg(IDX(y0)).b16);
+        //vpaddd(xtmp, xtmp, x1);
+	CG::add(xa::VReg(IDX(xtmp)).s4, xa::VReg(IDX(xtmp)).s4, xa::VReg(IDX(x1)).s4);
+	CG::mov(xa::ZReg(IDX(xtmp)).s, P_MSB_384/xa::T_m, 0);
+        //vinsertf128(y0, y0, xtmp, 0);
+	CG::ptrue(p_tmp0.d, xa::VL2);
+	CG::sel(xa::ZRegD(IDX(y0)), p_tmp0, xa::ZRegD(IDX(xtmp)), xa::ZRegD(IDX(y0)));
+	CG::mov(xa::ZReg(IDX(y0)).s, P_MSB_256/xa::T_m, 0);
+        //vextractf128(xtmp, y0, 1);
+	CG::mov(z_tmp0.d, xa::ZRegD(IDX(y0)));
+	CG::ext(z_tmp0.b, xa::ZRegB(IDX(y0)), 16);
+	CG::mov(xa::VReg(IDX(xtmp)).b16, xa::VReg(IDX(z_tmp0)).b16);
+        //vpaddd(xtmp, xtmp, x1);
+	CG::add(xa::VReg(IDX(xtmp)).s4, xa::VReg(IDX(xtmp)).s4, xa::VReg(IDX(x1)).s4);
+	CG::mov(xa::ZReg(IDX(xtmp)).s, P_MSB_384/xa::T_m, 0);
+        //vinsertf128(y0, y0, xtmp, 1);
+	CG::ptrue(p_tmp0.d, xa::VL2);
+	CG::mov(z_tmp0.d, xa::ZRegD(IDX(y0)));
+	CG::splice(z_tmp0.d, p_tmp0, xa::ZRegD(IDX(xtmp)) );
+	CG::mov(xa::ZReg(IDX(y0)).d, z_tmp0.d);
+	CG::mov(xa::ZReg(IDX(y0)).s, P_MSB_256/xa::T_m, 0);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION	
     }
 
     void avx_vpadd1(const Xmm &x0, const Xmm &x1, const Xmm &) {
