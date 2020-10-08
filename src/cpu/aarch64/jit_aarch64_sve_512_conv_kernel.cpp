@@ -2950,8 +2950,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
                 reg_tmp_imm);
         CGA64::add_imm(reg_kernel, reg_kernel,
                 jcp.typesize_out * jcp.kw * ic_block * oc_block, reg_tmp_imm);
-        CGA64::sub(kj, kj, 1);
-        CGA64::cmp(kj, 0);
+        CGA64::subs(kj, kj, 1);
         CGA64::b(xa::GT, kh_label);
     }
 
@@ -2962,8 +2961,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
         CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
                 jcp.typesize_out * jcp.kh * jcp.kw * ic_block * oc_block,
                 reg_tmp_imm);
-        CGA64::sub(ki, ki, 1);
-        CGA64::cmp(ki, 0);
+        CGA64::subs(ki, ki, 1);
         CGA64::b(xa::GT, kd_label);
     }
 }
@@ -3101,8 +3099,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
             CGA64::add_imm(reg_kernel, reg_kernel,
                     jcp.typesize_out * (jcp.kw - 1) * ic_block * oc_block,
                     reg_tmp_imm);
-        CGA64::sub(kj, kj, 1);
-        CGA64::cmp(kj, 0);
+        CGA64::subs(kj, kj, 1);
         CGA64::b(xa::GT, kh_label);
     }
     if (jcp.ndims == 5) {
@@ -3113,8 +3110,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
         CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
                 jcp.typesize_out * jcp.kh * jcp.kw * ic_block * oc_block,
                 reg_tmp_imm);
-        CGA64::sub(ki, ki, 1);
-        CGA64::cmp(ki, 0);
+        CGA64::subs(ki, ki, 1);
         CGA64::b(xa::GT, kd_label);
     }
 }
@@ -3317,8 +3313,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
             CGA64::add_imm(reg_kernel, reg_kernel,
                     jcp.typesize_out * (jcp.kw - 1) * ic_block * oc_block,
                     reg_tmp_imm);
-        CGA64::sub(kj, kj, 1);
-        CGA64::cmp(kj, 0);
+        CGA64::subs(kj, kj, 1);
         CGA64::b(xa::GT, kh_label);
     }
     if (jcp.ndims == 5) {
@@ -3329,8 +3324,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
         CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
                 jcp.typesize_out * jcp.kh * jcp.kw * ic_block * oc_block,
                 reg_tmp_imm);
-        CGA64::sub(ki, ki, 1);
-        CGA64::cmp(ki, 0);
+        CGA64::subs(ki, ki, 1);
         CGA64::b(xa::GT, kd_label);
     }
 }
@@ -3465,8 +3459,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
                 = is_ddst_layout_nxc() ? jcp.ngroups * jcp.oc : jcp.oc_block;
         CGA64::add_imm(
                 reg_tmp, reg_tmp, jcp.typesize_out * oc_stride, reg_tmp_imm);
-        CGA64::sub(reg_oi, reg_oi, 1);
-        CGA64::cmp(reg_oi, 0);
+        CGA64::subs(reg_oi, reg_oi, 1);
         CGA64::b(xa::GT, bias_loop);
     }
     CGA64::str(
@@ -3496,8 +3489,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
 
     CGA64::ldr(reg_oi, xa::ptr(param, GET_OFF(os_index_end)));
     CGA64::ldr(reg_tmp_imm, xa::ptr(param, GET_OFF(os_index_begin)));
-    CGA64::sub(reg_oi, reg_oi, reg_tmp_imm);
-    CGA64::cmp(reg_oi, 0);
+    CGA64::subs(reg_oi, reg_oi, reg_tmp_imm);
     CGA64::b(xa::LE, skip_bias); // no iterations along depth dimension
 
     const size_t oc_mult
@@ -3725,8 +3717,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
                 CGA64::b(xa::LT, oh_dilate_label_end);
                 CGA64::mov(reg_tmp, 0);
             }
-            CGA64::sub_imm(reg_kh, reg_kh, stride_h, reg_tmp_imm);
-            CGA64::cmp(reg_kh, 0);
+            CGA64::subs_imm(reg_kh, reg_kh, stride_h, reg_tmp_imm);
             CGA64::b(xa::LE, oh_bpad_label_end);
             if (is_dilated) CGA64::L_aarch64(oh_dilate_label_end);
 
@@ -3859,8 +3850,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
         CGA64::b(bottom_padding_end_label);
 
         CGA64::L_aarch64(bottom_padding_label);
-        CGA64::sub_imm(reg_kh, reg_kh, jcp.stride_h, reg_tmp_imm);
-        CGA64::cmp(reg_kh, 0);
+        CGA64::subs_imm(reg_kh, reg_kh, jcp.stride_h, reg_tmp_imm);
         CGA64::b(xa::LE, loop_end_label);
 
         CGA64::L_aarch64(bottom_padding_end_label);
@@ -3996,8 +3986,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
         CGA64::b(backpad_end_label);
 
         CGA64::L_aarch64(backpad_label);
-        CGA64::sub_imm(reg_kd_count, reg_kd_count, jcp.stride_d, reg_tmp_imm);
-        CGA64::cmp(reg_kd_count, 0);
+        CGA64::subs_imm(reg_kd_count, reg_kd_count, jcp.stride_d, reg_tmp_imm);
         CGA64::b(xa::LE, loop_end_label);
 
         CGA64::L_aarch64(backpad_end_label);
