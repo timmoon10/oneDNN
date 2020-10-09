@@ -23,6 +23,13 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 
+#define CG CodeGeneratorAArch64
+#include "cpu/aarch64/cpu_isa_traits.hpp"
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#ifndef DNNL_X64_IMPLEMENTATION
+namespace xa = Xbyak::Xbyak_aarch64;
+#endif
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -126,6 +133,24 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     Mmx mmx_full_msk = Mmx(
             1); // "avg" - Mmx reg for full mask (all 8 bytes) - used until not in tail
     Mmx mmx_tmp = Mmx(2);
+
+  
+  xa::XReg x_tmp = x28;
+
+  const std::vector<uint32_t> tmp_vec_idx
+            //  = {20, 21, 22, 23, 24, 25, 26, 27};
+            = {4, 5, 6, 7};
+    xa::ZReg z_tmp0 = z4;
+    xa::ZReg z_tmp1 = z5;
+    xa::ZReg z_tmp2 = z6;
+    xa::ZReg z_tmp3 = z7;
+  
+      /* Caution: Chose predicate registers not used by x64's implementation. */
+    xa::PReg p_256 = p1;
+    xa::PReg p_512 = p2;
+    xa::PReg p_tmp0 = p3;
+    xa::PReg p_128 = p7;
+    xa::PReg p_lsb = p2;
 
     enum : int { max_vidx_base = isa == avx2 ? 7 : 2 };
     //"avg" pool uses more registers for unrolling.
@@ -278,7 +303,7 @@ template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<avx512_core>::load_src_max_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
     using namespace data_type;
-
+#ifdef DNNL_X64_IMPLEMENTATION
     if (masked) {
         if (jpp.src_dt == s32)
             vmovups(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
@@ -286,8 +311,58 @@ void jit_uni_i8i8_pooling_fwd_ker_t<avx512_core>::load_src_max_op(
             vmovdqu8(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
     } else
         vmovups(vreg_src(jj), ptr[aux_reg_src_w + offset]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    if (masked) {
+      if (jpp.src_dt == s32){
+	//vmovups(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
+        //get mem address
+        CG::add_imm(x_tmp, xa::XReg(IDX(aux_reg_src_w)), offset, X_TMP_0);
+	int vlen = cpu_isa_traits<isa>::vlen;
+        if (vlen == 64) {
+          CG::ld1w(z_tmp0.s, xa::PReg(IDX(mask(0)))/xa::T_z, xa::ptr(x_tmp));
+          CG::mov(xa::ZRegS(IDX(vreg_src(jj))), xa::PReg(IDX(mask(0)))/xa::T_m, z_tmp0.s);
+        } else if (vlen == 32) {
+          CG::bic(p_tmp0.b, P_ALL_ONE/xa::T_z, xa::PRegB(IDX(mask(0))), P_MSB_256.b);
+          CG::ld1w(z_tmp0.s, p_tmp0/xa::T_z, xa::ptr(x_tmp));
+          CG::mov(xa::ZRegS(IDX(vreg_src(jj))), p_tmp0/xa::T_m, z_tmp0.s);
+	  CG::mov(xa::ZRegS(IDX(vreg_src(jj))), P_MSB_256/xa::T_m, 0);
+        } else if (vlen == 16) {
+	  CG::bic(p_tmp0.b, P_ALL_ONE/xa::T_z, xa::PRegB(IDX(mask(0))), P_MSB_256.b);
+          CG::ld1w(z_tmp0.s, p_tmp0/xa::T_z, xa::ptr(x_tmp));
+          CG::mov(xa::ZRegS(IDX(vreg_src(jj))), p_tmp0/xa::T_m, z_tmp0.s);
+          CG::mov(xa::ZRegS(IDX(vreg_src(jj))), P_MSB_384/xa::T_m, 0);
+	} else {
+	  assert(!"unreachable");
+	}
+      }else{
+	//vmovdqu8(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
+	//get mem address
+        CG::add_imm(x_tmp, xa::XReg(IDX(aux_reg_src_w)), offset, X_TMP_0);
+        int vlen = cpu_isa_traits<isa>::vlen;
+        if (vlen == 64) {
+          CG::ldr(z_tmp0, xa::ptr(x_tmp));
+          CG::mov(xa::ZRegB(IDX(vreg_src(jj))), xa::PReg(IDX(mask(0)))/xa::T_m, z_tmp0.b);
+        } else if (vlen == 32) {
+          CG::ld1b(z_tmp0.b, xa::PReg(IDX(mask(0))), xa::ptr(x_tmp));
+          CG::mov(xa::ZRegB(IDX(vreg_src(jj))), xa::PReg(IDX(mask(0)))/xa::T_m, z_tmp0.b);
+          CG::mov(xa::ZRegB(IDX(vreg_src(jj))), P_MSB_256/xa::T_m, 0);
+        } else if (vlen == 16) {
+          CG::ld1b(z_tmp0.b, xa::PReg(IDX(mask(0))), xa::ptr(x_tmp));
+          CG::mov(xa::ZRegB(IDX(vreg_src(jj))), xa::PReg(IDX(mask(0)))/xa::T_m, z_tmp0.b);
+          CG::mov(xa::ZRegB(IDX(vreg_src(jj))), P_MSB_256/xa::T_m, 0);
+        } else {
+          assert(!"unreachable");
+        }
+      }
+    } else{
+      //vmovups(vreg_src(jj), ptr[aux_reg_src_w + offset]);
+      //get mem address
+      CG::add_imm(x_tmp, xa::XReg(IDX(aux_reg_src_w)), offset, X_TMP_0);
+      CG::ld1w(xa::ZRegS(IDX(vreg_src(jj))), p_lsb / xa::T_z, xa::ptr(x_tmp));
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 };
-
+  
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<avx2>::load_src_avg_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
