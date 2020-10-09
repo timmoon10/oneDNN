@@ -2758,7 +2758,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
         return;
     };
 
-    auto load_out = [=](int zreg_idx, int ofs, int pre_offset_out) {
+    int pre_offset_out = -1;
+    auto load_out = [&](int zreg_idx, int ofs) {
         if (ldr_imm_check(ofs)) {
             CGA64::ldr(xa::ZReg(zreg_idx),
                     xa::ptr(reg_output, static_cast<int32_t>(VL_OFS(ofs))));
@@ -2774,10 +2775,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                 pre_offset_out = ofs;
             }
         }
-        return pre_offset_out;
+        return;
     };
 
-    int pre_offset_out = -1;
     int pre_loaded_ur = 0;
     /* 
      * This loop generates the ld1rw instruction as much as possible
@@ -2811,18 +2811,15 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
             for (int ii = 0; ii < num_zregs4out; ii++) {
                 if (ur_w > ii) {
 
-                    pre_offset_out = load_out(
-                            kw * ic_block_step + (i_ur + ii) % num_zregs4out,
-                            typesize * (i_ur + ii) * oc_block + output_offset,
-                            pre_offset_out);
+                    load_out(kw * ic_block_step + (i_ur + ii) % num_zregs4out,
+                            typesize * (i_ur + ii) * oc_block + output_offset);
                 }
             }
         } else if ((i_ur + num_zregs4out - 1) < ur_w) {
-            pre_offset_out = load_out(kw * ic_block_step
+            load_out(kw * ic_block_step
                             + (i_ur + num_zregs4out - 1) % num_zregs4out,
                     typesize * (i_ur + num_zregs4out - 1) * oc_block
-                            + output_offset,
-                    pre_offset_out);
+                            + output_offset);
         }
 
         for (int i_kw = 0; i_kw < kw; i_kw++) {
