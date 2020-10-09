@@ -122,8 +122,8 @@ private:
     reg64_t reg_out_org = x18; // dst base addr (3d)
     reg64_t reg_oi_org = x19; // base oi (3d)
     reg64_t aux_reg_ker_d_org = x20;
-    reg64_t reg_ker_org = x22; // ker base addr (3d)
-    reg64_t reg_inp_org = x23; // src base addr (3d)
+    reg64_t reg_ker_org = x21; // ker base addr (3d)
+    reg64_t reg_inp_org = x29; // src base addr (3d)
 
     void prefetch(
             const std::string prfop, int level, reg64_t in, long long int ofs) {
@@ -300,7 +300,7 @@ private:
     using reg64_t = const xa::XReg;
     enum {
         typesize = sizeof(float),
-        ker_reg_base_idx = 28,
+        ker_reg_base_idx = 26,
     };
 
     //[info]v0.21‚Ìcode‚ğ’Ç‰ÁBv1.6’Ç‰Ácode‚Í–¢”½‰fB
