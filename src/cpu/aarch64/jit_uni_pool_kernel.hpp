@@ -264,7 +264,7 @@ private:
         vextractf128(xtmp, y0, 1);
         vpaddd(xtmp, xtmp, x1);
         vinsertf128(y0, y0, xtmp, 1);
-#else //#ifdef DNNL_X64_IMPLEMENTATION \
+#else //#ifdef DNNL_X64_IMPLEMENTATION kuri \
         //vextractf128(xtmp, y0, 0);
         CG::mov(xa::VReg(IDX(xtmp)).b16, xa::VReg(IDX(y0)).b16);
         //vpaddd(xtmp, xtmp, x1);
