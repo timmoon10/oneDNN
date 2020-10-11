@@ -927,9 +927,9 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     Xbyak::Label end_log_label;
     compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_le_os);
-    std::cout << "log" << std::endl;
 
-#ifdef DNNL_INDIRECT_JIT_AARCH64
+#ifndef DNNL_INDIRECT_JIT_AARCH64
+    std::cout << "hoge:" << __LINE__ << std::endl;
     test_mask();
 #else
     h->CodeGeneratorAArch64::orrs(h->P_TMP_0.b,
