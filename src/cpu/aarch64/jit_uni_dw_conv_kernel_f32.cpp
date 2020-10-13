@@ -433,31 +433,32 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
     CGA64::mov(iter_kh, reg_kh);
     xa::LabelAArch64 kh_label;
     CGA64::L_aarch64(kh_label);
-    {
+    { // KH loop
         CGA64::mov(aux1_reg_ddst, aux_reg_ddst);
         CGA64::mov(aux1_reg_kernel, aux_reg_kernel);
 
         CGA64::mov(iter_kw, reg_kw);
         xa::LabelAArch64 kw_label;
         CGA64::L_aarch64(kw_label);
-        {
-            for (int ch = 0; ch < ur_ch_blocks; ch++) {
+        { // KW loop
+            for (int ch = 0; ch < ur_ch_blocks;
+                    ch++) { // unrolloing channel blocks
                 int ker_off = ch * kh * kw * ch_blk;
                 xa::ZReg zreg_ker = get_ker_reg(0);
                 xa::ZRegS zregs_ker = get_ker_reg_s(0);
 
                 CGA64::add_imm(reg_tmp_addr, aux1_reg_kernel,
                         ker_off * sizeof(float), reg_tmp_imm);
-                CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr));
+                CGA64::ldr(zreg_ker, xa::ptr(reg_tmp_addr)); // filter?
 
-                for (int w = 0; w < ur_str_w; w++) {
+                for (int w = 0; w < ur_str_w; w++) { // unrolling dst width?
                     int ddst_off = (ch * oh * ow + w) * ch_blk;
 
                     xa::ZReg zreg_src = get_src_reg(0);
                     xa::ZRegS zregs_src = get_src_reg_s(0);
                     CGA64::add_imm(reg_tmp_addr, aux1_reg_ddst,
                             ddst_off * sizeof(float), reg_tmp_imm);
-                    CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr));
+                    CGA64::ldr(zreg_src, xa::ptr(reg_tmp_addr)); // src?
 
                     xa::ZRegS zregs_acc = get_acc_reg_s(ch * ur_str_w + w);
                     CGA64::fmla(
@@ -467,9 +468,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
 
             CGA64::add_imm(aux1_reg_kernel, aux1_reg_kernel,
                     ch_blk * stride_w * sizeof(float), reg_tmp_imm);
-            CGA64::sub_imm(aux1_reg_ddst, aux1_reg_ddst, ch_blk * sizeof(float),
-                    reg_tmp_imm);
-
+            CGA64::sub_imm(aux1_reg_ddst, aux1_reg_ddst,
+                    ch_blk * (jcp.dilate_w + 1) * sizeof(float), reg_tmp_imm);
             CGA64::sub_imm(iter_kw, iter_kw, stride_w, reg_tmp_imm);
             CGA64::cmp(iter_kw, 0);
             CGA64::b(xa::GT, kw_label);
@@ -477,9 +477,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
 
         CGA64::add_imm(aux_reg_kernel, aux_reg_kernel,
                 kw * ch_blk * stride_h * sizeof(float), reg_tmp_imm);
-        CGA64::sub_imm(aux_reg_ddst, aux_reg_ddst, ow * ch_blk * sizeof(float),
-                reg_tmp_imm);
-
+        CGA64::sub_imm(aux_reg_ddst, aux_reg_ddst,
+                ow * ch_blk * (jcp.dilate_h + 1) * sizeof(float), reg_tmp_imm);
         CGA64::sub_imm(iter_kh, iter_kh, stride_h, reg_tmp_imm);
         CGA64::cmp(iter_kh, 0);
         CGA64::b(xa::GT, kh_label);
@@ -525,7 +524,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
         CGA64::mov(aux_reg_ddst, reg_ddst);
         CGA64::mov(aux_reg_kernel, reg_kernel);
 
-        load_ddst(ur_ch_blocks, ur_w);
+        load_ddst(ur_ch_blocks, ur_w); // zero clear
         apply_filter(ur_ch_blocks, ur_w);
         store_dsrc(ur_ch_blocks, ur_w);
 
@@ -618,13 +617,13 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_filter() {
         int off_filter = i * simd_w;
         CGA64::add_imm(reg_tmp_addr, reg_tmp_filter, off_filter * sizeof(float),
                 reg_tmp_imm);
-        if(simd_w == 16){
+        if (simd_w == 16) {
             xa::ZReg zreg_acc = get_acc_reg(i);
             CGA64::ldr(zreg_acc, xa::ptr(reg_tmp_addr));
-        }else if(simd_w == 8){
+        } else if (simd_w == 8) {
             xa::ZRegS zregs_acc = get_acc_reg_s(i);
             CGA64::ld1w(zregs_acc, reg_p_all_ones, xa::ptr(reg_tmp_addr));
-        }else{
+        } else {
             assert(!"Unsupport: simd_w != 16, 8");
         }
     }
@@ -637,8 +636,15 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::zero_bias() {
 }
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::load_bias() {
-    xa::ZReg zreg_bias = get_bias_reg(0);
-    CGA64::ldr(zreg_bias, xa::ptr(reg_bias_baddr));
+    if (simd_w == 16) {
+        xa::ZReg zreg_bias = get_bias_reg(0);
+        CGA64::ldr(zreg_bias, xa::ptr(reg_bias_baddr));
+    } else if (simd_w == 8) {
+        xa::ZRegS zregs_bias = get_bias_reg_s(0);
+        CGA64::ld1w(zregs_bias, reg_p_all_ones, xa::ptr(reg_bias_baddr));
+    } else {
+        assert(!"Unsupport: simd_w != 16, 8");
+    }
 }
 
 template <cpu_isa_t isa>
@@ -663,11 +669,11 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
 
         CGA64::add_imm(reg_tmp_addr, reg_tmp_output, off_output * sizeof(float),
                 reg_tmp_imm);
-        if(simd_w == 16){
+        if (simd_w == 16) {
             CGA64::ldr(zreg_output, xa::ptr(reg_tmp_addr));
-        }else if(simd_w == 8){
+        } else if (simd_w == 8) {
             CGA64::ld1w(zregs_output, reg_p_all_ones, xa::ptr(reg_tmp_addr));
-        }else{
+        } else {
             assert(!"Unsupport: simd_w != 16, 8");
         }
 
@@ -680,19 +686,18 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-
                 CGA64::add_imm(reg_tmp_addr, reg_tmp_input,
                         off_input * sizeof(float), reg_tmp_imm);
-                if(simd_w == 16){
+                if (simd_w == 16) {
                     xa::ZReg zreg_input = get_input_reg(c % jcp.kw);
                     CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
-                }else if(simd_w == 8){
+                } else if (simd_w == 8) {
                     xa::ZRegS zregs_input = get_input_reg_s(c % jcp.kw);
-                    CGA64::ld1w(zregs_input, reg_p_all_ones, xa::ptr(reg_tmp_addr));
-                }else{
+                    CGA64::ld1w(
+                            zregs_input, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                } else {
                     assert(!"Unsupport: simd_w != 16, 8");
                 }
- 
             }
         } else {
             for (int c = 0; c < cascade_input; ++c) {
@@ -707,13 +712,15 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
 
                 CGA64::add_imm(reg_tmp_addr, reg_tmp_input,
                         off_input * sizeof(float), reg_tmp_imm);
-                if(simd_w == 16){
+                if (simd_w == 16) {
                     xa::ZReg zreg_input = get_input_reg((overlap + c) % jcp.kw);
                     CGA64::ldr(zreg_input, xa::ptr(reg_tmp_addr));
-                }else if(simd_w == 8){
-                    xa::ZRegS zregs_input = get_input_reg_s((overlap + c) % jcp.kw);
-                    CGA64::ld1w(zregs_input, reg_p_all_ones, xa::ptr(reg_tmp_addr));
-                }else{
+                } else if (simd_w == 8) {
+                    xa::ZRegS zregs_input
+                            = get_input_reg_s((overlap + c) % jcp.kw);
+                    CGA64::ld1w(
+                            zregs_input, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                } else {
                     assert(!"Unsupport: simd_w != 16, 8");
                 }
             }
@@ -750,11 +757,11 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_bias_step_unroll(
         int off_output = i * simd_w;
         CGA64::add_imm(reg_tmp_addr, reg_tmp_output, off_output * sizeof(float),
                 reg_tmp_imm);
-        if(simd_w == 16){
+        if (simd_w == 16) {
             CGA64::ldr(xa::ZReg(31), xa::ptr(reg_tmp_addr));
-        }else if(simd_w == 8){
+        } else if (simd_w == 8) {
             CGA64::ld1w(xa::ZRegS(31), reg_p_all_ones, xa::ptr(reg_tmp_addr));
-        }else{
+        } else {
             assert(!"Unsupport: simd_w != 16, 8");
         }
         CGA64::fadd(zregs_bias, zregs_bias, xa::ZRegS(31));
@@ -767,13 +774,13 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_filter() {
         int off_filter = i * simd_w;
         CGA64::add_imm(reg_tmp_addr, reg_tmp_filter, off_filter * sizeof(float),
                 reg_tmp_imm);
-        if(simd_w == 16){
+        if (simd_w == 16) {
             xa::ZReg zreg_acc = get_acc_reg(i);
             CGA64::str(zreg_acc, xa::ptr(reg_tmp_addr));
-        }else if(simd_w == 8){
+        } else if (simd_w == 8) {
             xa::ZRegS zregs_acc = get_acc_reg_s(i);
-            CGA64::st1w(zregs_acc, reg_p_all_ones, xa::ptr(reg_tmp_addr) );
-        }else{
+            CGA64::st1w(zregs_acc, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+        } else {
             assert(!"Unsupported: simd_w != 16, 8");
         }
     }
@@ -781,13 +788,13 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_filter() {
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::store_bias() {
-    if(simd_w == 16){
+    if (simd_w == 16) {
         xa::ZReg zreg_bias = get_bias_reg(0);
         CGA64::str(zreg_bias, xa::ptr(reg_bias_baddr));
-    }else if(simd_w == 8){
+    } else if (simd_w == 8) {
         xa::ZRegS zregs_bias = get_bias_reg_s(0);
         CGA64::st1w(zregs_bias, reg_p_all_ones, xa::ptr(reg_bias_baddr));
-    }else{
+    } else {
         assert(!"Unsupported: simd_w != 16, 8");
     }
 }
@@ -1130,11 +1137,11 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
     preamble();
-    if(simd_w == 16){
+    if (simd_w == 16) {
         CGA64::ptrue(reg_p_all_ones.b);
-    }else if(simd_w == 8){
+    } else if (simd_w == 8) {
         CGA64::ptrue(reg_p_all_ones.b, xa::VL32);
-    }else{
+    } else {
         assert(!"Unsupport: simd_w != 16, 8");
     }
     CGA64::ldr(reg_input_baddr,

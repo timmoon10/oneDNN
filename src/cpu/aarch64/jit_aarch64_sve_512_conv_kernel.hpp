@@ -86,56 +86,44 @@ private:
         ker_reg_base_idx = 28,
     };
 
-    //[info]v0.21のcodeを少し修正
     const xa::PReg reg_p_all_ones = p2;
 
     reg64_t param = abi_param1_aarch64;
-    reg64_t reg_inp = x1;
-    reg64_t reg_ker = x2;
-    reg64_t reg_out = x3;
-    reg64_t reg_inp_prf = x20;
-    reg64_t reg_ker_prf = x5;
-    reg64_t reg_owb = x5;
-    reg64_t reg_out_prf = x6;
+    reg64_t reg_inp = x1; // src base addr (2d)
+    reg64_t reg_ker = x2; // ker base addr (2d)
+    reg64_t aux_reg_ker_d = x2; // ker addr (3d)
+    reg64_t reg_out = x3; // dst base addr (2d)
+    reg64_t reg_ki = x3; // d-dim loop var? (3d)
+    reg64_t reg_owb = x5; // num of ow-block
+    reg64_t reg_out_prf = x6; // addr for prefetch
 
-    reg64_t aux_reg_inp = x7;
-    reg64_t aux_reg_ker = x8;
-    reg64_t aux_reg_inp_prf = x9;
-    reg64_t aux_reg_ker_prf = x10;
-    reg64_t reg_channel = x9;
-    reg64_t reg_bias = x10;
+    reg64_t aux_reg_inp = x7; // src addr (main loop)
+    reg64_t reg_out_ofs = x7; // dst addr (store_output)
+    reg64_t aux_reg_ker = x8; // ker addr (main loop)
+    reg64_t reg_channel = x9; // reduce workload
+    reg64_t reg_bias = x10; // bias addr (prepare_out)
 
-    reg64_t aux_reg_ker_d = x2;
-    reg64_t aux_reg_inp_d = x11;
-    reg64_t aux_reg_inp_d_prf = x6;
-    reg64_t aux_reg_ker_d_prf = x12;
-    reg64_t reg_ki = x3;
-
-    reg64_t reg_kj = x13;
-    reg64_t reg_relu_ns = x13;
+    reg64_t aux_reg_inp_d = x11; // src addr (3d)
     reg64_t reg_oi = x11;
-    reg64_t reg_kh = x12;
 
-    reg64_t reg_long_offt = x20;
-    reg64_t reg_out_long_offt = x7;
+    reg64_t reg_kh = x12; // ker h size
+    reg64_t reg_kj = x13; // ker h workload
 
-    reg64_t reg_tail = aux_reg_ker;
-    reg64_t reg_load_work = reg_tail;
-
+#if 0
+    reg64_t reg_tail            = aux_reg_ker;
+    reg64_t reg_load_work       = reg_tail;
+#endif
     /* Temporary registers for ARM insts */
     reg64_t reg_tmp_addr = x14;
     reg64_t reg_prev_bcast_addr = x15;
     reg64_t reg_prev_wei_addr = x16;
     reg64_t reg_tmp_imm = x17;
 
-    reg64_t reg_out_org = x18;
-    reg64_t reg_oi_org = x19;
-    //[info]レジスタの割り当ては適当
+    reg64_t reg_out_org = x18; // dst base addr (3d)
+    reg64_t reg_oi_org = x19; // base oi (3d)
     reg64_t aux_reg_ker_d_org = x20;
-    reg64_t reg_inp_org = x23;
-    reg64_t reg_ker_org = x22;
-
-    reg64_t reg_tmp = x5;
+    reg64_t reg_ker_org = x21; // ker base addr (3d)
+    reg64_t reg_inp_org = x29; // src base addr (3d)
 
     void prefetch(
             const std::string prfop, int level, reg64_t in, long long int ofs) {
@@ -148,8 +136,8 @@ private:
             assert(!"invalid prfop");
         }
 
-        bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
-        if (cacheline_alinged == true) {
+        bool cacheline_aligned = ((ofs & 0xFF) == 0) ? true : false;
+        if (cacheline_aligned == true) {
             xa::Prfop op = xa::PLDL1KEEP;
             switch (level) {
                 case 1:
@@ -312,7 +300,7 @@ private:
     using reg64_t = const xa::XReg;
     enum {
         typesize = sizeof(float),
-        ker_reg_base_idx = 28,
+        ker_reg_base_idx = 26,
     };
 
     //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
@@ -559,7 +547,6 @@ private:
     static const int max_ur_w;
     static const int min_oh_reduce;
 
-    //[info]v0.21のcodeを追加。v1.6追加codeは要確認。
     reg64_t param = abi_param1_aarch64;
     reg64_t reg_input = x1;
     reg64_t reg_kernel = x2;
@@ -569,12 +556,8 @@ private:
     reg64_t reg_kh = x6;
     reg64_t reg_ur_w_trips = x7;
     reg64_t reg_oj = x8;
-    //    reg64_t reg_ih_count   = x9;
     reg64_t reg_tmp = x10;
-    reg64_t reg_long_offt = x10;
-    //[info]v1.6追加code
     reg64_t reg_icb = x9;
-    //
 
     reg64_t ki = x11;
     reg64_t reg_kd_count = x12;
@@ -585,9 +568,9 @@ private:
     reg64_t aux_reg_input = x12;
     reg64_t aux_reg_kernel = x13;
     reg64_t reg_bias = x9;
-    //[info]v1.6追加code
     reg64_t reg_oc_tail = x10;
-    //
+
+    /* Temporary registers */
     reg64_t reg_add_tmp = x14;
     reg64_t reg_tmp_imm = x15;
 
@@ -601,6 +584,10 @@ private:
     reg64_t reg_output_org = x23;
 
     reg64_t reg_pre_addr_input = x25;
+    reg64_t reg_pre_addr_out = x26;
+    reg64_t reg_pre_addr_ker = x26;
+    reg64_t reg_ker_start_addr = x27;
+    reg64_t reg_addr_diff_input = x28;
 
     const xa::PReg reg_p_all_ones = p2;
 

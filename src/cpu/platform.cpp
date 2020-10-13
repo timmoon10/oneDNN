@@ -15,9 +15,12 @@
 *******************************************************************************/
 
 #include "cpu/platform.hpp"
+#include "common/utils.hpp"
 
 #if DNNL_X64
 #include "cpu/x64/cpu_isa_traits.hpp"
+#elif DNNL_AARCH64
+#include "cpu/aarch64/cpu_isa_traits.hpp"
 #endif
 
 namespace dnnl {
@@ -69,6 +72,32 @@ float s8s8_weights_scale_factor() {
     return 1.0f;
 #endif
 }
+
+#if DNNL_AARCH64
+unsigned int get_A64FX_cache_size(
+        int level, bool per_core = true, int nthreads = 1) {
+
+    using aarch64::cpu;
+    unsigned int l = level - 1;
+    // Currently, if XByak is not able to fetch the cache topology
+    // we default to 64KiB of L1 per core, 8MiB of L2 per 1CMG.
+    if (cpu.getDataCacheLevels() == 0) {
+        const int L1_cache_per_core = 65536;
+        const int L2_cache_per_CMG = 8388608;
+        int num_cores = per_core ? 1 : nthreads;
+        switch (l) {
+            case (0): return L1_cache_per_core;
+            case (1): return L2_cache_per_CMG * utils::div_up(num_cores, 12);
+            default: return 0;
+        }
+    }
+    if (l < cpu.getDataCacheLevels()) {
+        return cpu.getDataCacheSize(l)
+                / (per_core ? cpu.getCoresSharingDataCache(l) : 1);
+    } else
+        return 0;
+}
+#endif
 
 unsigned get_per_core_cache_size(int level) {
     auto guess = [](int level) {

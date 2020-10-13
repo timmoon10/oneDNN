@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2019-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -21,19 +22,35 @@
 
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
+#ifndef DNNL_X64_IMPLEMENTATION
+#ifdef CG
+#undef CG
+#endif
+#define CG h->CodeGeneratorAArch64
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
 
 using namespace Xbyak;
+#ifndef DNNL_X64_IMPLEMENTATION
+namespace xa = Xbyak_aarch64;
+#endif
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
         size_t start_idx, size_t end_idx) {
     using namespace Xbyak::util;
     preserved_vecs_count = 0;
+#ifdef DNNL_X64_IMPLEMENTATION
     vecs_to_preserve = aux_vecs_count();
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    /* +1 for memory operand */
+    vecs_to_preserve = aux_vecs_count() + 1;
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     start_idx_tail = start_idx;
 
     // For sse41 mask register has to be Xmm(0)
@@ -74,14 +91,50 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
 
         if (preserved_vecs_count) h->sub(h->rsp, preserved_vecs_count * vlen);
 
+#ifdef DNNL_X64_IMPLEMENTATION
         for (size_t i = 0; i < preserved_vecs_count; ++i)
             h->uni_vmovups(
                     h->ptr[h->rsp + i * vlen], Vmm(preserved_vec_idxs[i]));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::XReg x_sp {IDX(h->rsp)};
+        xa::XReg x_addr {h->xtDefaultAddrIdx};
+        size_t i = 0;
+
+        while (i < preserved_vecs_count) {
+            int count = 0;
+            do {
+                CG::add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+                i++;
+            } while (i < preserved_vecs_count && i < x_tmp_vec_size);
+
+            if (vlen != 32)
+                for (int j = 0; j < count; j++)
+                    CG::st1w(xa::ZRegS(preserved_vec_idxs[j]), p_lsb,
+                            xa::ptr(x_tmp_vec[j]));
+            else
+                for (int j = 0; j < count; j++)
+                    CG::str(xa::QReg(preserved_vec_idxs[j]),
+                            xa::ptr(x_tmp_vec[j]));
+
+            i += count;
+        }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
         load_table_addr();
     }
 
     assign_regs();
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    CG::ptrue(p_512.b);
+    CG::ptrue(p_256.b, xa::VL32);
+    CG::ptrue(p_128.b, xa::VL16);
+    if (vlen == 32) {
+        p_lsb = p_256;
+    } else if (vlen == 16) {
+        p_lsb = p_128;
+    }
+#endif
 }
 
 template <cpu_isa_t isa>
@@ -95,18 +148,68 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
     if (save_state_) {
         if (idx_off) h->add(h->rsp, idx_off * vlen);
 
+#ifdef DNNL_X64_IMPLEMENTATION
         for (size_t i = 0; i < tail_vecs_to_preserve; ++i)
             h->uni_vmovups(Vmm(preserved_vec_idxs[idx_off + i]),
                     h->ptr[h->rsp + i * vlen]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::XReg x_sp {IDX(h->rsp)};
+        xa::XReg x_addr {h->xtDefaultAddrIdx};
+        size_t i = 0;
+
+        while (i < tail_vecs_to_preserve) {
+            int count = 0;
+            do {
+                CG::add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+                i++;
+            } while (i < tail_vecs_to_preserve && i < x_tmp_vec_size);
+
+            if (vlen != 32)
+                for (int j = 0; j < count; j++)
+                    CG::ld1w(xa::ZRegS(preserved_vec_idxs[idx_off + j]),
+                            p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
+            else
+                for (int j = 0; j < count; j++)
+                    CG::ldr(xa::QReg(preserved_vec_idxs[idx_off + j]),
+                            xa::ptr(x_tmp_vec[j]));
+
+            i += count;
+        }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 
     for (size_t i = 0; i < tail_vecs_to_preserve; ++i)
         preserved_vec_idxs[idx_off + i] += tail_vecs_to_preserve;
 
     if (save_state_) {
+#ifdef DNNL_X64_IMPLEMENTATION
         for (size_t i = 0; i < tail_vecs_to_preserve; ++i)
             h->uni_vmovups(h->ptr[h->rsp + i * vlen],
                     Vmm(preserved_vec_idxs[idx_off + i]));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::XReg x_sp {IDX(h->rsp)};
+        xa::XReg x_addr {h->xtDefaultAddrIdx};
+        size_t i = 0;
+
+        while (i < tail_vecs_to_preserve) {
+            int count = 0;
+            do {
+                CG::add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+                i++;
+            } while (i < tail_vecs_to_preserve && i < x_tmp_vec_size);
+
+            if (vlen != 32)
+                for (int j = 0; j < count; j++)
+                    CG::st1w(xa::ZRegS(preserved_vec_idxs[idx_off + j]),
+                            p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
+            else
+                for (int j = 0; j < count; j++)
+                    CG::str(xa::QReg(preserved_vec_idxs[idx_off + j]),
+                            xa::ptr(x_tmp_vec[j]));
+
+            i += count;
+        }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
         if (idx_off) h->sub(h->rsp, idx_off * vlen);
     }
@@ -129,6 +232,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_postamble() {
     h->pop(p_table);
 }
 
+#ifdef DNNL_X64_IMPLEMENTATION
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::assign_regs() {
     vmm_mask = Vmm(preserved_vec_idxs[0]);
@@ -138,18 +242,105 @@ void jit_uni_eltwise_injector_f32<isa>::assign_regs() {
     vmm_aux3 = Vmm(preserved_vec_idxs[3]);
     vmm_aux4 = Vmm(preserved_vec_idxs[4]);
 }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::assign_regs() {
+    /* For translation of x64's memory operand instructions */
+    z_tmp = xa::ZReg {static_cast<uint32_t>(preserved_vec_idxs[0])};
+
+    vmm_mask = Vmm(preserved_vec_idxs[1]);
+    vmm_aux0 = Vmm(preserved_vec_idxs[1]);
+    vmm_aux1 = Vmm(preserved_vec_idxs[2]);
+    vmm_aux2 = Vmm(preserved_vec_idxs[3]);
+    vmm_aux3 = Vmm(preserved_vec_idxs[4]);
+    vmm_aux4 = Vmm(preserved_vec_idxs[5]);
+}
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 // Uses injector masks objects: k_mask (>= avx512_common) or vmm_mask (<= avx2).
 // Stores a mask by applying cmpps on two inputs w/ a given predicate.
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::compute_cmp_mask(const Vmm &vmm_src,
         const Xbyak::Operand &compare_operand, int cmp_predicate) {
+
+#ifdef DNNL_X64_IMPLEMENTATION
     if (has_avx512()) {
         h->vcmpps(k_mask, vmm_src, compare_operand, cmp_predicate);
     } else {
         h->uni_vcmpps(vmm_mask, vmm_src, compare_operand, cmp_predicate);
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    if (compare_operand.isMEM() == false) {
+        if (has_avx512()) {
+            h->vcmpps(k_mask, vmm_src, compare_operand, cmp_predicate);
+        } else {
+            h->uni_vcmpps(vmm_mask, vmm_src, compare_operand, cmp_predicate);
+        }
+    } else { /* memory operand */
+        if (has_avx512()) {
+            xa::PRegS p_mask {IDX(k_mask)};
+            xa::ZRegS z_src {IDX(vmm_src)};
+            uni_ldr(Vmm(z_tmp.getIdx()), compare_operand);
+
+            /* Refer Table 3-1. Comparison Predicate for CMPPD and CMPPS Instructions.
+	   At this time, only the following conditions are considered. */
+            switch (cmp_predicate) {
+                case _cmp_lt_os:
+                    CG::fcmlt(p_mask, p_lsb / xa::T_z, z_src, z_tmp.s);
+                    break;
+                case _cmp_eq_oq:
+                    CG::fcmeq(p_mask, p_lsb / xa::T_z, z_src, z_tmp.s);
+                    break;
+                case _cmp_gt_os:
+                    CG::fcmgt(p_mask, p_lsb / xa::T_z, z_src, z_tmp.s);
+                    break;
+                case _cmp_le_os:
+                    CG::fcmle(p_mask, p_lsb / xa::T_z, z_src, z_tmp.s);
+                    break;
+                default: assert(false);
+            }
+        } else {
+            assert(false);
+        }
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 }
+
+#ifndef DNNL_X64_IMPLEMENTATION
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::uni_ldr(
+        const Vmm &vmm_dst, const Xbyak::Operand &addr) {
+    RegExp exp = addr.getAddress().getRegExp();
+    uint32_t base = IDX(exp.getBase());
+    uint32_t index = IDX(exp.getIndex());
+    bool isIndexExist = exp.getIndex().isREG();
+    int scale = exp.getScale();
+    int disp = exp.getDisp();
+    xa::XReg x_base {base};
+    xa::XReg x_index {index};
+    xa::XReg x_tmp_addr {h->xtDefaultAddrIdx};
+    xa::ZReg z_dst {IDX(vmm_dst)};
+
+    /* At this time, ignore disp only addressing. */
+    assert(exp.getBase().getBit());
+    assert(scale == 1);
+    (void)scale;
+
+    /* Address calculation */
+    if (isIndexExist == false && disp == 0) {
+        x_tmp_addr = x_base;
+    } else if (isIndexExist && disp == 0) {
+        CG::add(x_tmp_addr, x_base, x_index);
+    } else if (isIndexExist == false && disp) {
+        CG::add_imm(x_tmp_addr, x_base, disp, h->X_TMP_0);
+    } else {
+        CG::add(x_tmp_addr, x_base, x_index);
+        CG::add_imm(x_tmp_addr, x_base, disp, h->X_TMP_0);
+    }
+
+    CG::ld1w(z_dst.s, p_lsb / xa::T_z, xa::ptr(x_tmp_addr));
+}
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 // Uses injector masks objects: k_mask (>= avx512_common) or vmm_mask (<= avx2).
 // Blends a result of second input into a first input w/ a stored mask.
@@ -654,7 +845,11 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
         Xbyak::Address table_idx = h->ptr[p_table + table_start_idx + offt
                 + vmm_idxs * sizeof(float)];
         if (has_avx512()) {
+#ifdef DNNL_X64_IMPLEMENTATION
             h->kmovw(k_mask, table_val(log_full_k_reg_mask));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+            CG::ptrue(xa::PRegS {IDX(k_mask)}, xa::VL16);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             h->vgatherdps(vmm_dst | k_mask, table_idx);
         } else if (isa == avx2) {
             h->uni_vmovups(vmm_mask, table_val(sign_mask));
@@ -732,13 +927,15 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     Xbyak::Label end_log_label;
     compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_le_os);
-#ifdef DNNL_INDIRECT_JIT_AARCH64
+
+#ifndef DNNL_INDIRECT_JIT_AARCH64
+    std::cout << "hoge:" << __LINE__ << std::endl;
+    test_mask();
+#else
     h->CodeGeneratorAArch64::orrs(h->P_TMP_0.b,
             h->P_ALL_ONE / Xbyak_aarch64::T_z,
             Xbyak_aarch64::PRegB(k_mask.getIdx()),
             Xbyak_aarch64::PRegB(k_mask.getIdx()));
-#else
-    test_mask();
 #endif
     h->jz(end_log_label);
 
@@ -787,10 +984,17 @@ void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_fwd(
         if (has_avx512()) {
             h->sub(h->rsp, n_k_regs_to_save * k_mask_size);
             for (size_t i = 0; i < n_k_regs_to_save; ++i) {
+#ifdef DNNL_X64_IMPLEMENTATION
                 if (mayiuse(avx512_core))
                     h->kmovq(h->ptr[h->rsp + i * k_mask_size], Opmask(i));
                 else
                     h->kmovw(h->ptr[h->rsp + i * k_mask_size], Opmask(i));
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                CG::add_imm(h->X_TMP_0, xa::XReg {IDX(h->rsp)}, i * k_mask_size,
+                        h->X_TMP_1);
+                CG::str(xa::PReg {static_cast<uint32_t>(i)},
+                        xa::ptr(h->X_TMP_0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             }
         }
 
@@ -837,10 +1041,17 @@ void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_fwd(
         // restore k registers
         if (has_avx512()) {
             for (int i = n_k_regs_to_save - 1; i >= 0; --i) {
+#ifdef DNNL_X64_IMPLEMENTATION
                 if (mayiuse(avx512_core))
                     h->kmovq(Opmask(i), h->ptr[h->rsp + i * k_mask_size]);
                 else
                     h->kmovw(Opmask(i), h->ptr[h->rsp + i * k_mask_size]);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+                CG::add_imm(h->X_TMP_0, xa::XReg {IDX(h->rsp)}, i * k_mask_size,
+                        h->X_TMP_1);
+                CG::ldr(xa::PReg {static_cast<uint32_t>(i)},
+                        xa::ptr(h->X_TMP_0));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
             }
             h->add(h->rsp, n_k_regs_to_save * k_mask_size);
         }
@@ -1267,6 +1478,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
             case eltwise_relu_use_dst_for_bwd:
             case eltwise_relu: return 1;
             case eltwise_elu_use_dst_for_bwd: return 1;
+
             case eltwise_elu: return 3;
             case eltwise_tanh_use_dst_for_bwd: return 1;
             case eltwise_tanh: return 5;

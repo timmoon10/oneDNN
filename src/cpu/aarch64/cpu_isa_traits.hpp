@@ -179,7 +179,6 @@ struct cpu_isa_traits<sve256> {
     static constexpr const char *user_option_env = "SVE256";
 };
 
-
 template <>
 struct cpu_isa_traits<sve> {
     typedef Xbyak::Xbyak_aarch64::ZRegS Vmm;
