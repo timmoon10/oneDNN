@@ -188,7 +188,7 @@ private:
 
     using wreg_t = const WReg;
     wreg_t w_tmp_0 = w23;
-  
+
     using xreg_t = const XReg;
     xreg_t aux_xreg_input = x9;
     xreg_t xreg_output = x12;
