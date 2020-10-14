@@ -310,7 +310,7 @@ inline void jit_uni_pool_kernel<isa>::uni_broadcast_reg_val(
     } else {
         assert(!"unreachable");
     }
-#endif //#ifdef DNNL_X64_IMPLEMENTATION
+#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
 }
 
 template <cpu_isa_t isa>
@@ -319,9 +319,9 @@ inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
 #ifdef DNNL_X64_IMPLEMENTATION
     sub(rsp, val_to_store.getBit());
     uni_vmovups(ptr[rsp], val_to_store);
-#else //#ifdef DNNL_X64_IMPLEMENTATION
+#else /* #ifdef DNNL_X64_IMPLEMENTATION */
     //sub(rsp, val_to_store.getBit());
-    CG::sub_imm(xa::XReg(idx), xa::XReg(idx), val_to_store.getBit(), X_TMP_0);
+    CG::sub_imm(xa::XReg(idx), xa::XReg(idx), val_to_store.getBit(), x_tmp_0);
     //uni_vmovups(ptr[rsp], val_to_store);
     int vlen = cpu_isa_traits<isa>::vlen;
     if (vlen == 64) {
@@ -334,7 +334,7 @@ inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
     } else {
         assert(!"unreachable");
     }
-#endif //#ifdef DNNL_X64_IMPLEMENTATION
+#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
 }
 
 template <cpu_isa_t isa>
@@ -343,7 +343,7 @@ inline void jit_uni_pool_kernel<isa>::pop_vmm_val(const int idx) {
 #ifdef DNNL_X64_IMPLEMENTATION
     uni_vmovups(val_to_load, ptr[rsp]);
     add(rsp, val_to_load.getBit());
-#else //#ifdef DNNL_X64_IMPLEMENTATION
+#else /* #ifdef DNNL_X64_IMPLEMENTATION */
     //uni_vmovups(val_to_load, ptr[rsp]);
     int vlen = cpu_isa_traits<isa>::vlen;
     if (vlen == 64) { //vmovups(Ymm, mem)
@@ -359,8 +359,8 @@ inline void jit_uni_pool_kernel<isa>::pop_vmm_val(const int idx) {
     }
     //add(rsp, val_to_load.getBit());
     CG::add_imm(xa::XReg(IDX(rsp)), xa::XReg(IDX(rsp)), val_to_load.getBit(),
-            X_TMP_0);
-#endif //#ifdef DNNL_X64_IMPLEMENTATION
+            x_tmp_0);
+#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
 }
 
 #ifdef DNNL_X64_IMPLEMENTATION
@@ -398,7 +398,7 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx,
         }
     }
 }
-#else //#ifdef DNNL_X64_IMPLEMENTATION
+#else /* #ifdef DNNL_X64_IMPLEMENTATION */
 template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
         const int offset, const bool is_c_tail_proccessing) {
@@ -410,30 +410,30 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
             if (vlen == 64) {
                 //get mem address
                 CG::add_imm(
-                        X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                        x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (is_c_tail_proccessing) {
                     assert(!"unreachable");
                 } else {
                     //vpmovzxwd(Vmm(idx), ptr[reg_ptr + offset]);
-                    CG::ldr(z_tmp0, xa::ptr(X_TMP_ADDR));
+                    CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                     CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
-                    CG::mov(p_tmp0.b, P_ALL_ONE.b);
-                    CG::uxth(xa::ZReg(idx).s, p_tmp0 / xa::T_m, z_tmp0.s);
+                    //CG::mov(p_tmp0.b, P_ALL_ONE.b);
+                    CG::uxth(xa::ZReg(idx).s, p_512 / xa::T_m, z_tmp0.s);
                     //vpslld(vmm_to_load, vmm_to_load, 16);
                     CG::lsl(xa::ZReg(idx).s, xa::ZReg(idx).s, 16);
                 }
             } else if (vlen == 32) {
                 //get mem address
                 CG::add_imm(
-                        X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                        x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (is_c_tail_proccessing) {
                     assert(!"unreachable");
                 } else {
                     //vpmovzxwd(vmm_to_load, ptr[reg_ptr + offset]);
-                    CG::ldr(z_tmp0, xa::ptr(X_TMP_ADDR));
+                    CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                     CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
-                    CG::mov(p_tmp0.b, P_ALL_ONE.b);
-                    CG::uxth(xa::ZReg(idx).s, p_tmp0 / xa::T_m, z_tmp0.s);
+                    //CG::mov(p_tmp0.b, P_ALL_ONE.b);
+                    CG::uxth(xa::ZReg(idx).s, p_512 / xa::T_m, z_tmp0.s);
                     CG::mov(xa::ZReg(idx).s, P_MSB_256 / xa::T_m, 0);
                     //vpslld(vmm_to_load, vmm_to_load, 16);
                     CG::lsl(xa::ZReg(idx).s, xa::ZReg(idx).s, 16);
@@ -442,17 +442,17 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
             } else if (vlen == 16) {
                 //get mem address
                 CG::add_imm(
-                        X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                        x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (is_c_tail_proccessing) {
                     //vpmovzxwd(Vmm(idx) | k_c_tail_mask | T_z, ptr[reg_ptr + offset]);
                     //vpslld(Vmm(idx) | k_c_tail_mask | T_z, Vmm(idx), 16);
                     assert(!"unreachable");
                 } else {
                     //vpmovzxwd(vmm_to_load, ptr[reg_ptr + offset]);
-                    CG::ldr(z_tmp0, xa::ptr(X_TMP_ADDR));
+                    CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                     CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
-                    CG::mov(p_tmp0.b, P_ALL_ONE.b);
-                    CG::uxth(xa::ZReg(idx).s, p_tmp0 / xa::T_m, z_tmp0.s);
+                    //CG::mov(p_tmp0.b, P_ALL_ONE.b);
+                    CG::uxth(xa::ZReg(idx).s, p_512 / xa::T_m, z_tmp0.s);
                     CG::mov(xa::ZReg(idx).s, P_MSB_384 / xa::T_m, 0);
                     //vpslld(vmm_to_load, vmm_to_load, 16);
                     CG::lsl(xa::ZReg(idx).s, xa::ZReg(idx).s, 16);
@@ -463,22 +463,22 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
             }
         } else {
             //get mem address
-            CG::add_imm(X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
             //vmovups(Ymm(idx), ptr[reg_ptr + offset]);
-            CG::ld1w(xa::ZRegS(idx), p_256 / xa::T_z, xa::ptr(X_TMP_ADDR));
+            CG::ld1w(xa::ZRegS(idx), p_256 / xa::T_z, xa::ptr(x_tmp_addr));
             //vpermw(Vmm(idx) | k_mask_cvt | T_z, vmm_idx(), Vmm(idx));
             if (vlen == 64) {
-                CG::mov(p_tmp0.b, P_ALL_ONE.b);
+	      //CG::mov(p_tmp0.b, P_ALL_ONE.b);
                 CG::mov(z_tmp0.h, 31);
-                CG::and_(z_tmp0.b, p_tmp0, xa::ZRegB(reg_idx()));
+                CG::and_(z_tmp0.b, p_512, xa::ZRegB(reg_idx()));
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_tmp0, z_tmp0.h, i);
+                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[i]);
                     CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
                 }
                 CG::sub(z_tmp0.h, 16);
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_tmp0, z_tmp0.h, i);
+                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[16 + i]);
                     CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
                 }
@@ -486,11 +486,11 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 CG::mov(xa::ZRegH(idx), xa::PReg(IDX(k_mask_cvt)) / xa::T_m,
                         z_tmp3.h);
             } else if (vlen == 32) {
-                CG::mov(p_tmp0.b, P_ALL_ONE.b);
+	      //CG::mov(p_tmp0.b, P_ALL_ONE.b);
                 CG::mov(z_tmp0.h, 15);
-                CG::and_(z_tmp0.b, p_tmp0, xa::ZRegB(reg_idx()));
+                CG::and_(z_tmp0.b, p_512, xa::ZRegB(reg_idx()));
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_tmp0, z_tmp0.h, i);
+                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[i]);
                     CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
                 }
@@ -499,11 +499,11 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                         z_tmp3.h);
                 CG::mov(xa::ZRegH(idx), P_MSB_256 / xa::T_m, 0);
             } else if (vlen == 16) {
-                CG::mov(p_tmp0.b, P_ALL_ONE.b);
+	      //CG::mov(p_tmp0.b, P_ALL_ONE.b);
                 CG::mov(z_tmp0.h, 15);
-                CG::and_(z_tmp0.b, p_tmp0, xa::ZRegB(reg_idx()));
+                CG::and_(z_tmp0.b, p_512, xa::ZRegB(reg_idx()));
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_tmp0, z_tmp0.h, i);
+                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[i]);
                     CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
                 }
@@ -522,9 +522,9 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                     // pinsrd(Xmm(idx), ptr[reg_ptr + offset + i * jpp.dt_size],
                     //          i);
                     //get mem address
-                    CG::add_imm(X_TMP_ADDR, xa::XReg(IDX(reg_ptr)),
-                            (offset + i * jpp.dt_size), X_TMP_0);
-                    CG::ld1r(xa::VReg4S(z_tmp0.getIdx()), xa::ptr(X_TMP_ADDR));
+                    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)),
+                            (offset + i * jpp.dt_size), x_tmp_0);
+                    CG::ld1r(xa::VReg4S(z_tmp0.getIdx()), xa::ptr(x_tmp_addr));
                     CG::ptrue(P_TMP_0.s, static_cast<xa::Pattern>(i + 1));
                     if (i) {
                         CG::ptrue(P_TMP_1.s, static_cast<xa::Pattern>(i));
@@ -540,23 +540,23 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 //vmaskmovps(Vmm(idx), vmm_c_tail_mask, ptr[reg_ptr + offset]);
                 //get mem address
                 CG::add_imm(
-                        X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                        x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 CG::cmplt(p_tmp0.s, p_lsb / xa::T_z,
                         xa::ZReg(IDX(vmm_c_tail_mask)).s, 0);
-                CG::ld1w(xa::ZRegS(idx), p_lsb / xa::T_z, xa::ptr(X_TMP_ADDR));
+                CG::ld1w(xa::ZRegS(idx), p_lsb / xa::T_z, xa::ptr(x_tmp_addr));
             } else {
                 //vmovups(Zmm(idx) | k_c_tail_mask | T_z, ptr[reg_ptr + offset]);
                 //get mem address
                 CG::add_imm(
-                        X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                        x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 CG::ld1w(xa::ZRegS(idx), xa::PReg(IDX(k_c_tail_mask)) / xa::T_z,
-                        xa::ptr(X_TMP_ADDR));
+                        xa::ptr(x_tmp_addr));
             }
         } else {
             //uni_vmovups(Vmm(idx), ptr[reg_ptr + offset]);
             //get mem address
-            CG::add_imm(X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
-            CG::ld1w(xa::ZRegS(idx), p_lsb / xa::T_z, xa::ptr(X_TMP_ADDR));
+            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
+            CG::ld1w(xa::ZRegS(idx), p_lsb / xa::T_z, xa::ptr(x_tmp_addr));
         }
     }
 }
@@ -598,28 +598,28 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
     const int vlen = cpu_isa_traits<isa>::vlen;
     if (jpp.is_bf16) {
         //get mem address
-        CG::add_imm(X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+        CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
             //vmovdqu16(ptr[reg_ptr + offset] | k_c_tail_mask, Ymm(idx));
             if (vlen == 64) {
                 CG::st1h(xa::ZRegH(idx), xa::PReg(IDX(k_c_tail_mask)),
-                        xa::ptr(X_TMP_ADDR));
+                        xa::ptr(x_tmp_addr));
             } else if (vlen == 32) {
                 CG::bic(p_tmp0.b, P_ALL_ONE / xa::T_z,
                         xa::PRegB(IDX(k_c_tail_mask)), P_MSB_256.b);
-                CG::st1h(xa::ZRegH(idx), p_tmp0, xa::ptr(X_TMP_ADDR));
+                CG::st1h(xa::ZRegH(idx), p_tmp0, xa::ptr(x_tmp_addr));
             } else if (vlen == 16) {
                 CG::bic(p_tmp0.b, P_ALL_ONE / xa::T_z,
                         xa::PRegB(IDX(k_c_tail_mask)), P_MSB_384.b);
-                CG::st1h(xa::ZRegH(idx), p_tmp0, xa::ptr(X_TMP_ADDR));
+                CG::st1h(xa::ZRegH(idx), p_tmp0, xa::ptr(x_tmp_addr));
             } else {
                 assert(!"unreachable");
             }
         } else {
             //vmovups(yword[reg_ptr + offset], Ymm(idx));
             //get mem address
-            CG::add_imm(x_tmp, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
-            CG::st1w(xa::ZRegS(idx), p_lsb, xa::ptr(x_tmp));
+            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
+            CG::st1w(xa::ZRegS(idx), p_lsb, xa::ptr(x_tmp_addr));
         }
     } else {
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
@@ -628,24 +628,24 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
                     //pextrd(ptr[reg_ptr + offset + i * jpp.dt_size], Xmm(idx),
                     //	 i);
                     //get mem address
-                    CG::add_imm(X_TMP_ADDR, xa::XReg(IDX(reg_ptr)),
-                            (offset + i * jpp.dt_size), X_TMP_0);
+                    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)),
+                            (offset + i * jpp.dt_size), x_tmp_0);
                     uint32_t sel = i & 3;
-                    CG::mov(W_TMP_0, xa::VReg(idx).s[sel]);
-                    CG::str(W_TMP_0, xa::ptr(X_TMP_ADDR));
+                    CG::mov(w_tmp_0, xa::VReg(idx).s[sel]);
+                    CG::str(w_tmp_0, xa::ptr(x_tmp_addr));
                 }
             } else if (isa == avx) {
                 //vmaskmovps(ptr[reg_ptr + offset], vmm_c_tail_mask, Vmm(idx));
                 //get mem address
                 CG::add_imm(
-                        X_TMP_ADDR, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                        x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (vlen == 64) {
                     assert(!"unreachable");
                 } else if (vlen == 32) {
                     CG::cmplt(p_tmp0.s, p_lsb / xa::T_z,
                             xa::ZReg(IDX(vmm_c_tail_mask)).s, 0);
                     CG::st1w(xa::ZReg(idx).s, p_tmp0 / xa::T_m,
-                            xa::ptr(X_TMP_ADDR));
+                            xa::ptr(x_tmp_addr));
                 } else if (vlen == 16) {
                     assert(!"unreachable");
                 } else {
@@ -654,15 +654,15 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
             } else {
                 //vmovups(ptr[reg_ptr + offset] | k_c_tail_mask, Zmm(idx));
                 //get mem address
-                CG::add_imm(x_tmp, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
+                CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 CG::st1w(xa::ZRegS(idx), xa::PReg(IDX(k_c_tail_mask)),
-                        xa::ptr(x_tmp));
+                        xa::ptr(x_tmp_addr));
             }
         } else {
             //uni_vmovups(vmmword[reg_ptr + offset], Vmm(idx));
             //get mem address
-            CG::add_imm(x_tmp, xa::XReg(IDX(reg_ptr)), offset, X_TMP_0);
-            CG::st1w(xa::ZRegS(idx), p_lsb, xa::ptr(x_tmp));
+            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)), offset, x_tmp_0);
+            CG::st1w(xa::ZRegS(idx), p_lsb, xa::ptr(x_tmp_addr));
         }
     }
 }
@@ -785,12 +785,12 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                 /* uni_vdivps(accvr, accvr, vmm_tmp); */
                 int vlen = cpu_isa_traits<isa>::vlen;
                 if (vlen == 64) {
-                    CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
-                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_tmp0,
+		  //CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
+                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_512,
                             xa::ZRegS(IDX(vmm_tmp)));
                 } else if (vlen == 32) {
-                    CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
-                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_tmp0,
+		  //CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
+                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_512,
                             xa::ZRegS(IDX(vmm_tmp)));
                     CG::mov(xa::ZReg(IDX(accvr)).s, P_MSB_256 / xa::T_m, 0);
                 } else if (vlen == 16) {
@@ -843,8 +843,8 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
         //mov(ki, ptr[reg_param + GET_OFF(kd_padding)]);
         //get mem address
         CG::add_imm(
-                x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding), X_TMP_0);
-        CG::ldr(xa::XReg(IDX(ki)), xa::ptr(x_tmp));
+                x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding), x_tmp_0);
+        CG::ldr(xa::XReg(IDX(ki)), xa::ptr(x_tmp_addr));
         L(kd_label);
         //mov(aux_reg_input, aux_reg_input_d);
         CG::mov(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input_d)));
@@ -962,21 +962,21 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                         CG::ptrue(p_tmp0.b, xa::VL2);
                         int vlen = cpu_isa_traits<isa>::vlen;
                         //get mem address
-                        CG::add_imm(x_tmp, xa::XReg(IDX(aux_reg_input)),
-                                input_offset, X_TMP_0);
+                        CG::add_imm(x_tmp_addr, xa::XReg(IDX(aux_reg_input)),
+                                input_offset, x_tmp_0);
                         if (vlen == 64) {
-                            CG::ldr(z_tmp0, xa::ptr(x_tmp));
+                            CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                             CG::fadd(xa::ZReg(IDX(accvr)).s,
                                     xa::ZReg(IDX(accvr)).s, z_tmp0.s);
                         } else if (vlen == 32) {
-                            CG::ldr(z_tmp0, xa::ptr(x_tmp));
+                            CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                             CG::fadd(xa::ZReg(IDX(accvr)).s,
                                     xa::ZReg(IDX(accvr)).s, z_tmp0.s);
                             CG::mov(xa::ZReg(IDX(accvr)).s, P_MSB_256 / xa::T_m,
                                     0);
                         } else if (vlen == 16) {
                             CG::ld1(xa::VReg(z_tmp0.getIdx()).s4,
-                                    xa::ptr(x_tmp));
+                                    xa::ptr(x_tmp_addr));
                             CG::fadd(xa::VReg(IDX(accvr)).s4,
                                     xa::VReg(IDX(accvr)).s4,
                                     xa::VReg(z_tmp0.getIdx()).s4);
@@ -996,7 +996,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         /* add(aux_reg_input, jpp.dt_size * iw * c_off); */
         CG::add_imm(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input)),
-                (jpp.dt_size * iw * c_off), X_TMP_0);
+                (jpp.dt_size * iw * c_off), x_tmp_0);
         //inc(kj);
         CG::adds(xa::XReg(IDX(kj)), xa::XReg(IDX(kj)), 1);
         //cmp(kj, reg_kh);
@@ -1018,12 +1018,12 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
         /* add(aux_reg_input_d, jpp.dt_size * jpp.ih * iw * c_off); */
         CG::add_imm(xa::XReg(IDX(aux_reg_input_d)),
                 xa::XReg(IDX(aux_reg_input_d)),
-                (jpp.dt_size * jpp.ih * iw * c_off), X_TMP_0);
+                (jpp.dt_size * jpp.ih * iw * c_off), x_tmp_0);
         //dec(ki);
         CG::subs(xa::XReg(IDX(ki)), xa::XReg(IDX(ki)), 1);
         //cmp(ki, 0);
-        CG::mov_imm(X_TMP_0, 0);
-        CG::cmp(xa::XReg(IDX(ki)), X_TMP_0);
+        CG::mov_imm(x_tmp_0, 0);
+        CG::cmp(xa::XReg(IDX(ki)), x_tmp_0);
         //jg(kd_label, T_NEAR);
         CG::b(xa::GT, kd_label);
         //pop(reg_output);
@@ -1047,12 +1047,12 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                 /* uni_vdivps(accvr, accvr, vmm_tmp);*/
                 int vlen = cpu_isa_traits<isa>::vlen;
                 if (vlen == 64) {
-                    CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
-                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_tmp0,
+		  //CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
+                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_512,
                             xa::ZRegS(IDX(vmm_tmp)));
                 } else if (vlen == 32) {
-                    CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
-                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_tmp0,
+		  //CG::mov(p_tmp0.b, P_ALL_ONE, P_ALL_ONE.b);
+                    CG::fdiv(xa::ZRegS(IDX(accvr)), p_512,
                             xa::ZRegS(IDX(vmm_tmp)));
                     CG::mov(xa::ZReg(IDX(accvr)).s, P_MSB_256 / xa::T_m, 0);
                 } else if (vlen == 16) {
@@ -1224,8 +1224,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
         //mov(ki, ptr[reg_param + GET_OFF(kd_padding)]);
         //get mem address
         CG::add_imm(
-                x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding), X_TMP_0);
-        CG::ldr(xa::XReg(IDX(ki)), xa::ptr(x_tmp));
+                x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding), x_tmp_0);
+        CG::ldr(xa::XReg(IDX(ki)), xa::ptr(x_tmp_addr));
         L(kd_label);
         //mov(aux_reg_input, aux_reg_input_d);
         CG::mov(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input_d)));
@@ -2565,7 +2565,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
         }
         //add(aux_reg_input, jpp.dt_size * iw * c_off);
         CG::add_imm(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input)),
-                (jpp.dt_size * iw * c_off), X_TMP_0);
+                (jpp.dt_size * iw * c_off), x_tmp_0);
         //inc(kj);
         CG::adds(xa::XReg(IDX(kj)), xa::XReg(IDX(kj)), 1);
         //cmp(kj, reg_kh);
@@ -2578,13 +2578,13 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
         //add(aux_reg_input_d, jpp.dt_size * jpp.ih * iw * c_off);
         CG::add_imm(xa::XReg(IDX(aux_reg_input_d)),
                 xa::XReg(IDX(aux_reg_input_d)),
-                (jpp.dt_size * jpp.ih * iw * c_off), X_TMP_0);
+                (jpp.dt_size * jpp.ih * iw * c_off), x_tmp_0);
         if (jpp.is_training) {
             //mov(tmp_gpr, ptr[reg_param + GET_OFF(kd_padding_shift)]);
             //get mem address
-            CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)),
-                    GET_OFF(kd_padding_shift), X_TMP_0);
-            CG::ldr(xa::XReg(IDX(tmp_gpr)), xa::ptr(x_tmp));
+            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)),
+                    GET_OFF(kd_padding_shift), x_tmp_0);
+            CG::ldr(xa::XReg(IDX(tmp_gpr)), xa::ptr(x_tmp_addr));
             //movq(xmm_tmp, tmp_gpr);
             CG::ptrue(p_tmp0.d, xa::VL2);
             CG::mov(xa::ZRegD(IDX(xmm_tmp)), p_tmp0 / xa::T_m, 0);
@@ -2633,8 +2633,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
         //dec(ki);
         CG::subs(xa::XReg(IDX(ki)), xa::XReg(IDX(ki)), 1);
         //cmp(ki, 0);
-        CG::mov_imm(X_TMP_0, 0);
-        CG::cmp(xa::XReg(IDX(ki)), X_TMP_0);
+        CG::mov_imm(x_tmp_0, 0);
+        CG::cmp(xa::XReg(IDX(ki)), x_tmp_0);
         //jg(kd_label, T_NEAR);
         CG::b(xa::GT, kd_label);
         //pop(reg_output);
@@ -2764,14 +2764,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             vpmovusdb(ptr[reg_index + step_index], vr);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                             /* get mem address */
-                            CG::add_imm(x_tmp, xa::XReg(IDX(reg_index)),
-                                    step_index, X_TMP_0);
+                            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_index)),
+                                    step_index, x_tmp_0);
                             int vlen = cpu_isa_traits<isa>::vlen;
                             if (vlen == 64) {
-                                CG::mov(p_tmp0.b, P_ALL_ONE.b);
+			      //CG::mov(p_tmp0.b, P_ALL_ONE.b);
                                 CG::mov(z_tmp0.d, xa::ZRegD(IDX(vr)));
                                 CG::umin(z_tmp0.s, 255);
-                                CG::st1b(z_tmp0.s, p_tmp0, xa::ptr(x_tmp));
+                                CG::st1b(z_tmp0.s, p_512, xa::ptr(x_tmp_addr));
                             } else if (vlen == 32) {
                                 assert(!"unreachable");
                             } else if (vlen == 16) {
@@ -2787,14 +2787,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                         {
                             //get mem address
-                            CG::add_imm(x_tmp, xa::XReg(IDX(reg_index)),
-                                    step_index, X_TMP_0);
+                            CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_index)),
+                                    step_index, x_tmp_0);
                             int vlen = cpu_isa_traits<isa>::vlen;
                             if (vlen == 64) {
                                 CG::mov(z_tmp0.d, xa::ZRegD(IDX(vr)));
                                 CG::umin(z_tmp0.s, 255);
                                 CG::st1b(z_tmp0.s, xa::PReg(IDX(k_c_tail_mask)),
-                                        xa::ptr(x_tmp));
+                                        xa::ptr(x_tmp_addr));
                             } else if (vlen == 32) {
                                 assert(!"unreachable");
                             } else if (vlen == 16) {
@@ -2809,14 +2809,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                         vpmovusdb(ptr[reg_index + step_index], vr);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                         /* get mem address */
-                        CG::add_imm(x_tmp, xa::XReg(IDX(reg_index)), step_index,
-                                X_TMP_0);
+                        CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_index)), step_index,
+                                x_tmp_0);
                         int vlen = cpu_isa_traits<isa>::vlen;
                         if (vlen == 64) {
-                            CG::mov(p_tmp0.b, P_ALL_ONE.b);
+			  //CG::mov(p_tmp0.b, P_ALL_ONE.b);
                             CG::mov(z_tmp0.d, xa::ZRegD(IDX(vr)));
                             CG::umin(z_tmp0.s, 255);
-                            CG::st1b(z_tmp0.s, p_tmp0, xa::ptr(x_tmp));
+                            CG::st1b(z_tmp0.s, p_512, xa::ptr(x_tmp_addr));
                         } else if (vlen == 32) {
                             assert(!"unreachable");
                         } else if (vlen == 16) {
@@ -2912,30 +2912,30 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     vpmovzxbd(indvr, ptr[reg_index + step_index]);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                     /* get mem address */
-                    CG::add_imm(x_tmp, xa::XReg(IDX(reg_index)), step_index,
-                            X_TMP_0);
+                    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_index)), step_index,
+                            x_tmp_0);
                     int vlen = cpu_isa_traits<isa>::vlen;
                     if (vlen == 64) {
-                        CG::ldr(z_tmp0, xa::ptr(x_tmp));
+                        CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                         CG::zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                         CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
-                        CG::mov(p_tmp0.b, P_ALL_ONE.b);
-                        CG::uxtb(xa::ZReg(IDX(indvr)).s, p_tmp0 / xa::T_m,
+                        //CG::mov(p_tmp0.b, P_ALL_ONE.b);
+                        CG::uxtb(xa::ZReg(IDX(indvr)).s, p_512 / xa::T_m,
                                 z_tmp0.s);
                     } else if (vlen == 32) {
-                        CG::ldr(z_tmp0, xa::ptr(x_tmp));
+                        CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                         CG::zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                         CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
-                        CG::mov(p_tmp0.b, P_ALL_ONE.b);
-                        CG::uxtb(xa::ZReg(IDX(indvr)).s, p_tmp0 / xa::T_m,
+                        //CG::mov(p_tmp0.b, P_ALL_ONE.b);
+                        CG::uxtb(xa::ZReg(IDX(indvr)).s, p_512 / xa::T_m,
                                 z_tmp0.s);
                         CG::mov(xa::ZReg(IDX(indvr)).s, P_MSB_256 / xa::T_m, 0);
                     } else if (vlen == 16) {
-                        CG::ldr(z_tmp0, xa::ptr(x_tmp));
+                        CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
                         CG::zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                         CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
-                        CG::mov(p_tmp0.b, P_ALL_ONE.b);
-                        CG::uxtb(xa::ZReg(IDX(indvr)).s, p_tmp0 / xa::T_m,
+                        //CG::mov(p_tmp0.b, P_ALL_ONE.b);
+                        CG::uxtb(xa::ZReg(IDX(indvr)).s, p_512 / xa::T_m,
                                 z_tmp0.s);
                         CG::mov(xa::ZReg(IDX(indvr)).s, P_MSB_384 / xa::T_m, 0);
                     } else {
@@ -3012,13 +3012,13 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         //mov(ki, ptr[reg_param + GET_OFF(kd_padding)]);
         //get mem address
         CG::add_imm(
-                x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding), X_TMP_0);
-        CG::ldr(xa::XReg(IDX(ki)), xa::ptr(x_tmp));
+                x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding), x_tmp_0);
+        CG::ldr(xa::XReg(IDX(ki)), xa::ptr(x_tmp_addr));
         //mov(reg_kd_pad_shift, ptr[reg_param + GET_OFF(kd_padding_shift)]);
         //get mem address
-        CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding_shift),
-                X_TMP_0);
-        CG::ldr(xa::XReg(IDX(reg_kd_pad_shift)), xa::ptr(x_tmp));
+        CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(kd_padding_shift),
+                x_tmp_0);
+        CG::ldr(xa::XReg(IDX(reg_kd_pad_shift)), xa::ptr(x_tmp_addr));
         L(kd_label);
         //mov(aux_reg_input, aux_reg_input_d);
         CG::mov(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input_d)));
@@ -3212,7 +3212,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         /* add(aux_reg_input, jpp.dt_size * iw * c_off); */
         CG::add_imm(xa::XReg(IDX(aux_reg_input)), xa::XReg(IDX(aux_reg_input)),
-                (jpp.dt_size * iw * c_off), X_TMP_0);
+                (jpp.dt_size * iw * c_off), x_tmp_0);
         //inc(kj);
         CG::adds(xa::XReg(IDX(kj)), xa::XReg(IDX(kj)), 1);
         //cmp(kj, reg_kh);
@@ -3224,7 +3224,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         //add(aux_reg_input_d, jpp.dt_size * jpp.ih * iw * c_off);
         CG::add_imm(xa::XReg(IDX(aux_reg_input_d)),
                 xa::XReg(IDX(aux_reg_input_d)),
-                (jpp.dt_size * jpp.ih * iw * c_off), X_TMP_0);
+                (jpp.dt_size * jpp.ih * iw * c_off), x_tmp_0);
         //mov(tmp_gpr, reg_kd_pad_shift);
         CG::mov(xa::XReg(IDX(tmp_gpr)), xa::XReg(IDX(reg_kd_pad_shift)));
         //movq(xmm_tmp, tmp_gpr);
@@ -3273,8 +3273,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         //dec(ki);
         CG::subs(xa::XReg(IDX(ki)), xa::XReg(IDX(ki)), 1);
         //cmp(ki, 0);
-        CG::mov_imm(X_TMP_0, 0);
-        CG::cmp(xa::XReg(IDX(ki)), X_TMP_0);
+        CG::mov_imm(x_tmp_0, 0);
+        CG::cmp(xa::XReg(IDX(ki)), x_tmp_0);
         //jg(kd_label, T_NEAR);
         CG::b(xa::GT, kd_label);
         if (isa == sse41) {
@@ -3316,27 +3316,27 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
 #else //#ifdef DNNL_X64_IMPLEMENTATION
     //mov(reg_zero_id, ptr[reg_param + GET_OFF(zero_id)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(zero_id), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_zero_id)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(zero_id), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_zero_id)), xa::ptr(x_tmp_addr));
     //cmp(reg_zero_id, 0);
-    CG::mov_imm(X_TMP_0, 0);
-    CG::cmp(xa::XReg(IDX(reg_zero_id)), X_TMP_0);
+    CG::mov_imm(x_tmp_0, 0);
+    CG::cmp(xa::XReg(IDX(reg_zero_id)), x_tmp_0);
     //jz(l_skip, T_NEAR);
     CG::b(xa::EQ, l_skip);
     //mov(reg_zero_ih, ptr[reg_param + GET_OFF(zero_ih)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(zero_ih), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_zero_ih)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(zero_ih), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_zero_ih)), xa::ptr(x_tmp_addr));
     //cmp(reg_zero_ih, 0);
-    CG::mov_imm(X_TMP_0, 0);
-    CG::cmp(xa::XReg(IDX(reg_zero_ih)), X_TMP_0);
+    CG::mov_imm(x_tmp_0, 0);
+    CG::cmp(xa::XReg(IDX(reg_zero_ih)), x_tmp_0);
     //jz(l_skip, T_NEAR);
     CG::b(xa::EQ, l_skip);
 
     //mov(reg_zero_ptr, ptr[reg_param + GET_OFF(zero_ptr)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(zero_ptr), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_zero_ptr)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(zero_ptr), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_zero_ptr)), xa::ptr(x_tmp_addr));
 
     Vmm vzero = vmm_tmp;
     //uni_vpxor(vzero, vzero, vzero);
@@ -3430,7 +3430,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
 #else //#ifdef DNNL_X64_IMPLEMENTATION
             /* add(reg_zero_ptr, width_size); */
             CG::add_imm(xa::XReg(IDX(reg_zero_ptr)),
-                    xa::XReg(IDX(reg_zero_ptr)), width_size, X_TMP_0);
+                    xa::XReg(IDX(reg_zero_ptr)), width_size, x_tmp_0);
             //dec(aux_reg_zero_ih);
             CG::subs(xa::XReg(IDX(aux_reg_zero_ih)),
                     xa::XReg(IDX(aux_reg_zero_ih)), 1);
@@ -3441,7 +3441,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
         CG::mov(xa::XReg(IDX(reg_zero_ptr)), xa::XReg(IDX(aux_reg_zero_ptr)));
         //add(reg_zero_ptr, width_size * jpp.ih);
         CG::add_imm(xa::XReg(IDX(reg_zero_ptr)), xa::XReg(IDX(reg_zero_ptr)),
-                (width_size * jpp.ih), X_TMP_0);
+                (width_size * jpp.ih), x_tmp_0);
         //dec(reg_zero_id);
         CG::subs(xa::XReg(IDX(reg_zero_id)), xa::XReg(IDX(reg_zero_id)), 1);
         //jnz(l_id_loop, T_NEAR);
@@ -3503,35 +3503,35 @@ void jit_uni_pool_kernel<isa>::generate() {
 #else //#ifdef DNNL_X64_IMPLEMENTATION
     //mov(reg_input, ptr[reg_param + GET_OFF(src)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(src), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_input)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(src), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_input)), xa::ptr(x_tmp_addr));
     //mov(reg_output, ptr[reg_param + GET_OFF(dst)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(dst), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_output)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(dst), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_output)), xa::ptr(x_tmp_addr));
     if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward)) {
         //mov(reg_index, ptr[reg_param + GET_OFF(indices)]);
         //get mem address
-        CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(indices), X_TMP_0);
-        CG::ldr(xa::XReg(IDX(reg_index)), xa::ptr(x_tmp));
+        CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(indices), x_tmp_0);
+        CG::ldr(xa::XReg(IDX(reg_index)), xa::ptr(x_tmp_addr));
     }
     //mov(reg_kh, ptr[reg_param + GET_OFF(kh_padding)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(kh_padding), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_kh)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(kh_padding), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_kh)), xa::ptr(x_tmp_addr));
     //mov(reg_k_shift, ptr[reg_param + GET_OFF(kh_padding_shift)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(kh_padding_shift),
-            X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_k_shift)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(kh_padding_shift),
+            x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_k_shift)), xa::ptr(x_tmp_addr));
     //mov(reg_ker_area_h, ptr[reg_param + GET_OFF(ker_area_h)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(ker_area_h), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_ker_area_h)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(ker_area_h), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_ker_area_h)), xa::ptr(x_tmp_addr));
     //mov(reg_nbc, ptr[reg_param + GET_OFF(ur_bc)]);
     //get mem address
-    CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(ur_bc), X_TMP_0);
-    CG::ldr(xa::XReg(IDX(reg_nbc)), xa::ptr(x_tmp));
+    CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(ur_bc), x_tmp_0);
+    CG::ldr(xa::XReg(IDX(reg_nbc)), xa::ptr(x_tmp_addr));
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     if (jpp.is_bf16) {
@@ -3573,10 +3573,10 @@ void jit_uni_pool_kernel<isa>::generate() {
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         /* add(reg_input, dt_size * (ur_w * stride_w - lpad) * c_off - shift); */
         CG::add_imm(xa::XReg(IDX(reg_input)), xa::XReg(IDX(reg_input)),
-                (dt_size * (ur_w * stride_w - lpad) * c_off - shift), X_TMP_0);
+                (dt_size * (ur_w * stride_w - lpad) * c_off - shift), x_tmp_0);
         //add(reg_output, dt_size * ur_w * c_off - shift);
         CG::add_imm(xa::XReg(IDX(reg_output)), xa::XReg(IDX(reg_output)),
-                (dt_size * ur_w * c_off - shift), X_TMP_0);
+                (dt_size * ur_w * c_off - shift), x_tmp_0);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
         if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward)) {
             auto ishift = (isa == sse41) ? jpp.c_block / 2 : 0;
@@ -3586,7 +3586,7 @@ void jit_uni_pool_kernel<isa>::generate() {
 #else //#ifdef DNNL_X64_IMPLEMENTATION
             /* add(reg_index, (ur_w * c_off - ishift) * ind_dt_size); */
             CG::add_imm(xa::XReg(IDX(reg_index)), xa::XReg(IDX(reg_index)),
-                    ((ur_w * c_off - ishift) * ind_dt_size), X_TMP_0);
+                    ((ur_w * c_off - ishift) * ind_dt_size), x_tmp_0);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
         }
     };
@@ -3679,8 +3679,8 @@ void jit_uni_pool_kernel<isa>::generate() {
                 /* inc(oi_iter); */
                 CG::adds(xa::XReg(IDX(oi_iter)), xa::XReg(IDX(oi_iter)), 1);
                 //cmp(oi_iter, n_oi);
-                CG::mov_imm(X_TMP_0, n_oi);
-                CG::cmp(xa::XReg(IDX(oi_iter)), X_TMP_0);
+                CG::mov_imm(x_tmp_0, n_oi);
+                CG::cmp(xa::XReg(IDX(oi_iter)), x_tmp_0);
                 //jl(ow_loop, T_NEAR);
                 CG::b(xa::LT, ow_loop);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
@@ -3702,8 +3702,8 @@ void jit_uni_pool_kernel<isa>::generate() {
         jne(ur_bc_tail_label, T_NEAR);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         /* cmp(reg_nbc, jpp.ur_bc); */
-        CG::mov_imm(X_TMP_0, jpp.ur_bc);
-        CG::cmp(xa::XReg(IDX(reg_nbc)), X_TMP_0);
+        CG::mov_imm(x_tmp_0, jpp.ur_bc);
+        CG::cmp(xa::XReg(IDX(reg_nbc)), x_tmp_0);
         //jne(ur_bc_tail_label, T_NEAR);
         b(xa::NE, ur_bc_tail_label);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
@@ -3720,14 +3720,14 @@ void jit_uni_pool_kernel<isa>::generate() {
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         /* mov(tmp_gpr, ptr[reg_param + GET_OFF(b_c)]); */
         /* get mem address */
-        CG::add_imm(x_tmp, xa::XReg(IDX(reg_param)), GET_OFF(b_c), X_TMP_0);
-        CG::ldr(xa::XReg(IDX(tmp_gpr)), xa::ptr(x_tmp));
+        CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_param)), GET_OFF(b_c), x_tmp_0);
+        CG::ldr(xa::XReg(IDX(tmp_gpr)), xa::ptr(x_tmp_addr));
         //add(tmp_gpr, reg_nbc);
         CG::add(xa::XReg(IDX(tmp_gpr)), xa::XReg(IDX(tmp_gpr)),
                 xa::XReg(IDX(reg_nbc)));
         //cmp(tmp_gpr, jpp.nb_c);
-        CG::mov_imm(X_TMP_0, jpp.nb_c);
-        CG::cmp(xa::XReg(IDX(tmp_gpr)), X_TMP_0);
+        CG::mov_imm(x_tmp_0, jpp.nb_c);
+        CG::cmp(xa::XReg(IDX(tmp_gpr)), x_tmp_0);
         //je(c_tail_processing_label, T_NEAR);
         b(Xbyak_aarch64::EQ, c_tail_processing_label);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION

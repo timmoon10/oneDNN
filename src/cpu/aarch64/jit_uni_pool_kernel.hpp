@@ -69,6 +69,7 @@ private:
     using Reg64 = Xbyak::Reg64;
 
     using XReg = xa::XReg;
+    using WReg = xa::WReg;
 
     using Vmm = typename utils::conditional3<isa == sse41, Xmm, isa == avx, Ymm,
             Zmm>::type;
@@ -183,12 +184,16 @@ private:
     reg64_t ki = r12;
     reg64_t aux_reg_input_d = r8;
 
+    using wreg_t = const WReg;
+    wreg_t w_tmp_0 = w23;
+  
     using xreg_t = const XReg;
     xreg_t aux_xreg_input = x9;
     xreg_t xreg_output = x12;
     xreg_t xreg_index = x10;
     xreg_t xreg_zero_ptr = x9;
-    xreg_t x_tmp = x28;
+    xreg_t x_tmp_addr = x28;
+    xreg_t x_tmp_0 = x23;
 
     Reg32 reg_shuf_mask = esi;
 
