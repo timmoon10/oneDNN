@@ -472,15 +472,15 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 CG::mov(z_tmp0.h, 31);
                 CG::and_(z_tmp0.b, p_512, xa::ZRegB(reg_idx()));
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
+                    CG::cmpeq(p_tmp1.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[i]);
-                    CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
+                    CG::mov(z_tmp3.h, p_tmp1 / xa::T_m, z_tmp2.h);
                 }
                 CG::sub(z_tmp0.h, 16);
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
+                    CG::cmpeq(p_tmp1.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[16 + i]);
-                    CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
+                    CG::mov(z_tmp3.h, p_tmp1 / xa::T_m, z_tmp2.h);
                 }
                 CG::mov(xa::ZRegH(idx), 0);
                 CG::mov(xa::ZRegH(idx), xa::PReg(IDX(k_mask_cvt)) / xa::T_m,
@@ -490,9 +490,9 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 CG::mov(z_tmp0.h, 15);
                 CG::and_(z_tmp0.b, p_512, xa::ZRegB(reg_idx()));
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
+                    CG::cmpeq(p_tmp1.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[i]);
-                    CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
+                    CG::mov(z_tmp3.h, p_tmp1 / xa::T_m, z_tmp2.h);
                 }
                 CG::mov(xa::ZRegH(idx), 0);
                 CG::mov(xa::ZRegH(idx), xa::PReg(IDX(k_mask_cvt)) / xa::T_m,
@@ -503,9 +503,9 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 CG::mov(z_tmp0.h, 15);
                 CG::and_(z_tmp0.b, p_512, xa::ZRegB(reg_idx()));
                 for (int i = 0; i < 16; i++) {
-                    CG::cmpeq(P_TMP_0.h, p_512, z_tmp0.h, i);
+                    CG::cmpeq(p_tmp1.h, p_512, z_tmp0.h, i);
                     CG::dup(z_tmp2.h, xa::ZRegH(idx)[i]);
-                    CG::mov(z_tmp3.h, P_TMP_0 / xa::T_m, z_tmp2.h);
+                    CG::mov(z_tmp3.h, p_tmp1 / xa::T_m, z_tmp2.h);
                 }
                 CG::mov(xa::ZRegH(idx), 0);
                 CG::mov(xa::ZRegH(idx), xa::PReg(IDX(k_mask_cvt)) / xa::T_m,
@@ -525,15 +525,15 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                     CG::add_imm(x_tmp_addr, xa::XReg(IDX(reg_ptr)),
                             (offset + i * jpp.dt_size), x_tmp_0);
                     CG::ld1r(xa::VReg4S(z_tmp0.getIdx()), xa::ptr(x_tmp_addr));
-                    CG::ptrue(P_TMP_0.s, static_cast<xa::Pattern>(i + 1));
+                    CG::ptrue(p_tmp1.s, static_cast<xa::Pattern>(i + 1));
                     if (i) {
-                        CG::ptrue(P_TMP_1.s, static_cast<xa::Pattern>(i));
+                        CG::ptrue(p_tmp2.s, static_cast<xa::Pattern>(i));
                     } else {
-                        CG::pfalse(P_TMP_1.b);
+                        CG::pfalse(p_tmp2.b);
                     }
-                    CG::bic(P_TMP_0.b, P_ALL_ONE / xa::T_z, P_TMP_0.b,
-                            P_TMP_1.b);
-                    CG::sel(xa::ZRegS(idx), P_TMP_0 / xa::T_m,
+                    CG::bic(p_tmp1.b, P_ALL_ONE / xa::T_z, p_tmp1.b,
+                            p_tmp2.b);
+                    CG::sel(xa::ZRegS(idx), p_tmp1 / xa::T_m,
                             xa::ZRegS(z_tmp0.getIdx()), xa::ZRegS(idx));
                 }
             } else if (isa == avx) {
@@ -1380,15 +1380,15 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                     CG::mov(xa::ZRegS(IDX(vmm_mask)), p_tmp0 / xa::T_m,
                             z_tmp0.s);
                     //blendvps(accvr, inpvr);
-                    CG::cmplt(P_TMP_0.s, p_512 / xa::T_z, xa::ZReg(0).s, 0);
-                    CG::and_(P_TMP_0.b, P_ALL_ONE, P_TMP_0.b, p_128.b);
-                    CG::mov(xa::ZReg(IDX(accvr)).s, P_TMP_0 / xa::T_m,
+                    CG::cmplt(p_tmp1.s, p_512 / xa::T_z, xa::ZReg(0).s, 0);
+                    CG::and_(p_tmp1.b, P_ALL_ONE, p_tmp1.b, p_128.b);
+                    CG::mov(xa::ZReg(IDX(accvr)).s, p_tmp1 / xa::T_m,
                             xa::ZReg(IDX(inpvr)).s);
                     if (jpp.is_training) {
                         //blendvps(indvr, vmm_k_offset);
-                        CG::cmplt(P_TMP_0.s, p_512 / xa::T_z, xa::ZReg(0).s, 0);
-                        CG::and_(P_TMP_0.b, P_ALL_ONE, P_TMP_0.b, p_128.b);
-                        CG::mov(xa::ZReg(IDX(indvr)).s, P_TMP_0 / xa::T_m,
+                        CG::cmplt(p_tmp1.s, p_512 / xa::T_z, xa::ZReg(0).s, 0);
+                        CG::and_(p_tmp1.b, P_ALL_ONE, p_tmp1.b, p_128.b);
+                        CG::mov(xa::ZReg(IDX(indvr)).s, p_tmp1 / xa::T_m,
                                 xa::ZReg(IDX(vmm_k_offset)).s);
                     }
                 } else if (isa == avx) {

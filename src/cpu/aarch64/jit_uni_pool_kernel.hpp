@@ -150,6 +150,8 @@ private:
     xa::PReg p_tmp0 = p3;
     xa::PReg p_128 = p7;
     xa::PReg p_lsb = p2;
+    xa::PReg p_tmp1 = p11;
+    xa::PReg p_tmp2 = p12;
 
     // Here be some (tame) dragons. This kernel does not follow the regular
     // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu
