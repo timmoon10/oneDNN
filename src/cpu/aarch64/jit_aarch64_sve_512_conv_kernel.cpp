@@ -1469,19 +1469,24 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(ofs)));
-            } else if (((ofs2 & 0x3) == 0) && (ofs2 < LDRWMAX) && (ofs2 >= 0) && (prev_ofs != 0)) {
+            } else if (((ofs2 & 0x3) == 0) && (ofs2 < LDRWMAX) && (ofs2 >= 0)
+                    && (prev_ofs != 0)) {
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr2,
                                 static_cast<int32_t>(ofs2)));
-            } else if (((ofs3 & 0x3) == 0) && (ofs3 < LDRWMAX) && (ofs3 >= 0) && (prev_ofs != 0)) {
+            } else if (((ofs3 & 0x3) == 0) && (ofs3 < LDRWMAX) && (ofs3 >= 0)
+                    && (prev_ofs != 0)) {
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr3,
                                 static_cast<int32_t>(ofs3)));
             } else {
                 ofs = aux_output_offset;
-                CGA64::add_imm(reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
-                CGA64::add_imm(reg_prev_bcast_addr2, aux_reg_dst, ofs + 0x100, reg_tmp_imm);
-                CGA64::add_imm(reg_prev_bcast_addr3, aux_reg_dst, ofs + 0x200, reg_tmp_imm);
+                CGA64::add_imm(
+                        reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr2, aux_reg_dst, ofs + 0x100,
+                        reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr3, aux_reg_dst, ofs + 0x200,
+                        reg_tmp_imm);
 
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr));
@@ -1571,7 +1576,8 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                                 0, r_overflow - ki * dilate_w));
 
                 int bcast_idx = 0;
-                int bcast_pipeline_depth = 32 - (ker_reg_base_idx + ker_pipeline_depth);
+                int bcast_pipeline_depth
+                        = 32 - (ker_reg_base_idx + ker_pipeline_depth);
                 int num_bcast_pipeline = nstl::min(
                         ((jj_end - jj_start) / stride_w), bcast_pipeline_depth);
                 for (int jj = jj_start; jj < jj_end; jj += stride_w) {
@@ -1588,8 +1594,8 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                 prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
                                         bcast_idx + i);
                             }
-                        } else if (jj
-                                < jj_end - (num_bcast_pipeline - 1) * stride_w) {
+                        } else if (jj < jj_end
+                                        - (num_bcast_pipeline - 1) * stride_w) {
                             int jj_skip
                                     = jj + (num_bcast_pipeline - 1) * stride_w;
                             int aux_dst_offset = typesize
