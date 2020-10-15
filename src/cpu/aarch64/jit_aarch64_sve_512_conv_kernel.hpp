@@ -338,6 +338,8 @@ private:
 
     /* Temporary registers for ARM insts */
     reg64_t reg_prev_bcast_addr = x15;
+    reg64_t reg_prev_bcast_addr2 = x17;
+    reg64_t reg_prev_bcast_addr3 = x21;
     reg64_t reg_tmp_imm = x16;
     reg64_t reg_tmp_addr = x18;
 

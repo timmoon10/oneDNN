@@ -1425,7 +1425,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
     int stride_w = jcp.stride_w;
     int stride_h = jcp.stride_h;
 
-    int ker_pipeline_depth = 3;
+    int ker_pipeline_depth = 2;
     assert(ker_reg_base_idx + ker_pipeline_depth <= 31);
     assert(oc_block >= ker_pipeline_depth);
 
@@ -1462,17 +1462,26 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                     xa::ptr(aux_reg_dst,
                             static_cast<int32_t>(aux_output_offset)));
         } else {
-            int ofs;
-            ofs = aux_output_offset - prev_ofs;
+            int ofs = aux_output_offset - prev_ofs;
+            int ofs2 = aux_output_offset - (prev_ofs + 0x100);
+            int ofs3 = aux_output_offset - (prev_ofs + 0x200);
             if (((ofs & 0x3) == 0) && (ofs < LDRWMAX) && (ofs >= 0)) {
-
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(ofs)));
+            } else if (((ofs2 & 0x3) == 0) && (ofs2 < LDRWMAX) && (ofs2 >= 0) && (prev_ofs != 0)) {
+                CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
+                        xa::ptr(reg_prev_bcast_addr2,
+                                static_cast<int32_t>(ofs2)));
+            } else if (((ofs3 & 0x3) == 0) && (ofs3 < LDRWMAX) && (ofs3 >= 0) && (prev_ofs != 0)) {
+                CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
+                        xa::ptr(reg_prev_bcast_addr3,
+                                static_cast<int32_t>(ofs3)));
             } else {
                 ofs = aux_output_offset;
-                CGA64::add_imm(
-                        reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr2, aux_reg_dst, ofs + 0x100, reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr3, aux_reg_dst, ofs + 0x200, reg_tmp_imm);
 
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr));
@@ -1562,13 +1571,14 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                                 0, r_overflow - ki * dilate_w));
 
                 int bcast_idx = 0;
-                int num_ker_pipeline = nstl::min(
-                        ((jj_end - jj_start) / stride_w), ker_pipeline_depth);
+                int bcast_pipeline_depth = 32 - (ker_reg_base_idx + ker_pipeline_depth);
+                int num_bcast_pipeline = nstl::min(
+                        ((jj_end - jj_start) / stride_w), bcast_pipeline_depth);
                 for (int jj = jj_start; jj < jj_end; jj += stride_w) {
                     assert((jj + l_pad - ki * dilate_w) % stride_w == 0);
-                    if (num_ker_pipeline > 1) {
+                    if (num_bcast_pipeline > 1) {
                         if (jj == jj_start) {
-                            for (int i = 0; i < num_ker_pipeline; i++) {
+                            for (int i = 0; i < num_bcast_pipeline; i++) {
                                 int jj_skip = jj + stride_w * i;
                                 int aux_dst_offset = typesize
                                         * (((jj_skip + l_pad - ki * dilate_w)
@@ -1579,16 +1589,16 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                         bcast_idx + i);
                             }
                         } else if (jj
-                                < jj_end - (num_ker_pipeline - 1) * stride_w) {
+                                < jj_end - (num_bcast_pipeline - 1) * stride_w) {
                             int jj_skip
-                                    = jj + (num_ker_pipeline - 1) * stride_w;
+                                    = jj + (num_bcast_pipeline - 1) * stride_w;
                             int aux_dst_offset = typesize
                                     * (((jj_skip + l_pad - ki * dilate_w)
                                                / stride_w)
                                                     * jcp.oc_block
                                             + oc);
                             prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
-                                    bcast_idx + (num_ker_pipeline - 1));
+                                    bcast_idx + (num_bcast_pipeline - 1));
                         }
                     } else {
                         int aux_dst_offset = typesize
