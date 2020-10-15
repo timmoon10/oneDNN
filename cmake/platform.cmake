@@ -102,7 +102,9 @@ elseif(UNIX OR MINGW)
     # compiler specific settings
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         if(DNNL_TARGET_ARCH STREQUAL "AARCH64")
-             set(DEF_ARCH_OPT_FLAGS "-O3")
+	     if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+               set(DEF_ARCH_OPT_FLAGS "-O3")
+	     endif()
              # For native compilation tune for the host processor
              if (CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
                  if (NOT CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
@@ -111,7 +113,9 @@ elseif(UNIX OR MINGW)
                  endif()
              endif()
         elseif(DNNL_TARGET_ARCH STREQUAL "PPC64")
-             set(DEF_ARCH_OPT_FLAGS "-O3")
+	     if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+               set(DEF_ARCH_OPT_FLAGS "-O3")
+	     endif()
              # For native compilation tune for the host processor
              if (CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
                  append(DEF_ARCH_OPT_FLAGS "-mcpu=native")
@@ -163,7 +167,9 @@ elseif(UNIX OR MINGW)
         endif()
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         if(DNNL_TARGET_ARCH STREQUAL "AARCH64")
-             set(DEF_ARCH_OPT_FLAGS "-O3")
+	     if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+               set(DEF_ARCH_OPT_FLAGS "-O3")
+	     endif()
              # For native compilation tune for the host processor
              if (CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
                  if (NOT CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
@@ -172,7 +178,9 @@ elseif(UNIX OR MINGW)
                  endif()
              endif()
         elseif(DNNL_TARGET_ARCH STREQUAL "PPC64")
-             set(DEF_ARCH_OPT_FLAGS "-O3")
+	     if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+               set(DEF_ARCH_OPT_FLAGS "-O3")
+	     endif()
              # In GCC, -ftree-vectorize is turned on under -O3 since 2007.
              # For native compilation tune for the host processor
              if (CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
