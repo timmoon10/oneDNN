@@ -300,7 +300,7 @@ private:
     using reg64_t = const xa::XReg;
     enum {
         typesize = sizeof(float),
-        ker_reg_base_idx = 26,
+        ker_reg_base_idx = 24,
     };
 
     //[info]v0.21‚Ìcode‚ğ’Ç‰ÁBv1.6’Ç‰Ácode‚Í–¢”½‰fB

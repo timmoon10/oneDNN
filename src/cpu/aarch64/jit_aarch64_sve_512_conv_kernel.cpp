@@ -2326,7 +2326,7 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
 
     jcp.ur_w = jcp.stride_w;
 
-    int regs = 26;
+    int regs = 24;
     if (jcp.iw <= regs)
         jcp.ur_w = jcp.iw;
     else {
