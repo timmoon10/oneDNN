@@ -98,6 +98,8 @@ private:
     reg64_t reg_out_prf = x6; // addr for prefetch
 
     reg64_t aux_reg_inp = x7; // src addr (main loop)
+    reg64_t aux_reg_inp2 = x24; // src addr (main loop)
+    reg64_t aux_reg_inp3 = x25; // src addr (main loop)
     reg64_t reg_out_ofs = x7; // dst addr (store_output)
     reg64_t aux_reg_ker = x8; // ker addr (main loop)
     reg64_t reg_channel = x9; // reduce workload
