@@ -2433,7 +2433,7 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
 #endif
         if (use_expl_bcast && !jcp.large_w_filter) {
             jcp.kernel_kind = embd_bcast;
-            jcp.ur_w = nstl::min(jcp.iw, regs);
+            jcp.ur_w = nstl::min(jcp.iw, 16); //regs);
             jcp.nb_ic_blocking = jcp.nb_oc_blocking = 1;
 #if 0
             if (!(jcp.kw > 3

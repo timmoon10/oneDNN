@@ -300,8 +300,8 @@ private:
     using reg64_t = const xa::XReg;
     enum {
         typesize = sizeof(float),
-        ker_reg_base_idx = 24,
     };
+    int ker_reg_base_idx = (jcp.nb_ic_blocking == 1) ? 16 : 24;
 
     //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
     //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
