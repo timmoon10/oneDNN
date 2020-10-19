@@ -28,7 +28,7 @@
 #include "cpu/cpu_batch_normalization_utils.hpp"
 #include "cpu/platform.hpp"
 
-#include "cpu/aarch64/jit_aarch64_sve_512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_uni_tbb_batch_normalization.hpp"
 
 namespace dnnl {

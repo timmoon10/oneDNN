@@ -31,8 +31,8 @@
 #include "cpu/cpu_primitive.hpp"
 #include "cpu/cpu_reorder_pd.hpp"
 
-#include "cpu/aarch64/jit_aarch64_sve_512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 // #define TR_DEBUG
 #if defined(TR_DEBUG)

@@ -21,7 +21,7 @@
 #include "common/primitive.hpp"
 
 #include "cpu/aarch64/cpu_isa_traits.hpp"
-#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 #include "cpu/cpu_resampling_pd.hpp"
 
 namespace dnnl {

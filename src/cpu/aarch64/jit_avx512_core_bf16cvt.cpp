@@ -16,7 +16,7 @@
 
 #include <assert.h>
 
-#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 #include "common/bfloat16.hpp"
 

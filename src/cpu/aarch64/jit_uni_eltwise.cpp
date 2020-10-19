@@ -21,8 +21,8 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 #include "cpu/aarch64/jit_uni_eltwise.hpp"
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"

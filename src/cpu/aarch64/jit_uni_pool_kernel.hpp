@@ -25,8 +25,8 @@
 #include "common/utils.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 #define CG CodeGeneratorAArch64
 #define IDX(a) static_cast<uint32_t>(a.getIdx())

@@ -3778,7 +3778,7 @@ void jit_uni_pool_kernel<isa>::generate() {
         for (size_t i = 0; i < sizeof(_idx) / sizeof(_idx[0]); ++i)
             CodeArray::dw(_idx[i]);
         binCommit();
-#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 }
 

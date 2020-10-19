@@ -25,7 +25,7 @@
 #include "common/utils.hpp"
 
 #include "cpu/aarch64/cpu_isa_traits.hpp"
-#include "cpu/aarch64/jit_aarch64_sve_512_core_bf16cvt.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 #include "cpu/cpu_batch_normalization_pd.hpp"
 
 namespace dnnl {
