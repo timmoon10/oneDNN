@@ -1634,7 +1634,7 @@ void jit_uni_eltwise_injector_f32<isa>::prepare_table(bool gen_table) {
         const auto &te = (*it).second; // get map entry for a given key
         const auto len = te.bcast ? vlen : sizeof(table_entry_val_t);
         for (size_t d = 0; d < len; d += sizeof(table_entry_val_t))
-            h->dd(te.val);
+            h->CodeGeneratorAArch64::dd(te.val);
 
 #ifndef NDEBUG
         // we check that the precomputed offsets match the registered ones

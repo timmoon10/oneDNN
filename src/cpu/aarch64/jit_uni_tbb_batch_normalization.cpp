@@ -196,8 +196,15 @@ struct jit_bnorm_process_relu_t {
         h->jmp(l_mask_after);
         h->align(32);
         h->L(l_relu_mask_avx2); /* [0x80 0x40 0x20 0x10 0x08 0x04 0x02 0x01] */
+
+#ifdef DNNL_X64_IMPLEMENTATION
         for (int i = 0; i < 8; ++i)
             h->dd(1 << i);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        for (int i = 0; i < 8; ++i)
+            h->CodeArray::dd(1 << i);
+        h->binCommit();
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         h->L(l_mask_after);
     }
 
