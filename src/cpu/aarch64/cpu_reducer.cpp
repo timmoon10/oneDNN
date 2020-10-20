@@ -316,6 +316,7 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
         }
     }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
+#if AARCH64_OLD_IMPLEMENTATION
     void accumulate(int nloads, int load_len, size_t base_off) {
         const int n_vregs = cpu_isa_traits<isa>::n_vregs;
         xa::XReg x_sp {IDX(rsp)};
@@ -416,10 +417,80 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
 
         CG::add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, vlen);
     }
+#else //#if AARCH64_OLD_IMPLEMENTATION
+    void accumulate(int nloads, int load_len, size_t base_off) {
+        const int n_vregs = cpu_isa_traits<isa>::n_vregs;
+        const int n_vregs_h = n_vregs / 2;
+        xa::XReg x_sp {IDX(rsp)};
+        xa::XReg x_src {IDX(reg_src)};
+        xa::ZReg z_tmp {n_vregs - 1};
+
+        assert(nloads <= n_vregs_h);
+        CG::add_imm(X_TMP_0, xa::XReg {IDX(reg_src)}, base_off, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_1, xa::XReg {IDX(reg_src)}, base_off + 8 * vlen,
+                X_DEFAULT_ADDR);
+
+        if (load_len == typesize) {
+            if (data_type == data_type::f32) {
+                for (int i = 0; i < nloads; ++i) {
+                    CG::ldr(xa::SReg(n_vregs_h + i),
+                            xa::post_ptr(X_TMP_0, typesize));
+                }
+                for (int i = 0; i < nloads; ++i) {
+                    xa::SReg s(i);
+                    CG::fadd(s, s, xa::SReg(n_vregs_h + i));
+                }
+            } else {
+                for (int i = 0; i < nloads; ++i) {
+                    xa::VReg4S v(i);
+                    CG::ldr(xa::QReg(n_vregs_h + i),
+                            xa::post_ptr(X_TMP_0, vlen));
+                }
+                for (int i = 0; i < nloads; ++i) {
+                    xa::VReg4S v(i);
+                    CG::add(v, v, xa::VReg4S(n_vregs_h + i));
+                }
+            }
+        } else if (load_len == vlen) {
+            if (vlen == 64) {
+                int i = 0;
+                /* imm index must be in the range -8 to 7. */
+                for (i = 0; i < nloads && i < 8; ++i)
+                    CG::ld1w(xa::ZRegS(n_vregs_h + i), p_lsb / xa::T_z,
+                            xa::ptr(X_TMP_0, i, xa::MUL_VL));
+                for (; i < nloads; ++i)
+                    CG::ld1w(xa::ZRegS(n_vregs_h + i), p_lsb / xa::T_z,
+                            xa::ptr(X_TMP_1, i - 8, xa::MUL_VL));
+            } else {
+                for (int i = 0; i < nloads; ++i) {
+                    CG::ld1w(xa::ZRegS(n_vregs_h + i), p_lsb / xa::T_z,
+                            xa::ptr(X_TMP_0));
+                    CG::add_imm(X_TMP_0, X_TMP_0, load_len, X_TMP_1);
+                }
+            }
+
+            for (int i = 0; i < nloads; ++i) {
+                if (data_type == data_type::f32) {
+                    CG::fadd(xa::ZRegS(i), p_lsb / xa::T_m,
+                            xa::ZRegS(n_vregs_h + i));
+                } else {
+                    CG::add(xa::ZRegS(i), p_lsb / xa::T_m,
+                            xa::ZRegS(n_vregs_h + i));
+                }
+            }
+        } else {
+            assert(!"unsupported");
+        }
+    }
+#endif //#if AARCH64_OLD_IMPLEMENTATION
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     void loop_x() {
+#ifdef DNNL_X64_IMPLEMENTATION
         const int nloads[] = {cpu_isa_traits<isa>::n_vregs, 1, 1};
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        const int nloads[] = {cpu_isa_traits<isa>::n_vregs / 2, 1, 1};
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         const int nbranches = sizeof(nloads) / sizeof(nloads[0]);
 
         const int load_len[nbranches] = {vlen, vlen, typesize};
