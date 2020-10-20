@@ -862,6 +862,7 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
         /* check whether loading 4 values at once is possible */
+#ifdef DNNL_X64_IMPLEMENTATION
         bool can_load_xmm = mayiuse(avx) && reg_unroll % 4 == 0;
         for (int ur = 1; ur < reg_unroll; ++ur)
             if (i_off[ur] != i_off[ur - 1] + 1) can_load_xmm = false;
@@ -872,6 +873,43 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
         for (int ur = 1; ur < reg_unroll; ++ur)
             if (o_off[ur] != o_off[ur - 1] + 1) can_store_xmm = false;
         const int ur_step = can_store_xmm ? 4 : 1;
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        bool can_load_xmm = mayiuse(avx) && reg_unroll % 4 == 0;
+        bool can_load_ymm = reg_unroll % 8 == 0;
+        for (int ur = 1; ur < reg_unroll; ++ur)
+            if (i_off[ur] != i_off[ur - 1] + 1) {
+                can_load_xmm = false;
+                can_load_ymm = false;
+            }
+
+        /* At the moment, scale and beta are not supported. */
+        int load_step
+                = (prb_.scale_type == scale_type_t::NONE && prb_.beta == 0.f)
+                ? (can_load_ymm ? 8 : (can_load_xmm ? 4 : 1))
+                : (can_load_xmm ? 4 : 1);
+
+        /* check whether storing 4 values at once is possible */
+        bool can_store_xmm = reg_unroll % 4 == 0;
+        bool can_store_ymm = reg_unroll % 8 == 0;
+        for (int ur = 1; ur < reg_unroll; ++ur)
+            if (o_off[ur] != o_off[ur - 1] + 1) {
+                can_store_xmm = false;
+                can_store_ymm = false;
+            }
+
+        /* At the moment, scale and beta are not supported. */
+        int ur_step
+                = (prb_.scale_type == scale_type_t::NONE && prb_.beta == 0.f)
+                ? (can_store_ymm ? 8 : (can_store_xmm ? 4 : 1))
+                : (can_store_xmm ? 4 : 1);
+
+        /* Because SVE has no load instruction for single structure,
+	   Advanced SIMD must be used. */
+        if (!can_load_xmm && can_store_xmm) ur_step = 4;
+        /* Because SVE has no store instruction for single structure,
+	   Advanced SIMD must be used. */
+        if (can_load_xmm && !can_store_xmm) load_step = 4;
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
 
         const bool interim_f32 = false
                 || utils::one_of(f32, prb_.itype, prb_.otype)
@@ -933,6 +971,10 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 for (int i = 0; i < count; i++) {
 
                     switch (load_step * itype_sz) {
+                        case 32:
+                            CG::ld1w(xa::ZRegS(tmp_ur), p_lsb_256 / xa::T_z,
+                                    xa::ptr(x_tmp_vec[i]));
+                            break;
                         case 16:
                             CG::ldr(xa::QReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
                             break;
@@ -1327,7 +1369,6 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             int count = 0;
 
             do {
-                //		std::cout << "o_off:" << o_off[ur] * otype_sz << std::endl;
                 CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
                         o_off[ur] * otype_sz, X_DEFAULT_ADDR);
                 ur += ur_step;
@@ -1336,6 +1377,10 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             for (int i = 0; i < count; i++) {
 
                 switch (ur_step * otype_sz) {
+                    case 32:
+                        CG::st1w(xa::ZRegS(tmp_ur), p_lsb_256,
+                                xa::ptr(x_tmp_vec[i]));
+                        break;
                     case 16:
                         CG::str(xa::QReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
                         break;
