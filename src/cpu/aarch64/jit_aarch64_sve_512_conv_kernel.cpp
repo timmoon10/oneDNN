@@ -1370,12 +1370,11 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         } else {
             int tmp_ofs = aux_output_offset - prev_ofs;
 
-            if (((tmp_ofs & 0x3) == 0) && (tmp_ofs < LDRWMAX)
+            if (((tmp_ofs & 0x3f) == 0) && (VL_OFS(tmp_ofs) < LDRWMAX)
                     && (tmp_ofs >= 0)) {
-                CGA64::add_imm(
-                        reg_tmp_addr, reg_tmp_addr, tmp_ofs, reg_tmp_imm);
-                CGA64::str(zreg_out(j, k), xa::ptr(reg_tmp_addr));
-                prev_ofs = prev_ofs + tmp_ofs;
+                CGA64::str(zreg_out(j, k),
+                        xa::ptr(reg_tmp_addr,
+                                static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
                 CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
                 CGA64::str(zreg_out(j, k), xa::ptr(reg_tmp_addr));
