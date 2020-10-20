@@ -238,22 +238,20 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
 template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::prepare_tail_mask() {
     if (isa >= avx512_common) {
-        size_t c_tail_mask = (1ULL << jpp.c_tail) - 1ULL;
 #ifdef DNNL_X64_IMPLEMENTATION
+        size_t c_tail_mask = (1ULL << jpp.c_tail) - 1ULL;
         mov(tmp_gpr.cvt32(), c_tail_mask);
         // The kmovw instrucion here can be translated correctly by translator
         kmovw(k_c_tail_mask, tmp_gpr.cvt32());
 #else /* #ifdef DNNL_X64_IMPLEMENTATION */
-        /*mov(tmp_gpr.cvt32(), c_tail_mask); */
-        CG::mov_imm(xa::WReg(IDX(tmp_gpr)), c_tail_mask);
-        // The kmovw instrucion here can be translated correctly by translator
-        //kmovw(k_c_tail_mask, tmp_gpr.cvt32());
-        CG::index(z_tmp0.s, 0, 1);
-        CG::mov(z_tmp1.s, 1);
-        CG::lsl(z_tmp1.s, p_512 / xa::T_m, z_tmp0.s);
-        CG::dup(z_tmp0.s, xa::WReg(IDX(tmp_gpr)));
-        CG::and_(z_tmp0.d, z_tmp0.d, z_tmp1.d);
-        CG::cmpne(xa::PRegS(IDX(k_c_tail_mask)), p_512, z_tmp0.s, 0);
+        size_t c_tail_mask = jpp.c_tail;
+        CG::mov_imm(X_TMP_0, c_tail_mask);
+        CG::dup(z_tmp0.s, W_TMP_0);
+        CG::index(z_tmp1.s, 0, 1);
+        /* PRegS(IDX(k_c_tail_mask)) keeps flags in the context 
+	   of 32-bit elements. */
+        CG::cmplt(xa::PRegS(IDX(k_c_tail_mask)), p_512 / xa::T_z, z_tmp1.s,
+                z_tmp0.s);
 #endif /* #ifdef DNNL_X64_IMPLEMENTATION */
     } else if (isa == avx) {
         static const uint32_t mask[16] = {0xffffffff, 0xffffffff, 0xffffffff,
@@ -1370,10 +1368,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             break; //NLE_US
                         case 3: //UNORD_Q
                         case 7: //ORD_Q
-                        default:
-                            assert(!"unreachable");
-                            break;
-                            break;
+                        default: assert(!"unreachable"); break;
                     }
                     CG::cpy(z_tmp0.s, p_tmp0 / xa::T_z, 255);
                     CG::not_(p_tmp0.b, P_ALL_ONE / xa::T_z, P_MSB_384.b);
@@ -2905,8 +2900,25 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                 }
             } else {
                 if (is_tail_processing(bci) && !jpp.is_c_padded) {
+#ifndef DNNL_INDIRECT_JIT_AARCH64
                     vpmovzxbd(indvr | k_c_tail_mask | T_z,
                             ptr[reg_index + step_index]);
+#else //#ifndef DNNL_INDIRECT_JIT_AARCH64
+                    xa::ZReg z_indvr(IDX(indvr));
+                    CG::pfalse(p_tmp1.b);
+                    /* 32-bit context -> 16-bit conext */
+                    CG::uzp1(p_tmp0.b, xa::PRegB(IDX(k_c_tail_mask)), p_tmp1.b);
+                    /* 16-bit context -> 8-bit conext */
+                    CG::uzp1(p_tmp0.b, p_tmp0.b, p_tmp1.b);
+                    CG::add_imm(X_DEFAULT_ADDR, xa::XReg(IDX(reg_index)),
+                            step_index, X_TMP_0);
+                    CG::ld1b(z_indvr.b, p_tmp0 / xa::T_z,
+                            xa::ptr(X_DEFAULT_ADDR));
+                    CG::zip1(z_indvr.b, z_indvr.b, z_tmp0.b);
+                    CG::zip1(z_indvr.h, z_indvr.h, z_tmp0.h);
+                    CG::uxtb(xa::ZRegS(IDX(indvr)),
+                            xa::PReg(IDX(k_c_tail_mask)) / xa::T_m, z_indvr.s);
+#endif //#ifndef DNNL_INDIRECT_JIT_AARCH64
                 } else {
 #ifdef DNNL_X64_IMPLEMENTATION
                     vpmovzxbd(indvr, ptr[reg_index + step_index]);
@@ -2916,14 +2928,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                             step_index, x_tmp_0);
                     int vlen = cpu_isa_traits<isa>::vlen;
                     if (vlen == 64) {
-                        CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
+                        CG::ldr(xa::QReg(IDX(z_tmp0)), xa::ptr(x_tmp_addr));
                         CG::zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                         CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
                         //CG::mov(p_tmp0.b, P_ALL_ONE.b);
                         CG::uxtb(xa::ZReg(IDX(indvr)).s, p_512 / xa::T_m,
                                 z_tmp0.s);
                     } else if (vlen == 32) {
-                        CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
+                        CG::ldr(xa::QReg(IDX(z_tmp0)), xa::ptr(x_tmp_addr));
                         CG::zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                         CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
                         //CG::mov(p_tmp0.b, P_ALL_ONE.b);
@@ -2931,7 +2943,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                                 z_tmp0.s);
                         CG::mov(xa::ZReg(IDX(indvr)).s, P_MSB_256 / xa::T_m, 0);
                     } else if (vlen == 16) {
-                        CG::ldr(z_tmp0, xa::ptr(x_tmp_addr));
+                        CG::ldr(xa::QReg(IDX(z_tmp0)), xa::ptr(x_tmp_addr));
                         CG::zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                         CG::zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
                         //CG::mov(p_tmp0.b, P_ALL_ONE.b);
@@ -3773,7 +3785,7 @@ void jit_uni_pool_kernel<isa>::generate() {
                 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15};
 #ifdef DNNL_X64_IMPLEMENTATION
         for (size_t i = 0; i < sizeof(_idx) / sizeof(_idx[0]); ++i)
-            dw(_idx[i]);
+            CodeArray::dw(_idx[i]);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         for (size_t i = 0; i < sizeof(_idx) / sizeof(_idx[0]); ++i)
             CodeArray::dw(_idx[i]);
