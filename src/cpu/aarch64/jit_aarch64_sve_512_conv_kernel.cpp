@@ -1348,16 +1348,27 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         return xa::ZRegS(idx);
     };
 
-    auto out_load = [=](int aux_output_offset, int idx) {
+    auto out_load = [=](int aux_output_offset, int idx, int prev_ofs) {
         int ofs = aux_output_offset;
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
             CGA64::ldr(zreg_tmp(idx),
                     xa::ptr(reg_src, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
-            CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
-            CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_tmp_addr));
+            int tmp_ofs = aux_output_offset - prev_ofs;
+
+            if (((tmp_ofs & 0x3f) == 0) && (VL_OFS(tmp_ofs) < LDRWMAX)
+                    && (tmp_ofs >= 0)) {
+                CGA64::ldr(zreg_tmp(idx),
+                        xa::ptr(reg_tmp_addr,
+                                static_cast<int32_t>(VL_OFS(tmp_ofs))));
+            } else {
+                CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
+            }
         }
+        return prev_ofs;
     };
 
     auto out_str = [=](int j, int k, int aux_output_offset, int prev_ofs) {
@@ -1389,6 +1400,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
     CGA64::ldr(reg_channel, xa::ptr(param, GET_OFF(channel)));
     CGA64::cmp(reg_channel, 0);
     CGA64::b(xa::EQ, no_update_label);
+    int prev_ofs = 0;
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
             int num_ldr = nstl::min(ur_w, num_used_zreg);
@@ -1397,21 +1409,21 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
                     size_t aux_src_offset = (size_t)typesize
                             * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j + t)
                             * jcp.ic_block;
-                    out_load(aux_src_offset, t);
+                    prev_ofs = out_load(aux_src_offset, t, prev_ofs);
                 }
             } else if (j < ur_w - num_ldr + 1) {
                 size_t aux_src_offset = (size_t)typesize
                         * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j + num_ldr
                                 - 1)
                         * jcp.ic_block;
-                out_load(aux_src_offset, j + num_ldr - 1);
+                prev_ofs = out_load(aux_src_offset, j + num_ldr - 1, prev_ofs);
             }
             CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(j));
         }
     }
 
     CGA64::L_aarch64(no_update_label);
-    int prev_ofs = 0;
+    prev_ofs = 0;
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
             size_t aux_src_offset = (size_t)typesize
