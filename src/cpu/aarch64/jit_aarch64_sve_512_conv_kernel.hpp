@@ -302,8 +302,8 @@ private:
     using reg64_t = const xa::XReg;
     enum {
         typesize = sizeof(float),
-        ker_reg_base_idx = 26,
     };
+    int ker_reg_base_idx = (jcp.nb_ic_blocking == 1) ? 16 : 24;
 
     //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
     //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
@@ -340,6 +340,8 @@ private:
 
     /* Temporary registers for ARM insts */
     reg64_t reg_prev_bcast_addr = x15;
+    reg64_t reg_prev_bcast_addr2 = x17;
+    reg64_t reg_prev_bcast_addr3 = x21;
     reg64_t reg_tmp_imm = x16;
     reg64_t reg_tmp_addr = x18;
 

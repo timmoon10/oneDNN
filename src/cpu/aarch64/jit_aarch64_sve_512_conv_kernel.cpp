@@ -1369,19 +1369,30 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         return xa::ZRegS(idx);
     };
 
-    auto out_load = [=](int aux_output_offset, int idx) {
+    auto out_load = [=](int aux_output_offset, int idx, int prev_ofs) {
         int ofs = aux_output_offset;
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
             CGA64::ldr(zreg_tmp(idx),
                     xa::ptr(reg_src, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
-            CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
-            CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_tmp_addr));
+            int tmp_ofs = aux_output_offset - prev_ofs;
+
+            if (((tmp_ofs & 0x3f) == 0) && (VL_OFS(tmp_ofs) < LDRWMAX)
+                    && (tmp_ofs >= 0)) {
+                CGA64::ldr(zreg_tmp(idx),
+                        xa::ptr(reg_tmp_addr,
+                                static_cast<int32_t>(VL_OFS(tmp_ofs))));
+            } else {
+                CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
+                CGA64::ldr(zreg_tmp(idx), xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
+            }
         }
+        return prev_ofs;
     };
 
-    auto out_str = [=](int j, int k, int aux_output_offset) {
+    auto out_str = [=](int j, int k, int aux_output_offset, int prev_ofs) {
         int ofs = aux_output_offset;
 
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
@@ -1389,9 +1400,20 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
             CGA64::str(zreg_out(j, k),
                     xa::ptr(reg_src, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
-            CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
-            CGA64::str(zreg_out(j, k), xa::ptr(reg_tmp_addr));
+            int tmp_ofs = aux_output_offset - prev_ofs;
+
+            if (((tmp_ofs & 0x3f) == 0) && (VL_OFS(tmp_ofs) < LDRWMAX)
+                    && (tmp_ofs >= 0)) {
+                CGA64::str(zreg_out(j, k),
+                        xa::ptr(reg_tmp_addr,
+                                static_cast<int32_t>(VL_OFS(tmp_ofs))));
+            } else {
+                CGA64::add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
+                CGA64::str(zreg_out(j, k), xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
+            }
         }
+        return prev_ofs;
     };
 
     xa::LabelAArch64 no_update_label;
@@ -1399,6 +1421,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
     CGA64::ldr(reg_channel, xa::ptr(param, GET_OFF(channel)));
     CGA64::cmp(reg_channel, 0);
     CGA64::b(xa::EQ, no_update_label);
+    int prev_ofs = 0;
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
             int num_ldr = nstl::min(ur_w, num_used_zreg);
@@ -1407,26 +1430,27 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
                     size_t aux_src_offset = (size_t)typesize
                             * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j + t)
                             * jcp.ic_block;
-                    out_load(aux_src_offset, t);
+                    prev_ofs = out_load(aux_src_offset, t, prev_ofs);
                 }
             } else if (j < ur_w - num_ldr + 1) {
                 size_t aux_src_offset = (size_t)typesize
                         * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j + num_ldr
                                 - 1)
                         * jcp.ic_block;
-                out_load(aux_src_offset, j + num_ldr - 1);
+                prev_ofs = out_load(aux_src_offset, j + num_ldr - 1, prev_ofs);
             }
             CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(j));
         }
     }
 
     CGA64::L_aarch64(no_update_label);
+    prev_ofs = 0;
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
             size_t aux_src_offset = (size_t)typesize
                     * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j) * jcp.ic_block;
 
-            out_str(j, k, aux_src_offset);
+            prev_ofs = out_str(j, k, aux_src_offset, prev_ofs);
         }
     }
 }
@@ -1446,7 +1470,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
     int stride_w = jcp.stride_w;
     int stride_h = jcp.stride_h;
 
-    int ker_pipeline_depth = 3;
+    int ker_pipeline_depth = 2;
     assert(ker_reg_base_idx + ker_pipeline_depth <= 31);
     assert(oc_block >= ker_pipeline_depth);
 
@@ -1483,17 +1507,31 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                     xa::ptr(aux_reg_dst,
                             static_cast<int32_t>(aux_output_offset)));
         } else {
-            int ofs;
-            ofs = aux_output_offset - prev_ofs;
+            int ofs = aux_output_offset - prev_ofs;
+            int ofs2 = aux_output_offset - (prev_ofs + 0x100);
+            int ofs3 = aux_output_offset - (prev_ofs + 0x200);
             if (((ofs & 0x3) == 0) && (ofs < LDRWMAX) && (ofs >= 0)) {
-
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(ofs)));
+            } else if (((ofs2 & 0x3) == 0) && (ofs2 < LDRWMAX) && (ofs2 >= 0)
+                    && (prev_ofs != 0)) {
+                CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
+                        xa::ptr(reg_prev_bcast_addr2,
+                                static_cast<int32_t>(ofs2)));
+            } else if (((ofs3 & 0x3) == 0) && (ofs3 < LDRWMAX) && (ofs3 >= 0)
+                    && (prev_ofs != 0)) {
+                CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
+                        xa::ptr(reg_prev_bcast_addr3,
+                                static_cast<int32_t>(ofs3)));
             } else {
                 ofs = aux_output_offset;
                 CGA64::add_imm(
                         reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr2, aux_reg_dst, ofs + 0x100,
+                        reg_tmp_imm);
+                CGA64::add_imm(reg_prev_bcast_addr3, aux_reg_dst, ofs + 0x200,
+                        reg_tmp_imm);
 
                 CGA64::ld1rw(xa::ZRegS(zreg_idx), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr));
@@ -1583,13 +1621,15 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                                 0, r_overflow - ki * dilate_w));
 
                 int bcast_idx = 0;
-                int num_ker_pipeline = nstl::min(
-                        ((jj_end - jj_start) / stride_w), ker_pipeline_depth);
+                int bcast_pipeline_depth
+                        = 32 - (ker_reg_base_idx + ker_pipeline_depth);
+                int num_bcast_pipeline = nstl::min(
+                        ((jj_end - jj_start) / stride_w), bcast_pipeline_depth);
                 for (int jj = jj_start; jj < jj_end; jj += stride_w) {
                     assert((jj + l_pad - ki * dilate_w) % stride_w == 0);
-                    if (num_ker_pipeline > 1) {
+                    if (num_bcast_pipeline > 1) {
                         if (jj == jj_start) {
-                            for (int i = 0; i < num_ker_pipeline; i++) {
+                            for (int i = 0; i < num_bcast_pipeline; i++) {
                                 int jj_skip = jj + stride_w * i;
                                 int aux_dst_offset = typesize
                                         * (((jj_skip + l_pad - ki * dilate_w)
@@ -1599,17 +1639,17 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                                 prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
                                         bcast_idx + i);
                             }
-                        } else if (jj
-                                < jj_end - (num_ker_pipeline - 1) * stride_w) {
+                        } else if (jj < jj_end
+                                        - (num_bcast_pipeline - 1) * stride_w) {
                             int jj_skip
-                                    = jj + (num_ker_pipeline - 1) * stride_w;
+                                    = jj + (num_bcast_pipeline - 1) * stride_w;
                             int aux_dst_offset = typesize
                                     * (((jj_skip + l_pad - ki * dilate_w)
                                                / stride_w)
                                                     * jcp.oc_block
                                             + oc);
                             prev_ofs = bcast_load(aux_dst_offset, prev_ofs,
-                                    bcast_idx + (num_ker_pipeline - 1));
+                                    bcast_idx + (num_bcast_pipeline - 1));
                         }
                     } else {
                         int aux_dst_offset = typesize
@@ -2337,7 +2377,7 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
 
     jcp.ur_w = jcp.stride_w;
 
-    int regs = 26;
+    int regs = 24;
     if (jcp.iw <= regs)
         jcp.ur_w = jcp.iw;
     else {
@@ -2438,7 +2478,7 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
 #endif
         if (use_expl_bcast && !jcp.large_w_filter) {
             jcp.kernel_kind = embd_bcast;
-            jcp.ur_w = nstl::min(jcp.iw, regs);
+            jcp.ur_w = nstl::min(jcp.iw, 16); //regs);
             jcp.nb_ic_blocking = jcp.nb_oc_blocking = 1;
 #if 0
             if (!(jcp.kw > 3
