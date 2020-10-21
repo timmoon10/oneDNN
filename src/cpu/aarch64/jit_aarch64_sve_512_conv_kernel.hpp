@@ -354,8 +354,8 @@ private:
 
     const xa::PReg reg_p_all_ones = p2;
 
-    void prefetch(
-            const std::string prfop, int level, reg64_t in, long long int ofs) {
+    long long int prefetch(const std::string prfop, int level, reg64_t in,
+            long long int ofs, long long int prev_ofs) {
         bool for_load;
         if (prfop == "LD") {
             for_load = true;
@@ -381,11 +381,16 @@ private:
                 default: assert(!"invalid prfop"); break;
             }
 
+            long long int tmp_ofs = ofs - prev_ofs;
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
                 CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+            } else if ((tmp_ofs <= PRFMMAX) && (tmp_ofs >= 0)) {
+                CGA64::prfm(op,
+                        xa::ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
             } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfm(op, xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
             }
         } else {
             xa::PrfopSve op_sve = xa::PLDL1KEEP_SVE;
@@ -405,15 +410,23 @@ private:
                 default: assert(!"invalid prfop"); break;
             }
 
+            long long int tmp_ofs = ofs - prev_ofs;
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
                 CGA64::prfw(op_sve, reg_p_all_ones,
                         xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+            } else if ((VL_OFS(tmp_ofs) <= PRFWMAX)
+                    && (VL_OFS(tmp_ofs) >= (-1 * PRFWMAX - 1))) {
+                CGA64::prfw(op_sve, reg_p_all_ones,
+                        xa::ptr(reg_tmp_addr,
+                                static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
             }
         }
+        return prev_ofs;
     }
 
     xa::ZReg reg_wei = xa::ZReg(31);

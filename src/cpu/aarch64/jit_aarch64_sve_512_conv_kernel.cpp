@@ -1306,6 +1306,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::prepare_output(
         return xa::ZRegS(idx);
     };
 
+    long long int prev_ofs = 0;
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
             xa::ZRegS zreg = zreg_out_s(j, k);
@@ -1314,7 +1315,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::prepare_output(
                     * ((size_t)k * jcp.ih * jcp.iw * jcp.id + j) * jcp.ic_block;
 
             std::string op = "LD";
-            prefetch(op, 2, reg_src_prf, aux_src_offset);
+            prev_ofs = prefetch(op, 2, reg_src_prf, aux_src_offset, prev_ofs);
         }
     }
 }
