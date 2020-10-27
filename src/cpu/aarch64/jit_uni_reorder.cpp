@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2018-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -30,8 +31,8 @@
 #include "cpu/cpu_primitive.hpp"
 #include "cpu/cpu_reorder_pd.hpp"
 
-#include "cpu/aarch64/jit_aarch64_sve_512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 // #define TR_DEBUG
 #if defined(TR_DEBUG)
@@ -333,17 +334,20 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         cvt_z_u8_s32(startIdx, regNum);
                     break;
                 case s8:
-                    if (idt == f32)
+                    if (idt == bf16) cvt_z_bf16_f32(startIdx, regNum);
+                    if (utils::one_of(idt, bf16, f32))
                         cvt_z_f32_s32(startIdx, regNum);
-                    else if (idt == f32 || idt == s32) {
-                        assert(regNum <= z_tmp_vec.size());
-                    }
-                    if (idt == u8) {
-                        assert(false); // under implementation
-                    }
+                    if (utils::one_of(idt, bf16, f32, s32))
+                        cvt_z_s32_s8(startIdx, regNum);
+                    if (idt == u8) cvt_z_u8_s8(startIdx, regNum);
                     break;
                 case u8:
-                    assert(false); // under implementation
+                    if (idt == bf16) cvt_z_bf16_f32(startIdx, regNum);
+                    if (utils::one_of(idt, bf16, f32))
+                        cvt_z_f32_s32(startIdx, regNum);
+                    if (utils::one_of(idt, bf16, f32, s32))
+                        cvt_z_s32_u8(startIdx, regNum);
+                    if (idt == s8) cvt_z_s8_u8(startIdx, regNum);
                     break;
                 default: assert(!"unreachable");
             };
@@ -389,54 +393,51 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             if (interim_f32) cvt2ps(Ymm(i), Ymm(i), prb_.itype);
         }
 #else //#if DNNL_X64_IMPLEMENTATION
-        switch (unroll * itype_sz) {
-            case 32:
-                assert(unroll == 8);
+        CG::add_imm(X_TMP_0, xa::XReg(x_ptr_in_off), i_off * itype_sz,
+                X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_DEFAULT_ADDR);
 
-                CG::add_imm(X_TMP_0, xa::XReg(x_ptr_in_off), i_off * itype_sz,
-                        X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_DEFAULT_ADDR);
+        if (unroll * itype_sz == 32)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::ld1w(xa::ZRegS {i}, p_lsb_256 / xa::T_z,
+                        xa::ptr(x_tmp_vec[i]));
+        else if (unroll * itype_sz == 16)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::ldr(xa::QReg {i}, xa::ptr(x_tmp_vec[i]));
+        else if (unroll * itype_sz == 8)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::ldr(xa::DReg {i}, xa::ptr(x_tmp_vec[i]));
 
-                CG::ld1w(xa::ZRegS(0), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
-                CG::ld1w(xa::ZRegS(1), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
-                CG::ld1w(xa::ZRegS(2), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_2));
-                CG::ld1w(xa::ZRegS(3), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_3));
+        CG::add_imm(X_TMP_0, X_TMP_3, is(0) * itype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_DEFAULT_ADDR);
 
-                CG::add_imm(X_TMP_0, X_TMP_3, is(0) * itype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, is(0) * itype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, is(0) * itype_sz, X_DEFAULT_ADDR);
-
-                CG::ld1w(xa::ZRegS(4), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
-                CG::ld1w(xa::ZRegS(5), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
-                CG::ld1w(xa::ZRegS(6), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_2));
-                CG::ld1w(xa::ZRegS(7), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_3));
-                break;
-
-            case 16:
-            case 8:
-                assert(unroll == 8);
-                assert(is(0) * itype_sz < 255);
-
-                CG::add_imm(X_TMP_0, xa::XReg(x_ptr_in_off), i_off * itype_sz,
-                        X_DEFAULT_ADDR);
-                for (int i = 0; i < unroll; i++) {
-                    if (unroll * itype_sz == 16) {
-                        CG::ldr(xa::QReg(i),
-                                xa::post_ptr(X_TMP_0, is(0) * itype_sz));
-                    } else {
-                        CG::ldr(xa::DReg(i), xa::ptr(X_TMP_0));
-                    }
-                }
-
-                break;
-
-            default: assert(!"unreachable");
-        }
+        if (unroll * itype_sz == 32)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::ld1w(xa::ZRegS {4 + i}, p_lsb_256 / xa::T_z,
+                        xa::ptr(x_tmp_vec[i]));
+        else if (unroll * itype_sz == 16)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::ldr(xa::QReg {4 + i}, xa::ptr(x_tmp_vec[i]));
+        else if (unroll * itype_sz == 8)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::ldr(xa::DReg {4 + i}, xa::ptr(x_tmp_vec[i]));
 
         if (interim_f32) cvt2ps(0, unroll, prb_.itype);
+
+#if 0
+	/* Deubg code */
+	index(z0.s, 0, 1);
+	mov(z0.s, P_MSB_256/T_m, 0);
+	mov(z_tmp_vec[0].s, 16);
+	for(uint32_t i=1; i<8; i++) {
+	  add(xa::ZRegS{i}, xa::ZRegS{i-1}, z_tmp_vec[0].s);
+	  mov(xa::ZRegS{i}, P_MSB_256/T_m, 0);
+	}
+#endif
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 #ifdef DNNL_X64_IMPLEMENTATION
@@ -444,22 +445,6 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             vunpcklps(Ymm(unroll + i), Ymm(2 * i), Ymm(2 * i + 1));
             vunpckhps(Ymm(i), Ymm(2 * i), Ymm(2 * i + 1));
         }
-#else //#ifdef DNNL_X64_IMPLEMENTATION
-        assert(unroll == 8);
-        for (int i = 0; i < unroll / 2; i++) {
-            CG::trn2(
-                    z_tmp_vec[2 * i].s, xa::ZRegS(2 * i), xa::ZRegS(2 * i + 1));
-            CG::trn1(z_tmp_vec[2 * i + 1].s, xa::ZRegS(2 * i),
-                    xa::ZRegS(2 * i + 1));
-        }
-        for (int i = 0; i < unroll / 2; i++) {
-            CG::trn1(xa::ZRegD(unroll + i), z_tmp_vec[2 * i + 1].d,
-                    z_tmp_vec[2 * i].d);
-            CG::trn2(xa::ZRegD(i), z_tmp_vec[2 * i + 1].d, z_tmp_vec[2 * i].d);
-        }
-#endif //#ifdef DNNL_X64_IMPLEMENTATION
-
-#ifdef DNNL_X64_IMPLEMENTATION
         const unsigned int lfloat = 0x44;
         const unsigned int ufloat = 0xee;
         for (int i = 0; i < unroll / 2; i++) {
@@ -467,61 +452,51 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             vshufps(Ymm(unroll / 2 + 2 * i), Ymm(j), Ymm(j + 1), lfloat);
             vshufps(Ymm(unroll / 2 + 2 * i + 1), Ymm(j), Ymm(j + 1), ufloat);
         }
-#else //#ifdef DNNL_X64_IMPLEMENTATION
-        for (int i = 0; i < unroll / 2; i++) {
-            int j = i % 2 == 0 ? unroll + i : i - 1;
-            CG::trn1(xa::ZRegD(unroll / 2 + 2 * i), xa::ZRegD(j),
-                    xa::ZRegD(j + 1));
-            CG::trn2(xa::ZRegD(unroll / 2 + 2 * i + 1), xa::ZRegD(j),
-                    xa::ZRegD(j + 1));
-        }
-#endif //#ifdef DNNL_X64_IMPLEMENTATION
-
-#ifdef DNNL_X64_IMPLEMENTATION
         const unsigned int lquad = 0x20;
         for (int i = 0; i < unroll / 2; i++)
             vperm2f128(Ymm(i), Ymm(unroll / 2 + i), Ymm(unroll + i), lquad);
-#else //#ifdef DNNL_X64_IMPLEMENTATION
-        CG::ptrue(P_TMP_0.d, xa::VL4);
-        CG::ptrue(P_TMP_1.d, xa::VL2);
-        // p0 - p15 are ok for "bic".
-        CG::bic(P_TMP_0.b, P_ALL_ONE / xa::T_z, P_TMP_0.b, P_TMP_1.b);
-
-        CG::mov(z_tmp0.d, CG::z8.d);
-        CG::mov(z_tmp1.d, CG::z9.d);
-        CG::mov(z_tmp2.d, CG::z10.d);
-        CG::mov(z_tmp3.d, CG::z11.d);
-
-        CG::insr(z_tmp0.d, CG::d0); // Insert dummy 64-bit.
-        CG::insr(z_tmp1.d, CG::d0); // Insert dummy 64-bit.
-        CG::insr(z_tmp2.d, CG::d0); // Insert dummy 64-bit.
-        CG::insr(z_tmp3.d, CG::d0); // Insert dummy 64-bit.
-
-        CG::insr(z_tmp0.d, CG::d0); // Insert dummy 64-bit.
-        CG::insr(z_tmp1.d, CG::d0); // Insert dummy 64-bit.
-        CG::insr(z_tmp2.d, CG::d0); // Insert dummy 64-bit.
-        CG::insr(z_tmp3.d, CG::d0); // Insert dummy 64-bit.
-
-        // p0 - p15 are OK for "sel".
-        CG::sel(CG::z0.d, P_TMP_0, z_tmp0.d, CG::z4.d);
-        CG::sel(CG::z1.d, P_TMP_0, z_tmp1.d, CG::z5.d);
-        CG::sel(CG::z2.d, P_TMP_0, z_tmp2.d, CG::z6.d);
-        CG::sel(CG::z3.d, P_TMP_0, z_tmp3.d, CG::z7.d);
-#endif //#ifdef DNNL_X64_IMPLEMENTATION
-
-#ifdef DNNL_X64_IMPLEMENTATION
         const unsigned int uquad = 0x31;
         for (int i = unroll / 2; i < unroll; i++)
             vperm2f128(Ymm(i), Ymm(i), Ymm(unroll / 2 + i), uquad);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
-        CG::ext(xa::ZRegB(4), xa::ZRegB(4), 16);
-        CG::ext(xa::ZRegB(5), xa::ZRegB(5), 16);
-        CG::ext(xa::ZRegB(6), xa::ZRegB(6), 16);
-        CG::ext(xa::ZRegB(7), xa::ZRegB(7), 16);
-        CG::sel(xa::ZRegD(4), P_TMP_0, xa::ZRegD(8), xa::ZRegD(4));
-        CG::sel(xa::ZRegD(5), P_TMP_0, xa::ZRegD(9), xa::ZRegD(5));
-        CG::sel(xa::ZRegD(6), P_TMP_0, xa::ZRegD(10), xa::ZRegD(6));
-        CG::sel(xa::ZRegD(7), P_TMP_0, xa::ZRegD(11), xa::ZRegD(7));
+        ptrue(p_tmp0.s, xa::VL4);
+        /* 1st turn */
+        for (uint32_t i = 0; i < unroll / 2; i++) {
+            trn1(z_tmp_vec[i].s, xa::ZRegS {2 * i}, xa::ZRegS {2 * i + 1});
+            trn2(z_tmp_vec[unroll / 2 + i].s, xa::ZRegS {2 * i},
+                    xa::ZRegS {2 * i + 1});
+        }
+
+        /* 2nd turn */
+        trn1(z4.d, z_tmp_vec[0].d, z_tmp_vec[1].d);
+        trn1(z5.d, z_tmp_vec[4].d, z_tmp_vec[5].d);
+        trn2(z6.d, z_tmp_vec[0].d, z_tmp_vec[1].d);
+        trn2(z7.d, z_tmp_vec[4].d, z_tmp_vec[5].d);
+        trn1(z_tmp_vec[0].d, z_tmp_vec[2].d, z_tmp_vec[3].d);
+        trn1(z_tmp_vec[1].d, z_tmp_vec[6].d, z_tmp_vec[7].d);
+        trn2(z_tmp_vec[2].d, z_tmp_vec[2].d, z_tmp_vec[3].d);
+        trn2(z_tmp_vec[3].d, z_tmp_vec[6].d, z_tmp_vec[7].d);
+
+        /* 3rd turn */
+        for (uint32_t i = 0; i < unroll / 2; i++) {
+            CG::mov(xa::ZRegD {i}, xa::ZRegD {unroll / 2 + i});
+            CG::mov(z_tmp_vec[unroll / 2 + i].d, z_tmp_vec[i].d);
+        }
+
+        /* 4th turn */
+        for (uint32_t i = 0; i < unroll / 2; i++) {
+            xa::ZRegB z {unroll / 2 + i};
+            ext(z, z, 16);
+            ext(z_tmp_vec[unroll / 2 + i].b, z_tmp_vec[unroll / 2 + i].b, 48);
+        }
+
+        /* 5th turn */
+        for (uint32_t i = 0; i < unroll / 2; i++) {
+            xa::ZRegS z0 {i};
+            xa::ZRegS z1 {unroll / 2 + i};
+            sel(z0, p_tmp0.s, z0, z_tmp_vec[unroll / 2 + i].s);
+            sel(z1, p_tmp0, z1, z_tmp_vec[i].s);
+        }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
         if (need_saturation) {
@@ -539,110 +514,94 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             store(o_addr(o_off + i * os(1)), Ymm(i), unroll * otype_sz);
         }
 #else //#if DNNL_X64_IMPLEMENTATION
-        assert(prb_.otype == f32);
-
         if (prb_.otype != f32)
             cvt2odt(0, unroll, prb_.otype, interim_f32 ? f32 : prb_.itype);
 
-        switch (unroll * otype_sz) {
-            case 32:
-                assert(unroll == 8);
+        CG::add_imm(X_TMP_0, xa::XReg(x_ptr_out_off), o_off * otype_sz,
+                X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_DEFAULT_ADDR);
 
-                CG::add_imm(X_TMP_0, xa::XReg(x_ptr_out_off), o_off * otype_sz,
-                        X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_DEFAULT_ADDR);
+        if (unroll * otype_sz == 32)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::st1w(xa::ZRegS {i}, p_lsb_256 / xa::T_z,
+                        xa::ptr(x_tmp_vec[i]));
+        else if (unroll * otype_sz == 16)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::str(xa::QReg {i}, xa::ptr(x_tmp_vec[i]));
+        else if (unroll * otype_sz == 8)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::str(xa::DReg {i}, xa::ptr(x_tmp_vec[i]));
 
-                CG::st1w(xa::ZRegS(0), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
-                CG::st1w(xa::ZRegS(1), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
-                CG::st1w(xa::ZRegS(2), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_2));
-                CG::st1w(xa::ZRegS(3), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_3));
+        CG::add_imm(X_TMP_0, X_TMP_3, os(1) * otype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_DEFAULT_ADDR);
 
-                CG::add_imm(X_TMP_0, X_TMP_3, os(1) * otype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_2, X_TMP_1, os(1) * otype_sz, X_DEFAULT_ADDR);
-                CG::add_imm(X_TMP_3, X_TMP_2, os(1) * otype_sz, X_DEFAULT_ADDR);
-
-                CG::st1w(xa::ZRegS(4), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_0));
-                CG::st1w(xa::ZRegS(5), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_1));
-                CG::st1w(xa::ZRegS(6), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_2));
-                CG::st1w(xa::ZRegS(7), p_lsb_256 / xa::T_z, xa::ptr(X_TMP_3));
-                break;
-
-            case 16:
-            case 8:
-                assert(unroll == 8);
-
-                CG::add_imm(X_DEFAULT_ADDR, xa::XReg(x_ptr_out_off),
-                        o_off * otype_sz, X_TMP_0);
-                for (int i = 0; i < unroll; i++) {
-                    if (unroll * otype_sz == 16) {
-                        CG::str(xa::QReg(0), xa::ptr(X_DEFAULT_ADDR));
-                    } else {
-                        CG::str(xa::DReg(0), xa::ptr(X_DEFAULT_ADDR));
-                    }
-                }
-                break;
-
-            default: assert(!"unreachable");
-        }
-    };
+        if (unroll * otype_sz == 32)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::st1w(xa::ZRegS {4 + i}, p_lsb_256 / xa::T_z,
+                        xa::ptr(x_tmp_vec[i]));
+        else if (unroll * otype_sz == 16)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::str(xa::QReg {4 + i}, xa::ptr(x_tmp_vec[i]));
+        else if (unroll * otype_sz == 8)
+            for (uint32_t i = 0; i < 4; i++)
+                CG::str(xa::DReg {4 + i}, xa::ptr(x_tmp_vec[i]));
 #endif //#if DNNL_X64_IMPLEMENTATION
+    }
 
-        bool can_do_tr8x8() {
-            using namespace data_type;
+    bool can_do_tr8x8() {
+        using namespace data_type;
 
-            return mayiuse(avx2) && prb_.ndims >= 2
-                    && ((utils::one_of(prb_.itype, u8, s8, s32, f32, bf16)
-                            && utils::one_of(
-                                    prb_.otype, u8, s8, s32, f32, bf16)))
-                    && utils::everyone_is(8, n(0), n(1))
-                    && utils::everyone_is(1, os(0), is(1))
-                    && prb_.scale_type == scale_type_t::NONE
-                    && prb_.beta == 0.f;
+        return mayiuse(avx2) && prb_.ndims >= 2
+                && ((utils::one_of(prb_.itype, u8, s8, s32, f32, bf16)
+                        && utils::one_of(prb_.otype, u8, s8, s32, f32, bf16)))
+                && utils::everyone_is(8, n(0), n(1))
+                && utils::everyone_is(1, os(0), is(1))
+                && prb_.scale_type == scale_type_t::NONE && prb_.beta == 0.f;
+    }
+
+    bool process_unroll_tr8x8(int len) {
+        if (!can_do_tr8x8()) return false;
+
+        const int step_size = n(0) * n(1);
+        int i_off = 0, o_off = 0;
+        for (int off = 0; off < len; off += step_size) {
+            step(off, i_off, o_off, i_off, o_off, step_size);
+            tr8x8_avx2(i_off, o_off);
         }
 
-        bool process_unroll_tr8x8(int len) {
-            if (!can_do_tr8x8()) return false;
+        return true;
+    }
 
-            const int step_size = n(0) * n(1);
-            int i_off = 0, o_off = 0;
-            for (int off = 0; off < len; off += step_size) {
-                step(off, i_off, o_off, i_off, o_off, step_size);
-                tr8x8_avx2(i_off, o_off);
-            }
-
-            return true;
-        }
-
-        template <cpu_isa_t isa>
-        bool process_direct_copy(int len) {
-            using namespace data_type;
+    template <cpu_isa_t isa>
+    bool process_direct_copy(int len) {
+        using namespace data_type;
 
 #ifdef DNNL_X64_IMPLEMENTATION
-            using Vmm = typename cpu_isa_traits<isa>::Vmm;
+        using Vmm = typename cpu_isa_traits<isa>::Vmm;
 #endif
-            const int simd_w = cpu_isa_traits<isa>::vlen / itype_sz;
+        const int simd_w = cpu_isa_traits<isa>::vlen / itype_sz;
 
-            bool can_do = true && mayiuse(isa)
-                    && utils::everyone_is(1, os(0), is(0))
-                    && (false || prb_.itype == prb_.otype
-                            || (prb_.itype == s32 && prb_.otype == f32)
-                            || (prb_.itype == f32 && prb_.otype == s32))
-                    && len % simd_w == 0 && n(0) % len == 0
-                    && prb_.scale_type == scale_type_t::NONE
-                    && prb_.beta == 0.f;
-            if (!can_do) return false;
+        bool can_do = true && mayiuse(isa)
+                && utils::everyone_is(1, os(0), is(0))
+                && (false || prb_.itype == prb_.otype
+                        || (prb_.itype == s32 && prb_.otype == f32)
+                        || (prb_.itype == f32 && prb_.otype == s32))
+                && len % simd_w == 0 && n(0) % len == 0
+                && prb_.scale_type == scale_type_t::NONE && prb_.beta == 0.f;
+        if (!can_do) return false;
 
-            for (int off = 0; off < len;) {
-                // TODO: we need extra reg for proper saturation if otype == s32
-                const int unroll = nstl::min(
-                        16 - (prb_.otype == s32), (len - off) / simd_w);
+        for (int off = 0; off < len;) {
+            // TODO: we need extra reg for proper saturation if otype == s32
+            const int unroll
+                    = nstl::min(16 - (prb_.otype == s32), (len - off) / simd_w);
 
 #ifdef DNNL_X64_IMPLEMENTATION
-                for (int ur = 0; ur < unroll; ++ur)
-                    uni_vmovups(Vmm(ur), i_addr(off + ur * simd_w));
+            for (int ur = 0; ur < unroll; ++ur)
+                uni_vmovups(Vmm(ur), i_addr(off + ur * simd_w));
 #else //#ifdef DNNL_X64_IMPLEMENTATION
             int ur = 0;
             int tmp_ur = 0;
@@ -671,16 +630,16 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
-                if (prb_.itype != prb_.otype) {
+            if (prb_.itype != prb_.otype) {
 #ifdef DNNL_X64_IMPLEMENTATION
-                    for (int ur = 0; ur < unroll; ++ur) {
-                        if (prb_.itype == s32 && prb_.otype == f32)
-                            uni_vcvtdq2ps(Vmm(ur), Vmm(ur));
-                        else if (prb_.itype == f32 && prb_.otype == s32)
-                            uni_vcvtps2dq(Vmm(ur), Vmm(ur));
-                        else
-                            assert(!"unreachable");
-                    }
+                for (int ur = 0; ur < unroll; ++ur) {
+                    if (prb_.itype == s32 && prb_.otype == f32)
+                        uni_vcvtdq2ps(Vmm(ur), Vmm(ur));
+                    else if (prb_.itype == f32 && prb_.otype == s32)
+                        uni_vcvtps2dq(Vmm(ur), Vmm(ur));
+                    else
+                        assert(!"unreachable");
+                }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 const int vlen = cpu_isa_traits<isa>::vlen;
                 for (int ur = 0; ur < unroll; ++ur) {
@@ -710,11 +669,11 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         assert(!"unreachable");
                 }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                }
+            }
 
 #ifdef DNNL_X64_IMPLEMENTATION
-                for (int ur = 0; ur < unroll; ++ur)
-                    uni_vmovups(o_addr(off + ur * simd_w), Vmm(ur));
+            for (int ur = 0; ur < unroll; ++ur)
+                uni_vmovups(o_addr(off + ur * simd_w), Vmm(ur));
 #else //#ifdef DNNL_X64_IMPLEMENTATION
             ur = 0;
             tmp_ur = 0;
@@ -743,41 +702,40 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
             }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
-                off += unroll * simd_w;
-            }
-
-            return true;
+            off += unroll * simd_w;
         }
 
-        void process_unroll_generic_step(int reg_unroll, const int *i_off,
-                const int *o_off, const int *s_off) {
-            using namespace data_type;
+        return true;
+    }
+
+    void process_unroll_generic_step(int reg_unroll, const int *i_off,
+            const int *o_off, const int *s_off) {
+        using namespace data_type;
 
 #ifdef DNNL_X64_IMPLEMENTATION
-            auto cvt2ps = [=](const Xmm &dst, const Operand &src,
-                                  data_type_t idt) {
-                Xmm dst_pure = Xmm(dst.getIdx());
-                switch (idt) {
-                    case f32:
-                        if (src.isMEM() || src.getIdx() != dst.getIdx())
-                            vmovups(dst, src);
-                        break;
-                    case bf16:
-                        vpmovzxwd(dst, src);
-                        vpslld(dst, dst, 0x10);
-                        break;
-                    case s32: vcvtdq2ps(dst, src); break;
-                    case s8:
-                        vpmovsxbd(dst, src);
-                        vcvtdq2ps(dst_pure, dst);
-                        break;
-                    case u8:
-                        vpmovzxbd(dst, src);
-                        vcvtdq2ps(dst_pure, dst);
-                        break;
-                    default: assert(!"unreachable");
-                }
-            };
+        auto cvt2ps = [=](const Xmm &dst, const Operand &src, data_type_t idt) {
+            Xmm dst_pure = Xmm(dst.getIdx());
+            switch (idt) {
+                case f32:
+                    if (src.isMEM() || src.getIdx() != dst.getIdx())
+                        vmovups(dst, src);
+                    break;
+                case bf16:
+                    vpmovzxwd(dst, src);
+                    vpslld(dst, dst, 0x10);
+                    break;
+                case s32: vcvtdq2ps(dst, src); break;
+                case s8:
+                    vpmovsxbd(dst, src);
+                    vcvtdq2ps(dst_pure, dst);
+                    break;
+                case u8:
+                    vpmovzxbd(dst, src);
+                    vcvtdq2ps(dst_pure, dst);
+                    break;
+                default: assert(!"unreachable");
+            }
+        };
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         auto cvt2ps = [=](const uint32_t startIdx, const uint32_t regNum,
                               data_type_t idt) {
@@ -801,55 +759,54 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 #ifdef DNNL_X64_IMPLEMENTATION
-            auto cvt2odt = [=](const Xmm &xmm, data_type_t odt,
-                                   data_type_t idt) {
-                switch (odt) {
-                    case bf16:
-                        if (idt == f32) {
-                            if (mayiuse(avx512_core_bf16)) {
-                                vcvtneps2bf16(xmm, xmm);
-                            } else {
-                                bf16_emu_->vcvtneps2bf16(
-                                        Ymm(xmm.getIdx()), Zmm(xmm.getIdx()));
-                            }
+        auto cvt2odt = [=](const Xmm &xmm, data_type_t odt, data_type_t idt) {
+            switch (odt) {
+                case bf16:
+                    if (idt == f32) {
+                        if (mayiuse(avx512_core_bf16)) {
+                            vcvtneps2bf16(xmm, xmm);
+                        } else {
+                            bf16_emu_->vcvtneps2bf16(
+                                    Ymm(xmm.getIdx()), Zmm(xmm.getIdx()));
                         }
-                        break;
-                    case s32:
-                        if (idt == f32)
-                            vcvtps2dq(xmm, xmm);
-                        else if (idt == s8)
-                            vpmovsxbd(xmm, xmm);
-                        else if (idt == u8)
-                            vpmovzxbd(xmm, xmm);
-                        break;
-                    case s8:
-                        if (idt == f32) vcvtps2dq(xmm, xmm);
-                        if (idt == f32 || idt == s32) {
-                            if (mayiuse(avx512_core)) {
-                                vpmovsdb(xmm, xmm);
-                            } else {
-                                vpackssdw(xmm, xmm, xmm_zero);
-                                vpacksswb(xmm, xmm, xmm_zero);
-                            }
+                    }
+                    break;
+                case s32:
+                    if (idt == f32)
+                        vcvtps2dq(xmm, xmm);
+                    else if (idt == s8)
+                        vpmovsxbd(xmm, xmm);
+                    else if (idt == u8)
+                        vpmovzxbd(xmm, xmm);
+                    break;
+                case s8:
+                    if (idt == f32) vcvtps2dq(xmm, xmm);
+                    if (idt == f32 || idt == s32) {
+                        if (mayiuse(avx512_core)) {
+                            vpmovsdb(xmm, xmm);
+                        } else {
+                            vpackssdw(xmm, xmm, xmm_zero);
+                            vpacksswb(xmm, xmm, xmm_zero);
                         }
-                        if (idt == u8) vpminub(xmm, xmm, xmm_4x127b);
-                        break;
-                    case u8:
-                        if (idt == f32) vcvtps2dq(xmm, xmm);
-                        if (idt == f32 || idt == s32) {
-                            if (mayiuse(avx512_core)) {
-                                vpmaxsd(xmm, xmm, xmm_zero);
-                                vpmovusdb(xmm, xmm);
-                            } else {
-                                vpackssdw(xmm, xmm, xmm_zero);
-                                vpackuswb(xmm, xmm, xmm_zero);
-                            }
+                    }
+                    if (idt == u8) vpminub(xmm, xmm, xmm_4x127b);
+                    break;
+                case u8:
+                    if (idt == f32) vcvtps2dq(xmm, xmm);
+                    if (idt == f32 || idt == s32) {
+                        if (mayiuse(avx512_core)) {
+                            vpmaxsd(xmm, xmm, xmm_zero);
+                            vpmovusdb(xmm, xmm);
+                        } else {
+                            vpackssdw(xmm, xmm, xmm_zero);
+                            vpackuswb(xmm, xmm, xmm_zero);
                         }
-                        if (idt == s8) vpmaxsb(xmm, xmm, xmm_zero);
-                        break;
-                    default: assert(!"unreachable");
-                }
-            };
+                    }
+                    if (idt == s8) vpmaxsb(xmm, xmm, xmm_zero);
+                    break;
+                default: assert(!"unreachable");
+            }
+        };
 #else //#ifdef DNNL_X64_IMPLEMENTATION
         auto cvt2odt = [=](const uint32_t startIdx, const uint32_t regNum,
                                data_type_t odt, data_type_t idt) {
@@ -881,63 +838,100 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 #ifdef DNNL_X64_IMPLEMENTATION
-            auto load = [=](const Xmm &xmm, const Address &addr, int size) {
-                switch (size) {
-                    case 16: movups(xmm, addr); break;
-                    case 8: movsd(xmm, addr); break;
-                    case 4: movss(xmm, addr); break;
-                    case 2: pinsrw(xmm, addr, 0x0); break;
-                    case 1: pinsrb(xmm, addr, 0x0); break;
-                    default: assert(!"unreachable");
-                }
-            };
+        auto load = [=](const Xmm &xmm, const Address &addr, int size) {
+            switch (size) {
+                case 16: movups(xmm, addr); break;
+                case 8: movsd(xmm, addr); break;
+                case 4: movss(xmm, addr); break;
+                case 2: pinsrw(xmm, addr, 0x0); break;
+                case 1: pinsrb(xmm, addr, 0x0); break;
+                default: assert(!"unreachable");
+            }
+        };
 
-            auto store = [=](const Address &addr, const Xmm &xmm, int size) {
-                switch (size) {
-                    case 16: movups(addr, xmm); break;
-                    case 8: movsd(addr, xmm); break;
-                    case 4: movss(addr, xmm); break;
-                    case 2: pextrw(addr, xmm, 0x0); break;
-                    case 1: pextrb(addr, xmm, 0x0); break;
-                    default: assert(!"unreachable");
-                }
-            };
+        auto store = [=](const Address &addr, const Xmm &xmm, int size) {
+            switch (size) {
+                case 16: movups(addr, xmm); break;
+                case 8: movsd(addr, xmm); break;
+                case 4: movss(addr, xmm); break;
+                case 2: pextrw(addr, xmm, 0x0); break;
+                case 1: pextrb(addr, xmm, 0x0); break;
+                default: assert(!"unreachable");
+            }
+        };
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
-            /* check whether loading 4 values at once is possible */
-            bool can_load_xmm = mayiuse(avx) && reg_unroll % 4 == 0;
-            for (int ur = 1; ur < reg_unroll; ++ur)
-                if (i_off[ur] != i_off[ur - 1] + 1) can_load_xmm = false;
-            const int load_step = can_load_xmm ? 4 : 1;
-
-            /* check whether storing 4 values at once is possible */
-            bool can_store_xmm = reg_unroll % 4 == 0;
-            for (int ur = 1; ur < reg_unroll; ++ur)
-                if (o_off[ur] != o_off[ur - 1] + 1) can_store_xmm = false;
-            const int ur_step = can_store_xmm ? 4 : 1;
-
-            const bool interim_f32 = false
-                    || utils::one_of(f32, prb_.itype, prb_.otype)
-                    || prb_.scale_type != scale_type_t::NONE
-                    || prb_.beta != 0.f;
-
-            const bool need_saturation
-                    = (utils::one_of(prb_.otype, u8, s8, s32) && interim_f32);
-
-            if (!can_load_xmm && can_store_xmm) {
-                assert(ur_step == 4);
-                /* load with stride */
+        /* check whether loading 4 values at once is possible */
 #ifdef DNNL_X64_IMPLEMENTATION
-                for (int ur = 0; ur < reg_unroll; ur += ur_step) {
-                    for (int r = 0; r < ur_step; ++r) {
-                        if (itype_sz == 4)
-                            pinsrd(Xmm(ur), i_addr(i_off[ur + r]), r);
-                        else if (itype_sz == 2)
-                            pinsrw(Xmm(ur), i_addr(i_off[ur + r]), r);
-                        else
-                            pinsrb(Xmm(ur), i_addr(i_off[ur + r]), r);
-                    }
+        bool can_load_xmm = mayiuse(avx) && reg_unroll % 4 == 0;
+        for (int ur = 1; ur < reg_unroll; ++ur)
+            if (i_off[ur] != i_off[ur - 1] + 1) can_load_xmm = false;
+        const int load_step = can_load_xmm ? 4 : 1;
+
+        /* check whether storing 4 values at once is possible */
+        bool can_store_xmm = reg_unroll % 4 == 0;
+        for (int ur = 1; ur < reg_unroll; ++ur)
+            if (o_off[ur] != o_off[ur - 1] + 1) can_store_xmm = false;
+        const int ur_step = can_store_xmm ? 4 : 1;
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        bool can_load_xmm = mayiuse(avx) && reg_unroll % 4 == 0;
+        bool can_load_ymm = reg_unroll % 8 == 0;
+        for (int ur = 1; ur < reg_unroll; ++ur)
+            if (i_off[ur] != i_off[ur - 1] + 1) {
+                can_load_xmm = false;
+                can_load_ymm = false;
+            }
+
+        /* At the moment, scale and beta are not supported. */
+        int load_step
+                = (prb_.scale_type == scale_type_t::NONE && prb_.beta == 0.f)
+                ? (can_load_ymm ? 8 : (can_load_xmm ? 4 : 1))
+                : (can_load_xmm ? 4 : 1);
+
+        /* check whether storing 4 values at once is possible */
+        bool can_store_xmm = reg_unroll % 4 == 0;
+        bool can_store_ymm = reg_unroll % 8 == 0;
+        for (int ur = 1; ur < reg_unroll; ++ur)
+            if (o_off[ur] != o_off[ur - 1] + 1) {
+                can_store_xmm = false;
+                can_store_ymm = false;
+            }
+
+        /* At the moment, scale and beta are not supported. */
+        int ur_step
+                = (prb_.scale_type == scale_type_t::NONE && prb_.beta == 0.f)
+                ? (can_store_ymm ? 8 : (can_store_xmm ? 4 : 1))
+                : (can_store_xmm ? 4 : 1);
+
+        /* Because SVE has no load instruction for single structure,
+	   Advanced SIMD must be used. */
+        if (!can_load_xmm && can_store_xmm) ur_step = 4;
+        /* Because SVE has no store instruction for single structure,
+	   Advanced SIMD must be used. */
+        if (can_load_xmm && !can_store_xmm) load_step = 4;
+#endif //#ifndef DNNL_X64_IMPLEMENTATION
+
+        const bool interim_f32 = false
+                || utils::one_of(f32, prb_.itype, prb_.otype)
+                || prb_.scale_type != scale_type_t::NONE || prb_.beta != 0.f;
+
+        const bool need_saturation
+                = (utils::one_of(prb_.otype, u8, s8, s32) && interim_f32);
+
+        if (!can_load_xmm && can_store_xmm) {
+            assert(ur_step == 4);
+            /* load with stride */
+#ifdef DNNL_X64_IMPLEMENTATION
+            for (int ur = 0; ur < reg_unroll; ur += ur_step) {
+                for (int r = 0; r < ur_step; ++r) {
+                    if (itype_sz == 4)
+                        pinsrd(Xmm(ur), i_addr(i_off[ur + r]), r);
+                    else if (itype_sz == 2)
+                        pinsrw(Xmm(ur), i_addr(i_off[ur + r]), r);
+                    else
+                        pinsrb(Xmm(ur), i_addr(i_off[ur + r]), r);
                 }
+            }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
             for (int ur = 0; ur < reg_unroll; ur += ur_step) {
 
@@ -958,83 +952,81 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                 }
             }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-            } else {
-                /*
+        } else {
+            /*
                 for (int ur = 0; ur < reg_unroll; ur += load_step)
                     load(Xmm(ur), i_addr(i_off[ur]), load_step * itype_sz);
 	      */
-                int ur = 0;
-                int tmp_ur = 0;
-                while (ur < reg_unroll) {
-                    int count = 0;
+            int ur = 0;
+            int tmp_ur = 0;
+            while (ur < reg_unroll) {
+                int count = 0;
 
-                    do {
-                        CG::add_imm(x_tmp_vec[count++], x_ptr_in_off,
-                                i_off[ur] * itype_sz, X_DEFAULT_ADDR);
-                        ur += load_step;
-                    } while (ur < reg_unroll && count < x_tmp_vec_size);
+                do {
+                    CG::add_imm(x_tmp_vec[count++], x_ptr_in_off,
+                            i_off[ur] * itype_sz, X_DEFAULT_ADDR);
+                    ur += load_step;
+                } while (ur < reg_unroll && count < x_tmp_vec_size);
 
-                    for (int i = 0; i < count; i++) {
+                for (int i = 0; i < count; i++) {
 
-                        switch (load_step * itype_sz) {
-                            case 16:
-                                CG::ldr(xa::QReg(tmp_ur),
-                                        xa::ptr(x_tmp_vec[i]));
-                                break;
-                            case 8:
-                                CG::ldr(xa::DReg(tmp_ur),
-                                        xa::ptr(x_tmp_vec[i]));
-                                break;
-                            case 4:
-                                CG::ldr(xa::SReg(tmp_ur),
-                                        xa::ptr(x_tmp_vec[i]));
-                                break;
-                            case 2:
-                                CG::ldr(xa::HReg(tmp_ur),
-                                        xa::ptr(x_tmp_vec[i]));
-                                break;
-                            case 1:
-                                CG::ldr(xa::BReg(tmp_ur),
-                                        xa::ptr(x_tmp_vec[i]));
-                                break;
-                            default: assert(!"unreachable");
-                        }
-                        tmp_ur += load_step;
+                    switch (load_step * itype_sz) {
+                        case 32:
+                            CG::ld1w(xa::ZRegS(tmp_ur), p_lsb_256 / xa::T_z,
+                                    xa::ptr(x_tmp_vec[i]));
+                            break;
+                        case 16:
+                            CG::ldr(xa::QReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                            break;
+                        case 8:
+                            CG::ldr(xa::DReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                            break;
+                        case 4:
+                            CG::ldr(xa::SReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                            break;
+                        case 2:
+                            CG::ldr(xa::HReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                            break;
+                        case 1:
+                            CG::ldr(xa::BReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                            break;
+                        default: assert(!"unreachable");
                     }
+                    tmp_ur += load_step;
                 }
             }
+        }
 
-            /* xmm[:] <-- (f32)xmm[:] */
-            if (interim_f32) {
-                const int cvt_step = nstl::max(load_step, ur_step);
-                for (int ur = 0; ur < reg_unroll; ur += cvt_step)
+        /* xmm[:] <-- (f32)xmm[:] */
+        if (interim_f32) {
+            const int cvt_step = nstl::max(load_step, ur_step);
+            for (int ur = 0; ur < reg_unroll; ur += cvt_step)
 #ifdef DNNL_X64_IMPLEMENTATION
-                    cvt2ps(Xmm(ur), Xmm(ur), prb_.itype);
+                cvt2ps(Xmm(ur), Xmm(ur), prb_.itype);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 cvt2ps(ur, 1, prb_.itype);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-            }
+        }
 
-            if (can_load_xmm && !can_store_xmm) {
-                const bool fast_return = true // transposition on the fly
-                        && prb_.scale_type != scale_type_t::MANY
-                        && prb_.beta == 0.f;
-                if (fast_return) {
-                    if (prb_.scale_type == scale_type_t::COMMON)
-                        for (int ur = 0; ur < reg_unroll; ur += load_step)
-                            mulps(Xmm(ur), xmm_scale);
-                    if (prb_.otype != f32) {
-                        init_saturate_f32(xmm_zero, xmm_saturation_ubound,
-                                reg_tmp, interim_f32 ? f32 : prb_.itype,
-                                prb_.otype);
+        if (can_load_xmm && !can_store_xmm) {
+            const bool fast_return = true // transposition on the fly
+                    && prb_.scale_type != scale_type_t::MANY
+                    && prb_.beta == 0.f;
+            if (fast_return) {
+                if (prb_.scale_type == scale_type_t::COMMON)
+                    for (int ur = 0; ur < reg_unroll; ur += load_step)
+                        mulps(Xmm(ur), xmm_scale);
+                if (prb_.otype != f32) {
+                    init_saturate_f32(xmm_zero, xmm_saturation_ubound, reg_tmp,
+                            interim_f32 ? f32 : prb_.itype, prb_.otype);
 #ifdef DNNL_X64_IMPLEMENTATION
-                        for (int ur = 0; ur < reg_unroll; ur += load_step) {
-                            if (need_saturation)
-                                saturate_f32(Xmm(ur), xmm_zero,
-                                        xmm_saturation_ubound, prb_.otype);
-                            cvt2odt(Xmm(ur), prb_.otype,
-                                    interim_f32 ? f32 : prb_.itype);
-                        }
+                    for (int ur = 0; ur < reg_unroll; ur += load_step) {
+                        if (need_saturation)
+                            saturate_f32(Xmm(ur), xmm_zero,
+                                    xmm_saturation_ubound, prb_.otype);
+                        cvt2odt(Xmm(ur), prb_.otype,
+                                interim_f32 ? f32 : prb_.itype);
+                    }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                     for (int ur = 0; ur < reg_unroll; ur += load_step)
                         if (need_saturation)
@@ -1045,18 +1037,18 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         cvt2odt(ur, 1, prb_.otype,
                                 interim_f32 ? f32 : prb_.itype);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                    }
+                }
 #ifdef DNNL_X64_IMPLEMENTATION
-                    for (int ur = 0; ur < reg_unroll; ur += load_step) {
-                        for (int r = 0; r < load_step; ++r) {
-                            if (otype_sz == 4)
-                                pextrd(o_addr(o_off[ur + r]), Xmm(ur), r);
-                            else if (otype_sz == 2)
-                                pextrw(o_addr(o_off[ur + r]), Xmm(ur), r);
-                            else
-                                pextrb(o_addr(o_off[ur + r]), Xmm(ur), r);
-                        }
+                for (int ur = 0; ur < reg_unroll; ur += load_step) {
+                    for (int r = 0; r < load_step; ++r) {
+                        if (otype_sz == 4)
+                            pextrd(o_addr(o_off[ur + r]), Xmm(ur), r);
+                        else if (otype_sz == 2)
+                            pextrw(o_addr(o_off[ur + r]), Xmm(ur), r);
+                        else
+                            pextrb(o_addr(o_off[ur + r]), Xmm(ur), r);
                     }
+                }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 /* load_step is 1 or 4. */
                 for (int ur = 0; ur < reg_unroll; ur += load_step) {
@@ -1075,48 +1067,48 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                     }
                 }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                    return;
-                }
-
-                /* scatter elements of xmm into 4 xmms */
-                if (itype_sz == 4 || interim_f32) {
-                    for (int ur = 0; ur < reg_unroll; ur += load_step)
-                        for (int r = 1; r < load_step; ++r)
-                            vshufps(Xmm(ur + r), Xmm(ur), Xmm(ur), r);
-                } else if (itype_sz == 2) {
-                    for (int ur = 0; ur < reg_unroll; ur += load_step)
-                        for (int r = 1; r < load_step; ++r)
-                            vpalignr(Xmm(ur + r), Xmm(ur), Xmm(ur), 2 * r);
-                } else {
-                    for (int ur = 0; ur < reg_unroll; ur += load_step)
-                        for (int r = 1; r < load_step; ++r)
-                            vpalignr(Xmm(ur + r), Xmm(ur), Xmm(ur), r);
-                }
+                return;
             }
 
-            /* scale and beta processing */
-            if (can_store_xmm) {
-                /* xmm <-- scale * xmm[:] */
-                if (prb_.scale_type == scale_type_t::COMMON) {
-                    for (int ur = 0; ur < reg_unroll; ur += ur_step)
-                        mulps(Xmm(ur), xmm_scale);
-                } else if (prb_.scale_type == scale_type_t::MANY) {
-                    enum class scale_load_type_t { bcast, load, gather };
+            /* scatter elements of xmm into 4 xmms */
+            if (itype_sz == 4 || interim_f32) {
+                for (int ur = 0; ur < reg_unroll; ur += load_step)
+                    for (int r = 1; r < load_step; ++r)
+                        vshufps(Xmm(ur + r), Xmm(ur), Xmm(ur), r);
+            } else if (itype_sz == 2) {
+                for (int ur = 0; ur < reg_unroll; ur += load_step)
+                    for (int r = 1; r < load_step; ++r)
+                        vpalignr(Xmm(ur + r), Xmm(ur), Xmm(ur), 2 * r);
+            } else {
+                for (int ur = 0; ur < reg_unroll; ur += load_step)
+                    for (int r = 1; r < load_step; ++r)
+                        vpalignr(Xmm(ur + r), Xmm(ur), Xmm(ur), r);
+            }
+        }
 
-                    for (int ur = 0; ur < reg_unroll; ur += ur_step) {
-                        scale_load_type_t scale_load_type
-                                = scale_load_type_t::bcast; // the best case
+        /* scale and beta processing */
+        if (can_store_xmm) {
+            /* xmm <-- scale * xmm[:] */
+            if (prb_.scale_type == scale_type_t::COMMON) {
+                for (int ur = 0; ur < reg_unroll; ur += ur_step)
+                    mulps(Xmm(ur), xmm_scale);
+            } else if (prb_.scale_type == scale_type_t::MANY) {
+                enum class scale_load_type_t { bcast, load, gather };
 
-                        for (int r = ur + 1; r < ur + ur_step; ++r)
-                            if (s_off[r] != s_off[r - 1] + 0)
-                                scale_load_type = scale_load_type_t::load;
+                for (int ur = 0; ur < reg_unroll; ur += ur_step) {
+                    scale_load_type_t scale_load_type
+                            = scale_load_type_t::bcast; // the best case
 
-                        if (scale_load_type == scale_load_type_t::bcast) {
+                    for (int r = ur + 1; r < ur + ur_step; ++r)
+                        if (s_off[r] != s_off[r - 1] + 0)
+                            scale_load_type = scale_load_type_t::load;
+
+                    if (scale_load_type == scale_load_type_t::bcast) {
 #ifdef DNNL_X64_IMPLEMENTATION
-                            movss(xmm_scale, s_addr(s_off[ur]));
-                            shufps(xmm_scale, xmm_scale, 0x0);
-                            mulps(Xmm(ur), xmm_scale);
-                            continue;
+                        movss(xmm_scale, s_addr(s_off[ur]));
+                        shufps(xmm_scale, xmm_scale, 0x0);
+                        mulps(Xmm(ur), xmm_scale);
+                        continue;
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                         xa::VReg4S v {
                                 static_cast<uint32_t>(xmm_scale.getIdx())};
@@ -1128,18 +1120,18 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         CG::fmul(v_dst, v_dst, v);
                         continue;
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                        }
+                    }
 
-                        // bcast doesn't work, the next try -- load
-                        for (int r = ur + 1; r < ur + ur_step; ++r)
-                            if (s_off[r] != s_off[r - 1] + 1)
-                                scale_load_type = scale_load_type_t::gather;
+                    // bcast doesn't work, the next try -- load
+                    for (int r = ur + 1; r < ur + ur_step; ++r)
+                        if (s_off[r] != s_off[r - 1] + 1)
+                            scale_load_type = scale_load_type_t::gather;
 
-                        if (scale_load_type == scale_load_type_t::load) {
+                    if (scale_load_type == scale_load_type_t::load) {
 #ifdef DNNL_X64_IMPLEMENTATION
-                            movups(xmm_scale, s_addr(s_off[ur]));
-                            mulps(Xmm(ur), xmm_scale);
-                            continue;
+                        movups(xmm_scale, s_addr(s_off[ur]));
+                        mulps(Xmm(ur), xmm_scale);
+                        continue;
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                         uint32_t idx = xmm_scale.getIdx();
                         xa::VReg4S v_dst {static_cast<uint32_t>(ur)};
@@ -1149,13 +1141,13 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         CG::fmul(v_dst, v_dst, xa::VReg4S {idx});
                         continue;
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                        }
+                    }
 
-                        // load doesn't work as well
-                        // so gather the scale factors one by one
+                    // load doesn't work as well
+                    // so gather the scale factors one by one
 #ifdef DNNL_X64_IMPLEMENTATION
-                        for (int r = ur; r < ur + ur_step; ++r)
-                            pinsrd(xmm_scale, s_addr(s_off[r]), r - ur);
+                    for (int r = ur; r < ur + ur_step; ++r)
+                        pinsrd(xmm_scale, s_addr(s_off[r]), r - ur);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                     /*ur_step is 1 or 4. */
                     for (int r = ur; r < ur + ur_step; ++r) {
@@ -1170,30 +1162,30 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                         CG::ld1(v[r - ur], xa::ptr(x_tmp_vec[r - ur]));
                     }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                        mulps(Xmm(ur), xmm_scale);
+                    mulps(Xmm(ur), xmm_scale);
+                }
+            }
+
+            /* dst <-- beta * dst + xmm[:] */
+            assert(prb_.beta == 0.f || prb_.beta == 1.f);
+            if (prb_.beta == 1.f) {
+#ifdef DNNL_X64_IMPLEMENTATION
+                for (int ur = 0; ur < reg_unroll; ur += ur_step) {
+                    if (prb_.otype == f32) {
+                        /* non VEX instructions do not support unaligned
+                         * memory for instructions other than movups. */
+                        if (mayiuse(avx)) {
+                            vaddps(Xmm(ur), o_addr(o_off[ur]));
+                        } else {
+                            /* register xmm(1) is unused */
+                            movups(Xmm(1), o_addr(o_off[ur]));
+                            addps(Xmm(ur), Xmm(1));
+                        }
+                    } else {
+                        cvt2ps_org(Xmm(1), o_addr(o_off[ur]), prb_.otype);
+                        vaddps(Xmm(ur), Xmm(1));
                     }
                 }
-
-                /* dst <-- beta * dst + xmm[:] */
-                assert(prb_.beta == 0.f || prb_.beta == 1.f);
-                if (prb_.beta == 1.f) {
-#ifdef DNNL_X64_IMPLEMENTATION
-                    for (int ur = 0; ur < reg_unroll; ur += ur_step) {
-                        if (prb_.otype == f32) {
-                            /* non VEX instructions do not support unaligned
-                         * memory for instructions other than movups. */
-                            if (mayiuse(avx)) {
-                                vaddps(Xmm(ur), o_addr(o_off[ur]));
-                            } else {
-                                /* register xmm(1) is unused */
-                                movups(Xmm(1), o_addr(o_off[ur]));
-                                addps(Xmm(ur), Xmm(1));
-                            }
-                        } else {
-                            cvt2ps_org(Xmm(1), o_addr(o_off[ur]), prb_.otype);
-                            vaddps(Xmm(ur), Xmm(1));
-                        }
-                    }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 int ur = 0;
                 int tmp_ur = 0;
@@ -1236,21 +1228,21 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                     }
                 }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                }
-            } else {
-                /* xmm[0] <-- scale * xmm[0] */
-                if (prb_.scale_type == scale_type_t::COMMON) {
-                    for (int ur = 0; ur < reg_unroll; ur += ur_step)
+            }
+        } else {
+            /* xmm[0] <-- scale * xmm[0] */
+            if (prb_.scale_type == scale_type_t::COMMON) {
+                for (int ur = 0; ur < reg_unroll; ur += ur_step)
 #ifdef DNNL_X64_IMPLEMENTATION
-                        mulss(Xmm(ur), xmm_scale);
+                    mulss(Xmm(ur), xmm_scale);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                     CG::fmul(xa::ZRegS(ur), p_lsb_32 / xa::T_m,
                             xa::ZRegS(xmm_scale.getIdx()));
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                } else if (prb_.scale_type == scale_type_t::MANY) {
+            } else if (prb_.scale_type == scale_type_t::MANY) {
 #ifdef DNNL_X64_IMPLEMENTATION
-                    for (int ur = 0; ur < reg_unroll; ur += ur_step)
-                        mulss(Xmm(ur), s_addr(s_off[ur]));
+                for (int ur = 0; ur < reg_unroll; ur += ur_step)
+                    mulss(Xmm(ur), s_addr(s_off[ur]));
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 int ur = 0;
                 int tmp_ur = 0;
@@ -1273,28 +1265,28 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                     tmp_ur += ur_step * count;
                 }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                }
-                /* dst <-- beta * dst + xmm[0] */
-                assert(prb_.beta == 0.f || prb_.beta == 1.f);
-                if (prb_.beta == 1.f) {
+            }
+            /* dst <-- beta * dst + xmm[0] */
+            assert(prb_.beta == 0.f || prb_.beta == 1.f);
+            if (prb_.beta == 1.f) {
 #ifdef DNNL_X64_IMPLEMENTATION
-                    for (int ur = 0; ur < reg_unroll; ur += ur_step) {
-                        if (prb_.otype == f32) {
-                            addss(Xmm(ur), o_addr(o_off[ur]));
+                for (int ur = 0; ur < reg_unroll; ur += ur_step) {
+                    if (prb_.otype == f32) {
+                        addss(Xmm(ur), o_addr(o_off[ur]));
+                    } else {
+                        if (prb_.otype == s32) {
+                            vmovss(xmm_tmp, o_addr(o_off[ur]));
+                        } else if (utils::one_of(prb_.otype, s8, u8)) {
+                            pinsrb(xmm_tmp, o_addr(o_off[ur]), 0x0);
+                        } else if (prb_.otype == bf16) {
+                            pinsrw(xmm_tmp, o_addr(o_off[ur]), 0x0);
                         } else {
-                            if (prb_.otype == s32) {
-                                vmovss(xmm_tmp, o_addr(o_off[ur]));
-                            } else if (utils::one_of(prb_.otype, s8, u8)) {
-                                pinsrb(xmm_tmp, o_addr(o_off[ur]), 0x0);
-                            } else if (prb_.otype == bf16) {
-                                pinsrw(xmm_tmp, o_addr(o_off[ur]), 0x0);
-                            } else {
-                                assert(!"unsupported o_type");
-                            }
-                            cvt2ps(xmm_tmp, xmm_tmp, prb_.otype);
-                            addps(Xmm(ur), xmm_tmp);
+                            assert(!"unsupported o_type");
                         }
+                        cvt2ps(xmm_tmp, xmm_tmp, prb_.otype);
+                        addps(Xmm(ur), xmm_tmp);
                     }
+                }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 int ur = 0;
                 int tmp_ur = 0;
@@ -1349,484 +1341,479 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
                     }
                 }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-                }
             }
+        }
 
-            if (need_saturation) {
-                init_saturate_f32(xmm_zero, xmm_saturation_ubound, reg_tmp, f32,
-                        prb_.otype);
-                for (int ur = 0; ur < reg_unroll; ur += ur_step) {
-                    saturate_f32(Xmm(ur), xmm_zero, xmm_saturation_ubound,
-                            prb_.otype);
-                }
-            }
-
+        if (need_saturation) {
+            init_saturate_f32(
+                    xmm_zero, xmm_saturation_ubound, reg_tmp, f32, prb_.otype);
             for (int ur = 0; ur < reg_unroll; ur += ur_step) {
-                if (prb_.otype != f32)
+                saturate_f32(
+                        Xmm(ur), xmm_zero, xmm_saturation_ubound, prb_.otype);
+            }
+        }
+
+        for (int ur = 0; ur < reg_unroll; ur += ur_step) {
+            if (prb_.otype != f32)
 #ifdef DNNL_X64_IMPLEMENTATION
-                    cvt2odt(Xmm(ur), prb_.otype,
-                            interim_f32 ? f32 : prb_.itype);
+                cvt2odt(Xmm(ur), prb_.otype, interim_f32 ? f32 : prb_.itype);
 #else //#ifdef DNNL_X64_IMPLEMENTATION
                 cvt2odt(ur, 1, prb_.otype, interim_f32 ? f32 : prb_.itype);
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
-            }
+        }
 
-            /*		store(o_addr(o_off[ur]), Xmm(ur), ur_step * otype_sz); */
-            int ur = 0;
-            int tmp_ur = 0;
-            while (ur < reg_unroll) {
-                int count = 0;
+        /*		store(o_addr(o_off[ur]), Xmm(ur), ur_step * otype_sz); */
+        int ur = 0;
+        int tmp_ur = 0;
+        while (ur < reg_unroll) {
+            int count = 0;
 
-                do {
-                    //		std::cout << "o_off:" << o_off[ur] * otype_sz << std::endl;
-                    CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
-                            o_off[ur] * otype_sz, X_DEFAULT_ADDR);
-                    ur += ur_step;
-                } while (ur < reg_unroll && count < x_tmp_vec_size);
+            do {
+                CG::add_imm(x_tmp_vec[count++], x_ptr_out_off,
+                        o_off[ur] * otype_sz, X_DEFAULT_ADDR);
+                ur += ur_step;
+            } while (ur < reg_unroll && count < x_tmp_vec_size);
 
-                for (int i = 0; i < count; i++) {
+            for (int i = 0; i < count; i++) {
 
-                    switch (ur_step * otype_sz) {
-                        case 16:
-                            CG::str(xa::QReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
-                            break;
-                        case 8:
-                            CG::str(xa::DReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
-                            break;
-                        case 4:
-                            CG::str(xa::SReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
-                            break;
-                        case 2:
-                            CG::str(xa::HReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
-                            break;
-                        case 1:
-                            CG::str(xa::BReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
-                            break;
-                        default: assert(!"unreachable");
-                    }
-                    tmp_ur += ur_step;
+                switch (ur_step * otype_sz) {
+                    case 32:
+                        CG::st1w(xa::ZRegS(tmp_ur), p_lsb_256,
+                                xa::ptr(x_tmp_vec[i]));
+                        break;
+                    case 16:
+                        CG::str(xa::QReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                        break;
+                    case 8:
+                        CG::str(xa::DReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                        break;
+                    case 4:
+                        CG::str(xa::SReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                        break;
+                    case 2:
+                        CG::str(xa::HReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                        break;
+                    case 1:
+                        CG::str(xa::BReg(tmp_ur), xa::ptr(x_tmp_vec[i]));
+                        break;
+                    default: assert(!"unreachable");
                 }
+                tmp_ur += ur_step;
             }
         }
+    }
 
-        void process_unroll_generic(int len) {
-            const int blk = 8;
+    void process_unroll_generic(int len) {
+        const int blk = 8;
 
-            int i_off[2 * blk] = {0};
-            int o_off[2 * blk] = {0};
-            int s_off[2 * blk] = {0};
+        int i_off[2 * blk] = {0};
+        int o_off[2 * blk] = {0};
+        int s_off[2 * blk] = {0};
 
-            int curr = 0; // will switch between 0 and 1
+        int curr = 0; // will switch between 0 and 1
 
-            for (int off = 0; off < len; off += blk) {
-                const int reg_unroll = nstl::min(off + blk, len) - off;
+        for (int off = 0; off < len; off += blk) {
+            const int reg_unroll = nstl::min(off + blk, len) - off;
 
-                /* compute offsets */
-                for (int ur = off != 0 ? 0 : 1; ur < reg_unroll; ++ur) {
-                    const int ur_c = curr * blk + ur;
-                    const int ur_p
-                            = (ur_c - 1 + 2 * blk) % (2 * blk); // prev ur
-                    step(off + ur, i_off[ur_p], o_off[ur_p], s_off[ur_p],
-                            i_off[ur_c], o_off[ur_c], s_off[ur_c]);
-                }
-
-                process_unroll_generic_step(reg_unroll, i_off + curr * blk,
-                        o_off + curr * blk, s_off + curr * blk);
-
-                curr = 1 - curr;
+            /* compute offsets */
+            for (int ur = off != 0 ? 0 : 1; ur < reg_unroll; ++ur) {
+                const int ur_c = curr * blk + ur;
+                const int ur_p = (ur_c - 1 + 2 * blk) % (2 * blk); // prev ur
+                step(off + ur, i_off[ur_p], o_off[ur_p], s_off[ur_p],
+                        i_off[ur_c], o_off[ur_c], s_off[ur_c]);
             }
-        }
 
-        void loop_begin(Label & l, Reg64 reg_cnt, int len) {
-            mov(reg_cnt, len);
-            L(l);
-        }
+            process_unroll_generic_step(reg_unroll, i_off + curr * blk,
+                    o_off + curr * blk, s_off + curr * blk);
 
-        void loop_end(Label & l, Reg64 reg_cnt, int len, int i_step, int o_step,
-                int s_step) {
-            add(reg_off_in, i_step * itype_sz);
-            add(reg_off_out, o_step * otype_sz);
+            curr = 1 - curr;
+        }
+    }
+
+    void loop_begin(Label &l, Reg64 reg_cnt, int len) {
+        mov(reg_cnt, len);
+        L(l);
+    }
+
+    void loop_end(Label &l, Reg64 reg_cnt, int len, int i_step, int o_step,
+            int s_step) {
+        add(reg_off_in, i_step * itype_sz);
+        add(reg_off_out, o_step * otype_sz);
 
 #ifndef DNNL_X64_IMPLEMENTATION
-            CG::add_imm(x_ptr_in_off, x_ptr_in_off, i_step * itype_sz, X_TMP_0);
-            CG::add_imm(
-                    x_ptr_out_off, x_ptr_out_off, o_step * otype_sz, X_TMP_0);
+        CG::add_imm(x_ptr_in_off, x_ptr_in_off, i_step * itype_sz, X_TMP_0);
+        CG::add_imm(x_ptr_out_off, x_ptr_out_off, o_step * otype_sz, X_TMP_0);
 #endif
 
-            if (prb_.scale_type == scale_type_t::MANY) {
-                std::cout << "scale" << std::endl;
-                add(reg_off_scale, s_step * stype_sz);
+        if (prb_.scale_type == scale_type_t::MANY) {
+            std::cout << "scale" << std::endl;
+            add(reg_off_scale, s_step * stype_sz);
 #ifndef DNNL_X64_IMPLEMENTATION
-                CG::add_imm(x_ptr_scale_off, x_ptr_scale_off, s_step * stype_sz,
-                        X_TMP_0);
-#endif
-            }
-            dec(reg_cnt);
-            jnz(l);
-
-            sub(reg_off_in, len * i_step * itype_sz);
-            sub(reg_off_out, len * o_step * otype_sz);
-#ifndef DNNL_X64_IMPLEMENTATION
-            CG::sub_imm(x_ptr_in_off, x_ptr_in_off, len * i_step * itype_sz,
-                    X_TMP_0);
-            CG::sub_imm(x_ptr_out_off, x_ptr_out_off, len * o_step * otype_sz,
+            CG::add_imm(x_ptr_scale_off, x_ptr_scale_off, s_step * stype_sz,
                     X_TMP_0);
 #endif
-            if (prb_.scale_type == scale_type_t::MANY) {
-                sub(reg_off_scale, len * s_step * stype_sz);
+        }
+        dec(reg_cnt);
+        jnz(l);
+
+        sub(reg_off_in, len * i_step * itype_sz);
+        sub(reg_off_out, len * o_step * otype_sz);
 #ifndef DNNL_X64_IMPLEMENTATION
-                CG::sub_imm(x_ptr_scale_off, x_ptr_scale_off,
-                        len * s_step * stype_sz, X_TMP_0);
+        CG::sub_imm(
+                x_ptr_in_off, x_ptr_in_off, len * i_step * itype_sz, X_TMP_0);
+        CG::sub_imm(
+                x_ptr_out_off, x_ptr_out_off, len * o_step * otype_sz, X_TMP_0);
 #endif
-            }
+        if (prb_.scale_type == scale_type_t::MANY) {
+            sub(reg_off_scale, len * s_step * stype_sz);
+#ifndef DNNL_X64_IMPLEMENTATION
+            CG::sub_imm(x_ptr_scale_off, x_ptr_scale_off,
+                    len * s_step * stype_sz, X_TMP_0);
+#endif
+        }
+    }
+
+    bool simple_impl() {
+        simple_impl_desc_t d;
+        if (!simple_impl_desc_init(prb_, &d)) return false;
+
+        const int nfu = d.ndims_full_unroll;
+        const int ldu = d.len_last_dim_unroll;
+        const int n_jit_loops = prb_.ndims - d.ndims_full_unroll;
+        assert(n_jit_loops <= ndims_jit_loop_max);
+
+        xor_(reg_off_in, reg_off_in);
+        xor_(reg_off_out, reg_off_out);
+#ifndef DNNL_X64_IMPLEMENTATION
+        CG::mov(x_ptr_in_off, xa::XReg(reg_ptr_in.getIdx()));
+        CG::mov(x_ptr_out_off, xa::XReg(reg_ptr_out.getIdx()));
+#endif
+        if (prb_.scale_type == scale_type_t::MANY) {
+            xor_(reg_off_scale, reg_off_scale);
+#ifndef DNNL_X64_IMPLEMENTATION
+            CG::mov(x_ptr_scale_off, xa::XReg(reg_ptr_scale.getIdx()));
+#endif
         }
 
-        bool simple_impl() {
-            simple_impl_desc_t d;
-            if (!simple_impl_desc_init(prb_, &d)) return false;
+        Label l_loop[3];
+        Reg64 reg_cnt[3] = {r15, r14, r13};
 
-            const int nfu = d.ndims_full_unroll;
-            const int ldu = d.len_last_dim_unroll;
-            const int n_jit_loops = prb_.ndims - d.ndims_full_unroll;
-            assert(n_jit_loops <= ndims_jit_loop_max);
+        if (n_jit_loops > 2) loop_begin(l_loop[2], reg_cnt[2], n(nfu + 2));
 
-            xor_(reg_off_in, reg_off_in);
-            xor_(reg_off_out, reg_off_out);
-#ifndef DNNL_X64_IMPLEMENTATION
-            CG::mov(x_ptr_in_off, xa::XReg(reg_ptr_in.getIdx()));
-            CG::mov(x_ptr_out_off, xa::XReg(reg_ptr_out.getIdx()));
-#endif
-            if (prb_.scale_type == scale_type_t::MANY) {
-                xor_(reg_off_scale, reg_off_scale);
-#ifndef DNNL_X64_IMPLEMENTATION
-                CG::mov(x_ptr_scale_off, xa::XReg(reg_ptr_scale.getIdx()));
-#endif
-            }
+        if (n_jit_loops > 1) loop_begin(l_loop[1], reg_cnt[1], n(nfu + 1));
 
-            Label l_loop[3];
-            Reg64 reg_cnt[3] = {r15, r14, r13};
+        if (n_jit_loops > 0)
+            loop_begin(l_loop[0], reg_cnt[0], n(nfu + 0) / ldu);
 
-            if (n_jit_loops > 2) loop_begin(l_loop[2], reg_cnt[2], n(nfu + 2));
+        bool optimized = false;
+        optimized = optimized || process_direct_copy<avx>(d.len_unroll);
+        optimized = optimized || process_direct_copy<sse41>(d.len_unroll);
+        optimized = optimized || process_unroll_tr8x8(d.len_unroll);
+        if (!optimized) process_unroll_generic(d.len_unroll);
 
-            if (n_jit_loops > 1) loop_begin(l_loop[1], reg_cnt[1], n(nfu + 1));
+        if (n_jit_loops > 0)
+            loop_end(l_loop[0], reg_cnt[0], n(nfu + 0) / ldu, is(nfu + 0) * ldu,
+                    os(nfu + 0) * ldu, ss(nfu + 0) * ldu);
 
-            if (n_jit_loops > 0)
-                loop_begin(l_loop[0], reg_cnt[0], n(nfu + 0) / ldu);
+        if (n_jit_loops > 1)
+            loop_end(l_loop[1], reg_cnt[1], n(nfu + 1), is(nfu + 1),
+                    os(nfu + 1), ss(nfu + 1));
 
-            bool optimized = false;
-            optimized = optimized || process_direct_copy<avx>(d.len_unroll);
-            optimized = optimized || process_direct_copy<sse41>(d.len_unroll);
-            optimized = optimized || process_unroll_tr8x8(d.len_unroll);
-            if (!optimized) process_unroll_generic(d.len_unroll);
+        if (n_jit_loops > 2)
+            loop_end(l_loop[2], reg_cnt[2], n(nfu + 2), is(nfu + 2),
+                    os(nfu + 2), ss(nfu + 2));
 
-            if (n_jit_loops > 0)
-                loop_end(l_loop[0], reg_cnt[0], n(nfu + 0) / ldu,
-                        is(nfu + 0) * ldu, os(nfu + 0) * ldu,
-                        ss(nfu + 0) * ldu);
+        return true;
+    }
 
-            if (n_jit_loops > 1)
-                loop_end(l_loop[1], reg_cnt[1], n(nfu + 1), is(nfu + 1),
-                        os(nfu + 1), ss(nfu + 1));
-
-            if (n_jit_loops > 2)
-                loop_end(l_loop[2], reg_cnt[2], n(nfu + 2), is(nfu + 2),
-                        os(nfu + 2), ss(nfu + 2));
-
-            return true;
-        }
-
-        void impl() {
-            if (simple_impl()) return;
-            assert(!"no implementation available");
-        }
+    void impl() {
+        if (simple_impl()) return;
+        assert(!"no implementation available");
+    }
 
 #ifndef DNNL_X64_IMPLEMENTATION
-        void cvt_z_bf16_f32(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmovzxwd:
+    void cvt_z_bf16_f32(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmovzxwd:
 	       zero extend 16-bit integers to 32-bit integeres */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegH tmp {i};
-                CG::zip1(tmp, tmp, tmp);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::uxth(tmp, p_lsb_256 / xa::T_m, tmp);
-            }
-            /* vpslld: 16-bit shift left */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::lsl(tmp, tmp, 0x10);
-            }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegH tmp {i};
+            CG::zip1(tmp, tmp, tmp);
         }
-
-        void cvt_z_s32_f32(const uint32_t startIdx, const uint32_t regNum) {
-            /* vcvtdq2ps: Convert 32-bit integers to singl-precision floating-poitn values */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::scvtf(tmp, p_lsb_256 / xa::T_m, tmp);
-            }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::uxth(tmp, p_lsb_256 / xa::T_m, tmp);
         }
-
-        void cvt_z_f32_s32(const uint32_t startIdx, const uint32_t regNum) {
-            /* vcvtps2dq */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::frinti(tmp, p_lsb_256 / xa::T_m, tmp);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::fcvtzs(tmp, p_lsb_256 / xa::T_m, tmp);
-            }
+        /* vpslld: 16-bit shift left */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::lsl(tmp, tmp, 0x10);
         }
+    }
 
-        void cvt_z_s8_s32(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmovsxbd:
+    void cvt_z_s32_f32(const uint32_t startIdx, const uint32_t regNum) {
+        /* vcvtdq2ps: Convert 32-bit integers to singl-precision floating-poitn values */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::scvtf(tmp, p_lsb_256 / xa::T_m, tmp);
+        }
+    }
+
+    void cvt_z_f32_s32(const uint32_t startIdx, const uint32_t regNum) {
+        /* vcvtps2dq */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::frinti(tmp, p_lsb_256 / xa::T_m, tmp);
+        }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::fcvtzs(tmp, p_lsb_256 / xa::T_m, tmp);
+        }
+    }
+
+    void cvt_z_s8_s32(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmovsxbd:
 				sign extend 8-bit integers to 32-bit integeres */
 
-            cvt_z_b_s(startIdx, regNum);
+        cvt_z_b_s(startIdx, regNum);
 
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::sxtb(tmp, p_lsb_256 / xa::T_m, tmp);
-            }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::sxtb(tmp, p_lsb_256 / xa::T_m, tmp);
         }
+    }
 
-        void cvt_z_s8_f32(const uint32_t startIdx, const uint32_t regNum) {
-            cvt_z_b_s(startIdx, regNum);
-            cvt_z_s32_f32(startIdx, regNum);
+    void cvt_z_s8_f32(const uint32_t startIdx, const uint32_t regNum) {
+        cvt_z_b_s(startIdx, regNum);
+        cvt_z_s32_f32(startIdx, regNum);
+    }
+
+    void cvt_z_b_s(const uint32_t startIdx, const uint32_t regNum) {
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegB tmp {i};
+            CG::zip1(tmp, tmp, tmp);
         }
-
-        void cvt_z_b_s(const uint32_t startIdx, const uint32_t regNum) {
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegB tmp {i};
-                CG::zip1(tmp, tmp, tmp);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegH tmp {i};
-                CG::zip1(tmp, tmp, tmp);
-            }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegH tmp {i};
+            CG::zip1(tmp, tmp, tmp);
         }
+    }
 
-        void cvt_z_u8_s32(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmovzxbd:
+    void cvt_z_u8_s32(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmovzxbd:
 		     zero extend 8-bit integers to 32-bit integeres */
 
-            cvt_z_b_s(startIdx, regNum);
+        cvt_z_b_s(startIdx, regNum);
 
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegS tmp {i};
-                CG::uxtb(tmp, p_lsb_256 / xa::T_m, tmp);
-            }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegS tmp {i};
+            CG::uxtb(tmp, p_lsb_256 / xa::T_m, tmp);
         }
+    }
 
-        void cvt_z_s32_s8(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmovsdb */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::mov(z_tmp_vec[i].d, xa::ZRegD(i));
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::mov(z_tmp_vec[i].s, P_MSB_256 / xa::T_m, 0);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::dup(xa::ZRegS(i), 0);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::smin(z_tmp_vec[i].s, 127);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::smax(z_tmp_vec[i].s, -128);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::uzp1(z_tmp_vec[i].h, z_tmp_vec[i].h, xa::ZRegH(i));
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::uzp1(xa::ZRegB(i), z_tmp_vec[i].b, xa::ZRegB(i));
-            }
+    void cvt_z_s32_s8(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmovsdb */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::mov(z_tmp_vec[i].d, xa::ZRegD(i));
         }
-
-        void cvt_z_u8_s8(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpminub */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++)
-                CG::umax(xa::ZRegS(i), 127);
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::mov(z_tmp_vec[i].s, P_MSB_256 / xa::T_m, 0);
         }
-
-        void cvt_z_u32_u8(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmovusdb */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++)
-                CG::umax(xa::ZRegS {i}, 0);
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::dup(xa::ZRegS(i), 0);
         }
-
-        void cvt_z_s32_u8(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmaxsd xmm, xmm, xmm_zero */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++)
-                CG::smax(xa::ZRegS {i}, 0);
-
-            /*vpmovusdb */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegB z {i};
-                CG::uzp1(z, z, z);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                xa::ZRegB z {i};
-                CG::uzp1(z, z, z);
-            }
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
-                CG::mov(xa::ZRegB {i}, P_MSB_384 / xa::T_m, 0);
-            }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::smin(z_tmp_vec[i].s, 127);
         }
-
-        void cvt_z_s8_u8(const uint32_t startIdx, const uint32_t regNum) {
-            /* vpmovusdb */
-            for (uint32_t i = startIdx; i < startIdx + regNum; i++)
-                CG::smax(xa::ZRegB {i}, 0);
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::smax(z_tmp_vec[i].s, -128);
         }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::uzp1(z_tmp_vec[i].h, z_tmp_vec[i].h, xa::ZRegH(i));
+        }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::uzp1(xa::ZRegB(i), z_tmp_vec[i].b, xa::ZRegB(i));
+        }
+    }
+
+    void cvt_z_u8_s8(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpminub */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++)
+            CG::umax(xa::ZRegS(i), 127);
+    }
+
+    void cvt_z_u32_u8(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmovusdb */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++)
+            CG::umax(xa::ZRegS {i}, 0);
+    }
+
+    void cvt_z_s32_u8(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmaxsd xmm, xmm, xmm_zero */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++)
+            CG::smax(xa::ZRegS {i}, 0);
+
+        /*vpmovusdb */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegB z {i};
+            CG::uzp1(z, z, z);
+        }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            xa::ZRegB z {i};
+            CG::uzp1(z, z, z);
+        }
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++) {
+            CG::mov(xa::ZRegB {i}, P_MSB_384 / xa::T_m, 0);
+        }
+    }
+
+    void cvt_z_s8_u8(const uint32_t startIdx, const uint32_t regNum) {
+        /* vpmovusdb */
+        for (uint32_t i = startIdx; i < startIdx + regNum; i++)
+            CG::smax(xa::ZRegB {i}, 0);
+    }
 #endif //#ifndef DNNL_X64_IMPLEMENTATION
 
-        jit_uni_reorder_kernel_f32(const desc_t &desc)
-            : kernel_t(desc), jit_generator(), bf16_emu_(nullptr) {
-            itype_sz = data_type_size(prb_.itype);
-            otype_sz = data_type_size(prb_.otype);
-            stype_sz = sizeof(float);
-            if (prb_.otype == data_type::bf16 && !mayiuse(avx512_core_bf16)) {
-                bf16_emu_ = new bf16_emulation_t(this, bf16_emu_reserv_1,
-                        bf16_emu_reserv_2, bf16_emu_reserv_3, bf16_emu_scratch,
-                        bf16_emu_reserv_4);
-                bf16_emu_->init_vcvtneps2bf16();
-            }
+    jit_uni_reorder_kernel_f32(const desc_t &desc)
+        : kernel_t(desc), jit_generator(), bf16_emu_(nullptr) {
+        itype_sz = data_type_size(prb_.itype);
+        otype_sz = data_type_size(prb_.otype);
+        stype_sz = sizeof(float);
+        if (prb_.otype == data_type::bf16 && !mayiuse(avx512_core_bf16)) {
+            bf16_emu_ = new bf16_emulation_t(this, bf16_emu_reserv_1,
+                    bf16_emu_reserv_2, bf16_emu_reserv_3, bf16_emu_scratch,
+                    bf16_emu_reserv_4);
+            bf16_emu_->init_vcvtneps2bf16();
+        }
 
-            preamble();
+        preamble();
 #define PARAM(x) ptr[abi_param1 + offsetof(call_param_t, x)]
-            if (prb_.scale_type == scale_type_t::COMMON) {
-                auto reg_ptr_scale_tmp = reg_ptr_in;
-                mov(reg_ptr_scale_tmp, PARAM(scale));
-                uni_vbroadcastss(xmm_scale, ptr[reg_ptr_scale_tmp]);
-            } else if (prb_.scale_type == scale_type_t::MANY) {
-                mov(reg_ptr_scale, PARAM(scale));
-            }
-            mov(reg_ptr_in, PARAM(in));
-            mov(reg_ptr_out, PARAM(out));
+        if (prb_.scale_type == scale_type_t::COMMON) {
+            auto reg_ptr_scale_tmp = reg_ptr_in;
+            mov(reg_ptr_scale_tmp, PARAM(scale));
+            uni_vbroadcastss(xmm_scale, ptr[reg_ptr_scale_tmp]);
+        } else if (prb_.scale_type == scale_type_t::MANY) {
+            mov(reg_ptr_scale, PARAM(scale));
+        }
+        mov(reg_ptr_in, PARAM(in));
+        mov(reg_ptr_out, PARAM(out));
 #undef PARAM
 
 #ifndef DNNL_X64_IMPLEMENTATION
-            CG::mov(x_ptr_in_off, xa::XReg(reg_ptr_in.getIdx()));
-            CG::mov(x_ptr_out_off, xa::XReg(reg_ptr_out.getIdx()));
-            CG::mov(x_ptr_scale_off, xa::XReg(reg_ptr_scale.getIdx()));
-            CG::ptrue(p_lsb_256.b, xa::VL32);
-            CG::ptrue(p_lsb_32.b, xa::VL4);
-            CG::ptrue(p_512.b);
+        CG::mov(x_ptr_in_off, xa::XReg(reg_ptr_in.getIdx()));
+        CG::mov(x_ptr_out_off, xa::XReg(reg_ptr_out.getIdx()));
+        CG::mov(x_ptr_scale_off, xa::XReg(reg_ptr_scale.getIdx()));
+        CG::ptrue(p_lsb_256.b, xa::VL32);
+        CG::ptrue(p_lsb_32.b, xa::VL4);
+        CG::ptrue(p_512.b);
 #endif
 
-            if (can_do_tr8x8()) {
-                vxorps(ymm_zero, ymm_zero, ymm_zero);
+        if (can_do_tr8x8()) {
+            vxorps(ymm_zero, ymm_zero, ymm_zero);
 
-                if (prb_.itype == data_type::u8
-                        && prb_.otype == data_type::s8) {
-                    mov(reg_tmp, 0x7f7f7f7f7f7f7f7f);
-                    movq(Xmm(ymm_8x127b.getIdx()), reg_tmp);
-                }
-            } else if (mayiuse(avx)) {
-                vxorps(xmm_zero, xmm_zero, xmm_zero);
-
-                if (prb_.itype == data_type::u8
-                        && prb_.otype == data_type::s8) {
-                    mov(reg_tmp.cvt32(), 0x7f7f7f7f);
-                    movd(xmm_4x127b, reg_tmp.cvt32());
-                }
+            if (prb_.itype == data_type::u8 && prb_.otype == data_type::s8) {
+                mov(reg_tmp, 0x7f7f7f7f7f7f7f7f);
+                movq(Xmm(ymm_8x127b.getIdx()), reg_tmp);
             }
+        } else if (mayiuse(avx)) {
+            vxorps(xmm_zero, xmm_zero, xmm_zero);
 
-            impl();
-            postamble();
-            ker_ = (void (*)(const call_param_t *))getCode();
+            if (prb_.itype == data_type::u8 && prb_.otype == data_type::s8) {
+                mov(reg_tmp.cvt32(), 0x7f7f7f7f);
+                movd(xmm_4x127b, reg_tmp.cvt32());
+            }
         }
-        ~jit_uni_reorder_kernel_f32() { delete bf16_emu_; }
 
-    private:
-        int itype_sz;
-        int otype_sz;
-        int stype_sz;
+        impl();
+        postamble();
+        ker_ = (void (*)(const call_param_t *))getCode();
+    }
+    ~jit_uni_reorder_kernel_f32() { delete bf16_emu_; }
 
-        Reg64 reg_ptr_in = rsi;
-        Reg64 reg_ptr_out = rdx;
-        Reg64 reg_ptr_scale = abi_not_param1;
+private:
+    int itype_sz;
+    int otype_sz;
+    int stype_sz;
 
-        Reg64 reg_off_in = r8;
-        Reg64 reg_off_out = r9;
-        Reg64 reg_off_scale = r10;
+    Reg64 reg_ptr_in = rsi;
+    Reg64 reg_ptr_out = rdx;
+    Reg64 reg_ptr_scale = abi_not_param1;
 
-        Reg64 reg_tmp = rax;
+    Reg64 reg_off_in = r8;
+    Reg64 reg_off_out = r9;
+    Reg64 reg_off_scale = r10;
 
-        /* Note: x22 - x28 are used by xbyak_translatro_aarch64. */
-        xa::XReg x_ptr_in_off = x16;
-        xa::XReg x_ptr_in_off2 = x17;
-        xa::XReg x_ptr_out_off = x18;
-        xa::XReg x_ptr_out_off2 = x19;
-        xa::XReg x_ptr_scale_off = x20;
-        xa::XReg x_ptr_scale_off2 = x21;
+    Reg64 reg_tmp = rax;
 
-        /* Caution: Chose predicate registers not used by x64's implementation. */
-        xa::PReg p_lsb_256 = p7;
-        xa::PReg p_512 = p6;
-        xa::PReg p_tmp0 = p5;
-        xa::PReg p_lsb_32 = p4;
+    /* Note: x22 - x28 are used by xbyak_translatro_aarch64. */
+    xa::XReg x_ptr_in_off = x16;
+    xa::XReg x_ptr_in_off2 = x17;
+    xa::XReg x_ptr_out_off = x18;
+    xa::XReg x_ptr_out_off2 = x19;
+    xa::XReg x_ptr_scale_off = x20;
+    xa::XReg x_ptr_scale_off2 = x21;
 
-        Xmm xmm_scale = xmm15;
-        Xmm xmm_zero = xmm14;
-        Xmm xmm_4x127b = xmm13; // TODO: unite with ymm_zero
-        Ymm ymm_zero = ymm14;
-        Ymm ymm_8x127b = ymm13;
-        Xmm xmm_tmp = xmm12;
-        Xmm xmm_saturation_ubound = xmm12;
-        Ymm ymm_saturation_ubound = ymm12;
+    /* Caution: Chose predicate registers not used by x64's implementation. */
+    xa::PReg p_lsb_256 = p7;
+    xa::PReg p_512 = p6;
+    xa::PReg p_tmp0 = p5;
+    xa::PReg p_lsb_32 = p4;
 
-        /* bf16 support on SKX */
-        bf16_emulation_t *bf16_emu_;
-        Zmm bf16_emu_reserv_1 = Zmm(16);
-        Zmm bf16_emu_reserv_2 = Zmm(17);
-        Reg64 bf16_emu_scratch = reg_tmp;
-        Zmm bf16_emu_reserv_3 = Zmm(18);
-        Zmm bf16_emu_reserv_4 = Zmm(19);
+    Xmm xmm_scale = xmm15;
+    Xmm xmm_zero = xmm14;
+    Xmm xmm_4x127b = xmm13; // TODO: unite with ymm_zero
+    Ymm ymm_zero = ymm14;
+    Ymm ymm_8x127b = ymm13;
+    Xmm xmm_tmp = xmm12;
+    Xmm xmm_saturation_ubound = xmm12;
+    Ymm ymm_saturation_ubound = ymm12;
 
-        const std::vector<uint32_t> tmp_vec_idx
-                = {20, 21, 22, 23, 24, 25, 26, 27};
-        xa::ZReg z_tmp0 = z20;
-        xa::ZReg z_tmp1 = z21;
-        xa::ZReg z_tmp2 = z22;
-        xa::ZReg z_tmp3 = z23;
-        xa::ZReg z_tmp4 = z24;
-        xa::ZReg z_tmp5 = z25;
-        xa::ZReg z_tmp6 = z26;
-        xa::ZReg z_tmp7 = z27;
+    /* bf16 support on SKX */
+    bf16_emulation_t *bf16_emu_;
+    Zmm bf16_emu_reserv_1 = Zmm(16);
+    Zmm bf16_emu_reserv_2 = Zmm(17);
+    Reg64 bf16_emu_scratch = reg_tmp;
+    Zmm bf16_emu_reserv_3 = Zmm(18);
+    Zmm bf16_emu_reserv_4 = Zmm(19);
 
-        const std::vector<xa::XReg> x_tmp_vec
-                = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
-        constexpr static int x_tmp_vec_size = 5;
+    const std::vector<uint32_t> tmp_vec_idx = {20, 21, 22, 23, 24, 25, 26, 27};
+    xa::ZReg z_tmp0 = z20;
+    xa::ZReg z_tmp1 = z21;
+    xa::ZReg z_tmp2 = z22;
+    xa::ZReg z_tmp3 = z23;
+    xa::ZReg z_tmp4 = z24;
+    xa::ZReg z_tmp5 = z25;
+    xa::ZReg z_tmp6 = z26;
+    xa::ZReg z_tmp7 = z27;
 
-        const std::vector<xa::ZReg> z_tmp_vec = {
-                z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
-        constexpr static int z_tmp_vec_size = 8;
-    };
+    const std::vector<xa::XReg> x_tmp_vec
+            = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
+    constexpr static int x_tmp_vec_size = 5;
 
-    // Seperate class for no unroll/threading burden
-    struct jit_single_blk_kernel : public jit_generator {
-        DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_single_blk_kernel)
-        static bool applicable(const prb_t &p) {
-            using namespace data_type;
+    const std::vector<xa::ZReg> z_tmp_vec
+            = {z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
+    constexpr static int z_tmp_vec_size = 8;
+};
 
-            bool ok = p.ndims >= 2 && mayiuse(avx2)
-                    && p.scale_type == scale_type_t::NONE
-                    && utils::one_of(p.itype, f32)
-                    && utils::one_of(p.otype, f32)
-                    && utils::everyone_is(0, p.ioff, p.ooff) && p.beta == 0.f;
-            if (!ok) return false;
+// Seperate class for no unroll/threading burden
+struct jit_single_blk_kernel : public jit_generator {
+    DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_single_blk_kernel)
+    static bool applicable(const prb_t &p) {
+        using namespace data_type;
 
-            int64_t n0 = p.nodes[0].n;
-            auto i0 = p.nodes[0].is;
-            auto o0 = p.nodes[0].os;
-            int64_t n1 = p.nodes[1].n;
-            auto i1 = p.nodes[1].is;
-            auto o1 = p.nodes[1].os;
+        bool ok = p.ndims >= 2 && mayiuse(avx2)
+                && p.scale_type == scale_type_t::NONE
+                && utils::one_of(p.itype, f32) && utils::one_of(p.otype, f32)
+                && utils::everyone_is(0, p.ioff, p.ooff) && p.beta == 0.f;
+        if (!ok) return false;
 
-            /*
+        int64_t n0 = p.nodes[0].n;
+        auto i0 = p.nodes[0].is;
+        auto o0 = p.nodes[0].os;
+        int64_t n1 = p.nodes[1].n;
+        auto i1 = p.nodes[1].is;
+        auto o1 = p.nodes[1].os;
+
+        /*
          * for a transpose of plain to 8c case, nodes would be like:
          *     n    is   os
          *     m    1    8
@@ -1835,345 +1822,336 @@ struct jit_uni_reorder_kernel_f32 : public kernel_t, public jit_generator {
          *     8    m    1
          *     m    1    8
          */
-            ok = (utils::one_of(n0, 8, 16) || utils::one_of(n1, 8, 16))
-                    && ((i0 == 1 && o1 == 1 && n0 == i1 && o0 == n1)
-                            || (o0 == 1 && i1 == 1 && n0 == o1 && i0 == n1));
-            if (!ok) return false;
+        ok = (utils::one_of(n0, 8, 16) || utils::one_of(n1, 8, 16))
+                && ((i0 == 1 && o1 == 1 && n0 == i1 && o0 == n1)
+                        || (o0 == 1 && i1 == 1 && n0 == o1 && i0 == n1));
+        if (!ok) return false;
 
-            // Do not handle transpose of dimensions other than last 2
-            for (int i = 2; i < p.ndims; ++i) {
-                if (p.nodes[i].is != p.nodes[i].os) {
-                    ok = false;
-                    break;
-                }
+        // Do not handle transpose of dimensions other than last 2
+        for (int i = 2; i < p.ndims; ++i) {
+            if (p.nodes[i].is != p.nodes[i].os) {
+                ok = false;
+                break;
             }
-
-            return ok;
         }
 
-        jit_single_blk_kernel(const tr::prb_t &prb)
-            : jit_generator()
-            , prb_(prb)
-            , ker_(nullptr)
-            , itype_sz(data_type_size(prb_.itype))
-            , otype_sz(data_type_size(prb_.otype))
-            , block_sz(prb.nodes[0].n) {
-            auto input_stride = prb_.nodes[0].is != 1 ? prb_.nodes[0].is
-                                                      : prb_.nodes[1].is;
-            auto output_stride = prb_.nodes[0].os != 1 ? prb_.nodes[0].os
-                                                       : prb_.nodes[1].os;
+        return ok;
+    }
 
-            auto ker_off = getSize();
-            Label tail_processing;
+    jit_single_blk_kernel(const tr::prb_t &prb)
+        : jit_generator()
+        , prb_(prb)
+        , ker_(nullptr)
+        , itype_sz(data_type_size(prb_.itype))
+        , otype_sz(data_type_size(prb_.otype))
+        , block_sz(prb.nodes[0].n) {
+        auto input_stride
+                = prb_.nodes[0].is != 1 ? prb_.nodes[0].is : prb_.nodes[1].is;
+        auto output_stride
+                = prb_.nodes[0].os != 1 ? prb_.nodes[0].os : prb_.nodes[1].os;
 
-            preamble();
-            cmp(reg_ptr_tail, true);
-            je(tail_processing, T_NEAR);
+        auto ker_off = getSize();
+        Label tail_processing;
 
-            if (block_sz == 8) {
-                gen_ker8x8(0, 0, input_stride, output_stride, 8, 8);
-                block_sz = 8;
-            } else if (block_sz == 16) {
-                gen_ker16x16_in_8x8(input_stride, output_stride);
-                block_sz = 16;
+        preamble();
+        cmp(reg_ptr_tail, true);
+        je(tail_processing, T_NEAR);
+
+        if (block_sz == 8) {
+            gen_ker8x8(0, 0, input_stride, output_stride, 8, 8);
+            block_sz = 8;
+        } else if (block_sz == 16) {
+            gen_ker16x16_in_8x8(input_stride, output_stride);
+            block_sz = 16;
+        } else {
+            assert(!"unimplemented");
+        }
+
+        postamble();
+
+        L(tail_processing);
+
+        if (block_sz == 8) {
+            auto i_tail = input_stride % 8 != 0 ? input_stride % 8 : 8;
+            auto o_tail = output_stride % 8 != 0 ? output_stride % 8 : 8;
+            if (i_tail != o_tail) {
+                auto t_mask = i_tail == 8 ? o_tail : i_tail;
+                gen_setmask(t_mask);
+                gen_ker8x8(0, 0, input_stride, output_stride, i_tail, o_tail);
+            }
+        } else if (block_sz == 16) {
+            auto i_tail = input_stride % 16 != 0 ? input_stride % 16 : 16;
+            auto o_tail = output_stride % 16 != 0 ? output_stride % 16 : 16;
+            if (i_tail != o_tail) {
+                auto t_mask = i_tail == 16 ? o_tail : i_tail;
+                t_mask %= 8;
+                if (t_mask != 0) gen_setmask(t_mask);
+                gen_ker16x16_in_8x8(
+                        input_stride, output_stride, i_tail, o_tail);
+            }
+        } else {
+            assert(!"unimplemented");
+        }
+
+        postamble();
+
+        auto *ker_start = getCode();
+        this->ker_ = (decltype(ker_))(ker_start + ker_off);
+    }
+
+    void gen_loadu(const Ymm &ymm, const Address &addr, int size) {
+        Xmm xmm(ymm.getIdx());
+        switch (size) {
+            case 32: vmovups(ymm, addr); break;
+            case 16: vmovups(xmm, addr); break;
+            default: assert(!"unreachable");
+        }
+    }
+
+    void gen_storeu(const Address &addr, const Ymm &ymm, int size) {
+        Xmm xmm(ymm.getIdx());
+        switch (size) {
+            case 32: vmovups(addr, ymm); break;
+            case 16: vmovups(addr, xmm); break;
+            default: assert(!"unreachable");
+        }
+    }
+
+    void gen_maskloadu(
+            const Ymm &ymm, const Address &addr, const Ymm mask, int size) {
+        Xmm xmm(ymm.getIdx());
+        Xmm mask128(mask.getIdx());
+        switch (size) {
+            case 32: vmaskmovps(ymm, mask, addr); break;
+            case 16: vmaskmovps(xmm, mask128, addr); break;
+            default: assert(!"unreachable");
+        }
+    }
+
+    void gen_maskstoreu(
+            const Address &addr, const Ymm &ymm, const Ymm mask, int size) {
+        Xmm xmm(ymm.getIdx());
+        Xmm mask128(mask.getIdx());
+        switch (size) {
+            case 32: vmaskmovps(addr, mask, ymm); break;
+            case 16: vmaskmovps(addr, mask128, xmm); break;
+            default: assert(!"unreachable");
+        }
+    }
+
+    // Register allocation xmm0~11
+    void gen_transpose_8x8() {
+        constexpr int lane = 8;
+        for (int i = 0; i < lane / 2; i++) {
+            vunpcklps(Ymm(lane + i), Ymm(2 * i), Ymm(2 * i + 1));
+            vunpckhps(Ymm(i), Ymm(2 * i), Ymm(2 * i + 1));
+        }
+
+        const unsigned int lfloat = 0x44;
+        const unsigned int ufloat = 0xee;
+        for (int i = 0; i < lane / 2; i++) {
+            int j = i % 2 == 0 ? lane + i : i - 1;
+            vshufps(Ymm(lane / 2 + 2 * i), Ymm(j), Ymm(j + 1), lfloat);
+            vshufps(Ymm(lane / 2 + 2 * i + 1), Ymm(j), Ymm(j + 1), ufloat);
+        }
+
+        const unsigned int lquad = 0x20;
+        for (int i = 0; i < lane / 2; i++)
+            vperm2f128(Ymm(i), Ymm(lane / 2 + i), Ymm(lane + i), lquad);
+
+        const unsigned int uquad = 0x31;
+        for (int i = lane / 2; i < lane; i++)
+            vperm2f128(Ymm(i), Ymm(i), Ymm(lane / 2 + i), uquad);
+    }
+
+    // keep order nchw -> nChw()C
+    // or nChw()C -> nchw
+    void gen_setmask(int mask) {
+        // all 0, all 1
+        vxorps(ymm_tmp, ymm_tmp, ymm_tmp);
+        vpcmpeqd(ymm_mask, ymm_mask, ymm_mask);
+        // blend in
+        auto in_mask = -1 << mask;
+        vpblendd(ymm_mask, ymm_mask, ymm_tmp, in_mask);
+    }
+
+    // TODO: Mark parameter with type information
+    // XXX: !
+    // offset in byte offset
+    // stride in element number
+    //
+    // Gen specific 8x8 transform respect to certain tail condition
+    void gen_tr8x8(int i_off, int o_off, int input_stride, int output_stride,
+            int in_tail, int out_tail) {
+        constexpr int lane = 8;
+
+        if (in_tail == 0 || out_tail == 0) return;
+
+        for (int i = 0; i < out_tail; ++i) {
+            if (in_tail != lane) {
+                gen_maskloadu(Ymm(i),
+                        ptr[reg_ptr_in + i_off + i * input_stride * itype_sz],
+                        ymm_mask, lane * itype_sz);
             } else {
-                assert(!"unimplemented");
+                gen_loadu(Ymm(i),
+                        ptr[reg_ptr_in + i_off + i * input_stride * itype_sz],
+                        lane * itype_sz);
             }
+        }
 
-            postamble();
+        gen_transpose_8x8();
 
-            L(tail_processing);
-
-            if (block_sz == 8) {
-                auto i_tail = input_stride % 8 != 0 ? input_stride % 8 : 8;
-                auto o_tail = output_stride % 8 != 0 ? output_stride % 8 : 8;
-                if (i_tail != o_tail) {
-                    auto t_mask = i_tail == 8 ? o_tail : i_tail;
-                    gen_setmask(t_mask);
-                    gen_ker8x8(
-                            0, 0, input_stride, output_stride, i_tail, o_tail);
-                }
-            } else if (block_sz == 16) {
-                auto i_tail = input_stride % 16 != 0 ? input_stride % 16 : 16;
-                auto o_tail = output_stride % 16 != 0 ? output_stride % 16 : 16;
-                if (i_tail != o_tail) {
-                    auto t_mask = i_tail == 16 ? o_tail : i_tail;
-                    t_mask %= 8;
-                    if (t_mask != 0) gen_setmask(t_mask);
-                    gen_ker16x16_in_8x8(
-                            input_stride, output_stride, i_tail, o_tail);
-                }
+        for (int i = 0; i < in_tail; ++i) {
+            if (out_tail == lane) {
+                gen_storeu(
+                        ptr[reg_ptr_out + o_off + i * output_stride * otype_sz],
+                        Ymm(i), lane * otype_sz);
             } else {
-                assert(!"unimplemented");
-            }
-
-            postamble();
-
-            auto *ker_start = getCode();
-            this->ker_ = (decltype(ker_))(ker_start + ker_off);
-        }
-
-        void gen_loadu(const Ymm &ymm, const Address &addr, int size) {
-            Xmm xmm(ymm.getIdx());
-            switch (size) {
-                case 32: vmovups(ymm, addr); break;
-                case 16: vmovups(xmm, addr); break;
-                default: assert(!"unreachable");
+                gen_maskstoreu(
+                        ptr[reg_ptr_out + o_off + i * output_stride * otype_sz],
+                        Ymm(i), ymm_mask, lane * otype_sz);
             }
         }
+    }
 
-        void gen_storeu(const Address &addr, const Ymm &ymm, int size) {
-            Xmm xmm(ymm.getIdx());
-            switch (size) {
-                case 32: vmovups(addr, ymm); break;
-                case 16: vmovups(addr, xmm); break;
-                default: assert(!"unreachable");
-            }
-        }
+    // tail: 0 ~ 8
+    // support: either in_tail or out_tail is not 8, but not both
+    void gen_ker8x8(int i_off, int o_off, int input_stride, int output_stride,
+            int in_tail, int out_tail) {
+        gen_tr8x8(i_off, o_off, input_stride, output_stride, in_tail, out_tail);
+    }
 
-        void gen_maskloadu(
-                const Ymm &ymm, const Address &addr, const Ymm mask, int size) {
-            Xmm xmm(ymm.getIdx());
-            Xmm mask128(mask.getIdx());
-            switch (size) {
-                case 32: vmaskmovps(ymm, mask, addr); break;
-                case 16: vmaskmovps(xmm, mask128, addr); break;
-                default: assert(!"unreachable");
-            }
-        }
+    void gen_ker16x16_in_8x8(int input_stride, int output_stride) {
+        const auto lane = 16;
+        const auto sub_lane = lane / 2;
+        gen_tr8x8(0, 0, input_stride, output_stride, sub_lane, sub_lane);
+        gen_tr8x8(input_stride * sub_lane * itype_sz, sub_lane * otype_sz,
+                input_stride, output_stride, sub_lane, sub_lane);
+        gen_tr8x8(sub_lane * itype_sz, output_stride * sub_lane * otype_sz,
+                input_stride, output_stride, sub_lane, sub_lane);
+        gen_tr8x8((input_stride * sub_lane + sub_lane) * itype_sz,
+                (output_stride * sub_lane + sub_lane) * otype_sz, input_stride,
+                output_stride, sub_lane, sub_lane);
+    }
 
-        void gen_maskstoreu(
-                const Address &addr, const Ymm &ymm, const Ymm mask, int size) {
-            Xmm xmm(ymm.getIdx());
-            Xmm mask128(mask.getIdx());
-            switch (size) {
-                case 32: vmaskmovps(addr, mask, ymm); break;
-                case 16: vmaskmovps(addr, mask128, xmm); break;
-                default: assert(!"unreachable");
-            }
-        }
+    // tail can be 1 ~ 16, using avx2 for now
+    void gen_ker16x16_in_8x8(
+            int input_stride, int output_stride, int in_tail, int out_tail) {
+        constexpr auto lane = 16;
+        constexpr auto sub_lane = lane / 2;
+        auto tail = in_tail != lane ? in_tail : out_tail;
 
-        // Register allocation xmm0~11
-        void gen_transpose_8x8() {
-            constexpr int lane = 8;
-            for (int i = 0; i < lane / 2; i++) {
-                vunpcklps(Ymm(lane + i), Ymm(2 * i), Ymm(2 * i + 1));
-                vunpckhps(Ymm(i), Ymm(2 * i), Ymm(2 * i + 1));
-            }
+        const auto l_tail = tail < sub_lane ? tail : sub_lane;
+        const auto u_tail = tail < sub_lane ? 0 : tail - sub_lane;
 
-            const unsigned int lfloat = 0x44;
-            const unsigned int ufloat = 0xee;
-            for (int i = 0; i < lane / 2; i++) {
-                int j = i % 2 == 0 ? lane + i : i - 1;
-                vshufps(Ymm(lane / 2 + 2 * i), Ymm(j), Ymm(j + 1), lfloat);
-                vshufps(Ymm(lane / 2 + 2 * i + 1), Ymm(j), Ymm(j + 1), ufloat);
-            }
-
-            const unsigned int lquad = 0x20;
-            for (int i = 0; i < lane / 2; i++)
-                vperm2f128(Ymm(i), Ymm(lane / 2 + i), Ymm(lane + i), lquad);
-
-            const unsigned int uquad = 0x31;
-            for (int i = lane / 2; i < lane; i++)
-                vperm2f128(Ymm(i), Ymm(i), Ymm(lane / 2 + i), uquad);
-        }
-
-        // keep order nchw -> nChw()C
-        // or nChw()C -> nchw
-        void gen_setmask(int mask) {
-            // all 0, all 1
-            vxorps(ymm_tmp, ymm_tmp, ymm_tmp);
-            vpcmpeqd(ymm_mask, ymm_mask, ymm_mask);
-            // blend in
-            auto in_mask = -1 << mask;
-            vpblendd(ymm_mask, ymm_mask, ymm_tmp, in_mask);
-        }
-
-        // TODO: Mark parameter with type information
-        // XXX: !
-        // offset in byte offset
-        // stride in element number
-        //
-        // Gen specific 8x8 transform respect to certain tail condition
-        void gen_tr8x8(int i_off, int o_off, int input_stride,
-                int output_stride, int in_tail, int out_tail) {
-            constexpr int lane = 8;
-
-            if (in_tail == 0 || out_tail == 0) return;
-
-            for (int i = 0; i < out_tail; ++i) {
-                if (in_tail != lane) {
-                    gen_maskloadu(Ymm(i),
-                            ptr[reg_ptr_in + i_off
-                                    + i * input_stride * itype_sz],
-                            ymm_mask, lane * itype_sz);
-                } else {
-                    gen_loadu(Ymm(i),
-                            ptr[reg_ptr_in + i_off
-                                    + i * input_stride * itype_sz],
-                            lane * itype_sz);
-                }
-            }
-
-            gen_transpose_8x8();
-
-            for (int i = 0; i < in_tail; ++i) {
-                if (out_tail == lane) {
-                    gen_storeu(ptr[reg_ptr_out + o_off
-                                       + i * output_stride * otype_sz],
-                            Ymm(i), lane * otype_sz);
-                } else {
-                    gen_maskstoreu(ptr[reg_ptr_out + o_off
-                                           + i * output_stride * otype_sz],
-                            Ymm(i), ymm_mask, lane * otype_sz);
-                }
-            }
-        }
-
-        // tail: 0 ~ 8
-        // support: either in_tail or out_tail is not 8, but not both
-        void gen_ker8x8(int i_off, int o_off, int input_stride,
-                int output_stride, int in_tail, int out_tail) {
-            gen_tr8x8(i_off, o_off, input_stride, output_stride, in_tail,
-                    out_tail);
-        }
-
-        void gen_ker16x16_in_8x8(int input_stride, int output_stride) {
-            const auto lane = 16;
-            const auto sub_lane = lane / 2;
-            gen_tr8x8(0, 0, input_stride, output_stride, sub_lane, sub_lane);
+        if (tail == in_tail) {
+            gen_tr8x8(0, 0, input_stride, output_stride, l_tail, sub_lane);
             gen_tr8x8(input_stride * sub_lane * itype_sz, sub_lane * otype_sz,
-                    input_stride, output_stride, sub_lane, sub_lane);
+                    input_stride, output_stride, l_tail, sub_lane);
             gen_tr8x8(sub_lane * itype_sz, output_stride * sub_lane * otype_sz,
-                    input_stride, output_stride, sub_lane, sub_lane);
-            gen_tr8x8((input_stride * sub_lane + sub_lane) * itype_sz,
-                    (output_stride * sub_lane + sub_lane) * otype_sz,
-                    input_stride, output_stride, sub_lane, sub_lane);
+                    input_stride, output_stride, u_tail, sub_lane);
+            gen_tr8x8(itype_sz * (input_stride * sub_lane + sub_lane),
+                    otype_sz * (output_stride * sub_lane + sub_lane),
+                    input_stride, output_stride, u_tail, sub_lane);
+        } else {
+            gen_tr8x8(0, 0, input_stride, output_stride, sub_lane, l_tail);
+            gen_tr8x8(input_stride * sub_lane * itype_sz, sub_lane * otype_sz,
+                    input_stride, output_stride, sub_lane, u_tail);
+            gen_tr8x8(sub_lane * itype_sz, output_stride * sub_lane * itype_sz,
+                    input_stride, output_stride, sub_lane, l_tail);
+            gen_tr8x8(itype_sz * (input_stride * sub_lane + sub_lane),
+                    otype_sz * (output_stride * sub_lane + sub_lane),
+                    input_stride, output_stride, sub_lane, u_tail);
         }
+    }
 
-        // tail can be 1 ~ 16, using avx2 for now
-        void gen_ker16x16_in_8x8(int input_stride, int output_stride,
-                int in_tail, int out_tail) {
-            constexpr auto lane = 16;
-            constexpr auto sub_lane = lane / 2;
-            auto tail = in_tail != lane ? in_tail : out_tail;
+    void operator()(const void *in, void *out, bool tail) const {
+        ker_(in, out, tail);
+    }
 
-            const auto l_tail = tail < sub_lane ? tail : sub_lane;
-            const auto u_tail = tail < sub_lane ? 0 : tail - sub_lane;
+private:
+    // 6 ~ 12
+    constexpr static int xmm_save_for_windows = is_windows ? 7 : 0;
+    constexpr static int xmm_save_start_from = 6;
+    constexpr static int xmm_width = 16;
 
-            if (tail == in_tail) {
-                gen_tr8x8(0, 0, input_stride, output_stride, l_tail, sub_lane);
-                gen_tr8x8(input_stride * sub_lane * itype_sz,
-                        sub_lane * otype_sz, input_stride, output_stride,
-                        l_tail, sub_lane);
-                gen_tr8x8(sub_lane * itype_sz,
-                        output_stride * sub_lane * otype_sz, input_stride,
-                        output_stride, u_tail, sub_lane);
-                gen_tr8x8(itype_sz * (input_stride * sub_lane + sub_lane),
-                        otype_sz * (output_stride * sub_lane + sub_lane),
-                        input_stride, output_stride, u_tail, sub_lane);
-            } else {
-                gen_tr8x8(0, 0, input_stride, output_stride, sub_lane, l_tail);
-                gen_tr8x8(input_stride * sub_lane * itype_sz,
-                        sub_lane * otype_sz, input_stride, output_stride,
-                        sub_lane, u_tail);
-                gen_tr8x8(sub_lane * itype_sz,
-                        output_stride * sub_lane * itype_sz, input_stride,
-                        output_stride, sub_lane, l_tail);
-                gen_tr8x8(itype_sz * (input_stride * sub_lane + sub_lane),
-                        otype_sz * (output_stride * sub_lane + sub_lane),
-                        input_stride, output_stride, sub_lane, u_tail);
+    void preamble() {
+        if (is_windows) {
+            sub(rsp, xmm_save_for_windows * xmm_width);
+            for (int i = 0; i < xmm_save_for_windows; ++i) {
+                movdqu(ptr[rsp + i * xmm_width],
+                        Xbyak::Xmm(xmm_save_start_from + i));
             }
         }
+    }
 
-        void operator()(const void *in, void *out, bool tail) const {
-            ker_(in, out, tail);
+    void postamble() {
+        if (is_windows) {
+            for (int i = 0; i < xmm_save_for_windows; ++i)
+                movdqu(Xbyak::Xmm(xmm_save_start_from + i),
+                        ptr[rsp + i * xmm_width]);
+            add(rsp, xmm_save_for_windows * xmm_width);
         }
+        uni_vzeroupper();
+        ret();
+    }
 
-    private:
-        // 6 ~ 12
-        constexpr static int xmm_save_for_windows = is_windows ? 7 : 0;
-        constexpr static int xmm_save_start_from = 6;
-        constexpr static int xmm_width = 16;
+    const prb_t &prb_;
+    void (*ker_)(const void *, void *, bool tail);
 
-        void preamble() {
-            if (is_windows) {
-                sub(rsp, xmm_save_for_windows * xmm_width);
-                for (int i = 0; i < xmm_save_for_windows; ++i) {
-                    movdqu(ptr[rsp + i * xmm_width],
-                            Xbyak::Xmm(xmm_save_start_from + i));
-                }
-            }
-        }
+    int itype_sz;
+    int otype_sz;
+    int block_sz;
 
-        void postamble() {
-            if (is_windows) {
-                for (int i = 0; i < xmm_save_for_windows; ++i)
-                    movdqu(Xbyak::Xmm(xmm_save_start_from + i),
-                            ptr[rsp + i * xmm_width]);
-                add(rsp, xmm_save_for_windows * xmm_width);
-            }
-            uni_vzeroupper();
-            ret();
-        }
+    Reg64 reg_ptr_in = abi_param1;
+    Reg64 reg_ptr_out = abi_param2;
+    // Windows bool is 1-byte in register
+    Reg8 reg_ptr_tail = is_windows ? r8b : dl;
 
-        const prb_t &prb_;
-        void (*ker_)(const void *, void *, bool tail);
+    Ymm ymm_mask = ymm12;
+    Ymm ymm_tmp = ymm0;
+};
 
-        int itype_sz;
-        int otype_sz;
-        int block_sz;
+status_t kernel_t::desc_init(
+        kernel_t::desc_t &desc, const prb_t &prb, int ndims_ker_max) {
+    desc.prb = prb;
+    desc.prb.ioff = desc.prb.ooff = 0;
 
-        Reg64 reg_ptr_in = abi_param1;
-        Reg64 reg_ptr_out = abi_param2;
-        // Windows bool is 1-byte in register
-        Reg8 reg_ptr_tail = is_windows ? r8b : dl;
+    if (ndims_ker_max > prb.ndims) return status::invalid_arguments;
 
-        Ymm ymm_mask = ymm12;
-        Ymm ymm_tmp = ymm0;
+    auto ndims_ker_max_f = [&]() {
+        size_t cur_size = 1;
+        for (int d = 0; d < prb.ndims; cur_size *= prb.nodes[d++].n)
+            if (cur_size >= ker_prb_size_min) return d;
+        return prb.ndims;
     };
 
-    status_t kernel_t::desc_init(
-            kernel_t::desc_t &desc, const prb_t &prb, int ndims_ker_max) {
-        desc.prb = prb;
-        desc.prb.ioff = desc.prb.ooff = 0;
+    if (ndims_ker_max <= 0) ndims_ker_max = ndims_ker_max_f();
 
-        if (ndims_ker_max > prb.ndims) return status::invalid_arguments;
-
-        auto ndims_ker_max_f = [&]() {
-            size_t cur_size = 1;
-            for (int d = 0; d < prb.ndims; cur_size *= prb.nodes[d++].n)
-                if (cur_size >= ker_prb_size_min) return d;
-            return prb.ndims;
-        };
-
-        if (ndims_ker_max <= 0) ndims_ker_max = ndims_ker_max_f();
-
-        /* traverse through kernel implementations */
-        /* TODO: find a better way to do that... */
-        desc.id = 0;
-        for (int ndims_ker = ndims_ker_max; ndims_ker > 0; --ndims_ker) {
-            desc.prb.ndims = ndims_ker;
-            if (jit_uni_reorder_kernel_f32::applicable(desc.prb))
-                return status::success;
-        }
-
-        return status::unimplemented;
+    /* traverse through kernel implementations */
+    /* TODO: find a better way to do that... */
+    desc.id = 0;
+    for (int ndims_ker = ndims_ker_max; ndims_ker > 0; --ndims_ker) {
+        desc.prb.ndims = ndims_ker;
+        if (jit_uni_reorder_kernel_f32::applicable(desc.prb))
+            return status::success;
     }
 
-    kernel_t *kernel_t::create(const kernel_t::desc_t &desc) {
-        switch (desc.id) {
-            case 0: return new jit_uni_reorder_kernel_f32(desc);
-            default: assert(!"unknown kernel id"); return nullptr;
-        }
+    return status::unimplemented;
+}
 
-        return nullptr;
+kernel_t *kernel_t::create(const kernel_t::desc_t &desc) {
+    switch (desc.id) {
+        case 0: return new jit_uni_reorder_kernel_f32(desc);
+        default: assert(!"unknown kernel id"); return nullptr;
     }
+
+    return nullptr;
+}
 
 } // namespace tr
 
-static void
-prb_block_for_cache(tr::prb_t &prb) {
+static void prb_block_for_cache(tr::prb_t &prb) {
     /* If strides for 0th and 1st nodes are cache friendly
      * then one can altogether do away with blocking ! */
     const bool cache_blocking_needed = false
@@ -2646,7 +2624,7 @@ status_t jit_uni_reorder_create(reorder_pd_t **reorder_pd, engine_t *engine,
     return ret;
 }
 
-} // namespace tr
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl
+} // namespace dnnl

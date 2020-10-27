@@ -25,8 +25,8 @@
 #include "common/utils.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 #define CG CodeGeneratorAArch64
 #define IDX(a) static_cast<uint32_t>(a.getIdx())
@@ -69,6 +69,7 @@ private:
     using Reg64 = Xbyak::Reg64;
 
     using XReg = xa::XReg;
+    using WReg = xa::WReg;
 
     using Vmm = typename utils::conditional3<isa == sse41, Xmm, isa == avx, Ymm,
             Zmm>::type;
@@ -149,6 +150,8 @@ private:
     xa::PReg p_tmp0 = p3;
     xa::PReg p_128 = p7;
     xa::PReg p_lsb = p2;
+    xa::PReg p_tmp1 = p11;
+    xa::PReg p_tmp2 = p12;
 
     // Here be some (tame) dragons. This kernel does not follow the regular
     // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu
@@ -183,12 +186,16 @@ private:
     reg64_t ki = r12;
     reg64_t aux_reg_input_d = r8;
 
+    using wreg_t = const WReg;
+    wreg_t w_tmp_0 = w23;
+
     using xreg_t = const XReg;
     xreg_t aux_xreg_input = x9;
     xreg_t xreg_output = x12;
     xreg_t xreg_index = x10;
     xreg_t xreg_zero_ptr = x9;
-    xreg_t x_tmp = x28;
+    xreg_t x_tmp_addr = x28;
+    xreg_t x_tmp_0 = x23;
 
     Reg32 reg_shuf_mask = esi;
 
@@ -264,8 +271,8 @@ private:
         vextractf128(xtmp, y0, 1);
         vpaddd(xtmp, xtmp, x1);
         vinsertf128(y0, y0, xtmp, 1);
-#else //#ifdef DNNL_X64_IMPLEMENTATION kuri \
-        //vextractf128(xtmp, y0, 0);
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        /*vextractf128(xtmp, y0, 0);*/
         CG::mov(xa::VReg(IDX(xtmp)).b16, xa::VReg(IDX(y0)).b16);
         //vpaddd(xtmp, xtmp, x1);
         CG::add(xa::VReg(IDX(xtmp)).s4, xa::VReg(IDX(xtmp)).s4,

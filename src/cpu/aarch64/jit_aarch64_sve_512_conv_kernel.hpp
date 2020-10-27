@@ -98,6 +98,8 @@ private:
     reg64_t reg_out_prf = x6; // addr for prefetch
 
     reg64_t aux_reg_inp = x7; // src addr (main loop)
+    reg64_t aux_reg_inp2 = x24; // src addr (main loop)
+    reg64_t aux_reg_inp3 = x25; // src addr (main loop)
     reg64_t reg_out_ofs = x7; // dst addr (store_output)
     reg64_t aux_reg_ker = x8; // ker addr (main loop)
     reg64_t reg_channel = x9; // reduce workload
@@ -300,8 +302,8 @@ private:
     using reg64_t = const xa::XReg;
     enum {
         typesize = sizeof(float),
-        ker_reg_base_idx = 26,
     };
+    int ker_reg_base_idx = (jcp.nb_ic_blocking == 1) ? 16 : 24;
 
     //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
     //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
@@ -338,6 +340,8 @@ private:
 
     /* Temporary registers for ARM insts */
     reg64_t reg_prev_bcast_addr = x15;
+    reg64_t reg_prev_bcast_addr2 = x17;
+    reg64_t reg_prev_bcast_addr3 = x21;
     reg64_t reg_tmp_imm = x16;
     reg64_t reg_tmp_addr = x18;
 
@@ -352,8 +356,8 @@ private:
 
     const xa::PReg reg_p_all_ones = p2;
 
-    void prefetch(
-            const std::string prfop, int level, reg64_t in, long long int ofs) {
+    long long int prefetch(const std::string prfop, int level, reg64_t in,
+            long long int ofs, long long int prev_ofs) {
         bool for_load;
         if (prfop == "LD") {
             for_load = true;
@@ -379,11 +383,16 @@ private:
                 default: assert(!"invalid prfop"); break;
             }
 
+            long long int tmp_ofs = ofs - prev_ofs;
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
                 CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+            } else if ((tmp_ofs <= PRFMMAX) && (tmp_ofs >= 0)) {
+                CGA64::prfm(op,
+                        xa::ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
             } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfm(op, xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
             }
         } else {
             xa::PrfopSve op_sve = xa::PLDL1KEEP_SVE;
@@ -403,15 +412,23 @@ private:
                 default: assert(!"invalid prfop"); break;
             }
 
+            long long int tmp_ofs = ofs - prev_ofs;
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
                 CGA64::prfw(op_sve, reg_p_all_ones,
                         xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+            } else if ((VL_OFS(tmp_ofs) <= PRFWMAX)
+                    && (VL_OFS(tmp_ofs) >= (-1 * PRFWMAX - 1))) {
+                CGA64::prfw(op_sve, reg_p_all_ones,
+                        xa::ptr(reg_tmp_addr,
+                                static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
                 CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                prev_ofs = ofs;
             }
         }
+        return prev_ofs;
     }
 
     xa::ZReg reg_wei = xa::ZReg(31);
