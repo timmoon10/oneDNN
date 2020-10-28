@@ -914,14 +914,14 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
                 : jcp.id * jcp.ih; // backward
 
         static const int max_ur_regs_list[] = {24, 14, 9, 6, 5, 2};
-        max_regs = 1;
+        int max_ur_regs_idx = 2;
         for (int ii = 6; ii > 0; ii--) {
             if ((jcp.oc_block % ii) == 0) {
-                max_regs = ii;
+                max_ur_regs_idx = ii - 1;
                 break;
             }
         }
-        max_regs = max_ur_regs_list[max_regs]; // max # of ur_w
+        max_regs = max_ur_regs_list[max_ur_regs_idx]; // max # of ur_w
         min_regs = nstl::min(6, max_regs); // min # of ur_w
         size_threshold = 14;
         ur_step = 1; // step size of ur_w param checking
