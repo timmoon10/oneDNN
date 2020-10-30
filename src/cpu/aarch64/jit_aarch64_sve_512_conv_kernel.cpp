@@ -2980,13 +2980,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     typesize * (i_kw * ic_block + i_ic) * jcp.oc_block
                             + kernel_offset,
                     pre_offset_ker);
-
-            //CGA64::add_imm(reg_add_tmp, reg_kernel,
-            //        typesize * (i_kw * ic_block + i_ic) * jcp.oc_block
-            //                + kernel_offset,
-            //        reg_tmp_imm);
-            //CGA64::str(xa::ZReg(i_kw * ic_block_step + i_ic),
-            //        xa::ptr(reg_add_tmp));
         }
     }
 }
