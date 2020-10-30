@@ -496,6 +496,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
             reg_tmp_imm);
     CGA64::b(xa::LE, reduce_loop_tail);
 
+    align(32);
     CGA64::L_aarch64(reduce_loop);
     {
         fma_block(false);
@@ -844,7 +845,7 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     // TODO: Optimize bellow params
     const int SMALL_SPATIAL = 10;
     const int BIG_SPATIAL = 65;
-    const int BIG_REDUCE_DIM = 1024;
+    //const int BIG_REDUCE_DIM = 1024;
     const int BIG_LOAD_DIM = (jcp.reduce_dim >= 512) ? 256 : 512;
 
     int load_blocking {0};
@@ -907,22 +908,14 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         /* adjusting registry blocking */
         int max_regs, min_regs, size_threshold, ur_step;
 
-        // spatial : H*D of dst
+        /* spatial : H*D of dst */
         const int spatial
                 = (one_of(jcp.prop_kind, forward_training, forward_inference))
                 ? jcp.od * jcp.oh // forward
                 : jcp.id * jcp.ih; // backward
 
-        static const int max_ur_regs_list[] = {24, 14, 9, 6, 5, 2};
-        int max_ur_regs_idx = 2;
-        for (int ii = 6; ii > 0; ii--) {
-            if ((jcp.oc_block % ii) == 0) {
-                max_ur_regs_idx = ii - 1;
-                break;
-            }
-        }
-        max_regs = max_ur_regs_list[max_ur_regs_idx]; // max # of ur_w
-        min_regs = nstl::min(6, max_regs); // min # of ur_w
+        max_regs = 9; // max # of ur_w
+        min_regs = 6; // min # of ur_w
         size_threshold = 14;
         ur_step = 1; // step size of ur_w param checking
         jcp.expl_bcast = true;
@@ -934,12 +927,11 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
         /*
          *  H*D of dst  > SMALL_SPATIAL
          */
-        //if (jcp.load_dim > 128 && jcp.load_dim < BIG_LOAD_DIM
-        //        && spatial > SMALL_SPATIAL && spatial < BIG_SPATIAL
-        //        && jcp.reduce_dim < 256) {
-        if (jcp.load_dim > 128 && spatial > SMALL_SPATIAL) {
-            max_regs = 8;
-            min_regs = 4;
+        if (jcp.load_dim > 128 && jcp.load_dim < BIG_LOAD_DIM
+                && spatial > SMALL_SPATIAL && spatial < BIG_SPATIAL
+                && jcp.reduce_dim < 256) {
+            max_regs = 6;
+            min_regs = 5;
         }
 
         for (int ur_w = max_regs; ur_w >= min_regs; ur_w -= ur_step) {
@@ -978,19 +970,18 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
             jcp.loop_order = reduce_src ? loop_blr : loop_lbr;
 
         int nb_bcast = div_up(jcp.bcast_dim, jcp.bcast_block);
-        int nb_reduce = div_up(jcp.reduce_dim, jcp.reduce_block);
         int nb_load = div_up(jcp.load_dim, jcp.load_block);
         if (is_data_layout_nxc) {
             reduce_blocking = jcp.reduce_dim;
         } else {
-            reduce_blocking = nb_reduce;
-            if (spatial <= SMALL_SPATIAL && jcp.reduce_dim >= BIG_REDUCE_DIM)
-                reduce_blocking = 16;
-            else if (spatial > SMALL_SPATIAL
-                    && jcp.reduce_dim >= BIG_REDUCE_DIM)
-                reduce_blocking = 8;
-            reduce_blocking = best_divider(nb_reduce, 1, reduce_blocking, true);
-            reduce_blocking *= jcp.reduce_block;
+            reduce_blocking = jcp.reduce_dim;
+            if (jcp.load_dim <= BIG_LOAD_DIM && spatial > SMALL_SPATIAL
+                    && spatial < BIG_SPATIAL) {
+                reduce_blocking = nstl::min(jcp.reduce_dim, 80);
+            } else if (spatial > SMALL_SPATIAL)
+                reduce_blocking = nstl::min(jcp.reduce_dim, 512);
+            else
+                reduce_blocking = nstl::min(jcp.reduce_dim, 256);
         }
 
         // Check input data cache aliasing.
