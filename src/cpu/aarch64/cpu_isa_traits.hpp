@@ -75,7 +75,46 @@ enum cpu_isa_t : unsigned {
     isa_all = ~0u,
 };
 
+enum class cpu_isa_cmp_t {
+    // List of infix comparison relations between two cpu_isa_t
+    // where we take isa_1 and isa_2 to be two cpu_isa_t instances.
+
+    // isa_1 SUBSET isa_2 if all feature flags supported by isa_1
+    // are supported by isa_2 as well (equality allowed)
+    SUBSET,
+
+    // isa_1 SUPERSET isa_2 if all feature flags supported by isa_2
+    // are supported by isa_1 as well (equality allowed)
+    SUPERSET,
+
+    // Few more options that (depending upon need) can be enabled in future
+
+    // 1. PROPER_SUBSET: isa_1 SUBSET isa_2 and isa_1 != isa_2
+    // 2. PROPER_SUPERSET: isa_1 SUPERSET isa_2 and isa_1 != isa_2
+};
+  
 const char *get_isa_info();
+
+static inline bool compare_isa(
+        cpu_isa_t isa_1, cpu_isa_cmp_t cmp, cpu_isa_t isa_2) {
+    unsigned mask_1 = static_cast<unsigned>(isa_1);
+    unsigned mask_2 = static_cast<unsigned>(isa_2);
+    unsigned mask_min = mask_1 & mask_2;
+
+    switch (cmp) {
+        case cpu_isa_cmp_t::SUBSET: return mask_1 == mask_min;
+        case cpu_isa_cmp_t::SUPERSET: return mask_2 == mask_min;
+        default: assert(!"unsupported comparison of isa"); return false;
+    }
+}
+
+static inline bool is_subset(cpu_isa_t isa_1, cpu_isa_t isa_2) {
+    return compare_isa(isa_1, cpu_isa_cmp_t::SUBSET, isa_2);
+}
+
+static inline bool is_superset(cpu_isa_t isa_1, cpu_isa_t isa_2) {
+    return compare_isa(isa_1, cpu_isa_cmp_t::SUPERSET, isa_2);
+}
 
 cpu_isa_t DNNL_API get_max_cpu_isa_mask(bool soft = false);
 status_t set_max_cpu_isa(dnnl_cpu_isa_t isa);
@@ -101,6 +140,26 @@ struct cpu_isa_traits<asimd> {
     static constexpr const char *user_option_env = "ADVANCED_SIMD";
 };
 
+template <>
+struct cpu_isa_traits<sve_128> {
+    typedef Xbyak_aarch64::VReg4S Vmm;
+    static constexpr int vlen_shift = 4;
+    static constexpr int vlen = 16;
+    static constexpr int n_vregs = 16;
+    static constexpr dnnl_cpu_isa_t user_option_val = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_128);
+    static constexpr const char *user_option_env = "SVE_128";
+};
+
+template <>
+struct cpu_isa_traits<sve_256> {
+    typedef Xbyak_aarch64::ZRegS Vmm;
+    static constexpr int vlen_shift = 5;
+    static constexpr int vlen = 32;
+    static constexpr int n_vregs = 16;
+    static constexpr dnnl_cpu_isa_t user_option_val = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_256);
+    static constexpr const char *user_option_env = "SVE_256";
+};
+  
 template <>
 struct cpu_isa_traits<sve_512> {
     typedef Xbyak_aarch64::ZRegS Vmm;
