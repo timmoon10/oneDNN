@@ -1219,7 +1219,7 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
             }
         }
 
-        const int max_nb_oc = 5;
+        const int max_nb_oc = 2;
         {
             jcp.kernel_kind = expl_bcast;
             jcp.nb_ic_blocking = 1;
