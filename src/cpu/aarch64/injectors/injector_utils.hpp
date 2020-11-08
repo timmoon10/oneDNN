@@ -13,9 +13,12 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 *******************************************************************************/
-
+/*
 #ifndef CPU_X64_JIT_INJECTOR_UTILS_HPP
 #define CPU_X64_JIT_INJECTOR_UTILS_HPP
+*/
+#ifndef CPU_AARCH64_JIT_INJECTOR_UTILS_HPP
+#define CPU_AARCH64_JIT_INJECTOR_UTILS_HPP
 
 #include <array>
 #include <cstddef>
@@ -37,17 +40,19 @@ template <typename Vmm>
 struct vmm_size_t;
 
 template <>
-struct vmm_size_t<Xbyak::Zmm> {
+//struct vmm_size_t<Xbyak::Zmm> {
+struct vmm_size_t<Xbyak_aarch64::ZReg> {
     static constexpr std::size_t bytes = 64u;
 };
-
+  /*
 template <>
 struct vmm_size_t<Xbyak::Ymm> {
     static constexpr std::size_t bytes = 32u;
 };
-
+  */
 template <>
-struct vmm_size_t<Xbyak::Xmm> {
+//struct vmm_size_t<Xbyak::Xmm> {
+struct vmm_size_t<Xbyak_aarch64::VReg> {
     static constexpr std::size_t bytes = 16u;
 };
 
@@ -58,9 +63,11 @@ struct vmm_size_t<Xbyak::Xmm> {
 class register_preserve_guard_t {
 
 public:
-    register_preserve_guard_t(jit_generator *host,
-            std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
-            std::initializer_list<Xbyak::Xmm> vmm_to_preserve = {});
+  register_preserve_guard_t(/*jit_generator *host,*/
+			      //            std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
+            std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,			      
+			      //std::initializer_list<Xbyak::Xmm> vmm_to_preserve = {});
+            std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve = {});			      
     register_preserve_guard_t(register_preserve_guard_t &&other) = default;
     register_preserve_guard_t &operator=(register_preserve_guard_t &&other)
             = default;
@@ -69,9 +76,11 @@ public:
     size_t stack_space_occupied() const;
 
 private:
-    jit_generator *host_;
-    std::stack<Xbyak::Reg64> reg64_stack_;
-    std::stack<Xbyak::Xmm> vmm_stack_;
+  //jit_generator *host_;
+  //std::stack<Xbyak::Reg64> reg64_stack_;
+    std::stack<Xbyak_aarch64::XReg> reg64_stack_;
+  //std::stack<Xbyak::Xmm> vmm_stack_;
+    std::stack<Xbyak_aarch64::VReg> vmm_stack_;  
     size_t vmm_to_preserve_size_bytes_;
 };
 
