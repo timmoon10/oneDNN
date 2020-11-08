@@ -162,7 +162,8 @@ public:
         mov(x1, x3);
         mov(x8, x4);
         mov(x9, x5); /* 6-th arg. */
-
+	mov(x4, sp); /* Intel64's stack register is 4-th register. */
+        sub_imm(x22, x4, 0x20000, X_TMP_0); //X_TRANSLATOR_STACK:x22, xt_stack_offset:0x20000
     }
 
     void postamble() {
