@@ -50,11 +50,11 @@ template <cpu_isa_t isa, impl::data_type_t d_type>
 struct jit_uni_pooling_fwd_t : public primitive_t {
     struct pd_t : public cpu_pooling_fwd_pd_t {
         using cpu_pooling_fwd_pd_t::cpu_pooling_fwd_pd_t;
-      /*
+        /*
         DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", jpp_.isa, ""),
                 jit_uni_pooling_fwd_t);
       */
-              DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_pooling_fwd_t);
+        DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_pooling_fwd_t);
 
         status_t init(engine_t *engine) {
             using namespace utils;
@@ -120,11 +120,11 @@ template <cpu_isa_t isa, impl::data_type_t d_type>
 struct jit_uni_pooling_bwd_t : public primitive_t {
     struct pd_t : public cpu_pooling_bwd_pd_t {
         using cpu_pooling_bwd_pd_t::cpu_pooling_bwd_pd_t;
-      /*
+        /*
         DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", jpp_.isa, ""),
                 jit_uni_pooling_bwd_t);
       */
-      DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_pooling_bwd_t);
+        DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_pooling_bwd_t);
 
         status_t init(engine_t *engine) {
             using namespace utils;
@@ -183,7 +183,7 @@ private:
     static constexpr data_type_t wsp_dt_ = data_type::f32;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

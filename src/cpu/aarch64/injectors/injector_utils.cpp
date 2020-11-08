@@ -23,42 +23,43 @@ namespace cpu {
 namespace aarch64 {
 namespace injector_utils {
 
-  //static std::size_t get_vmm_size_bytes(const Xbyak::Xmm &vmm) {
+//static std::size_t get_vmm_size_bytes(const Xbyak::Xmm &vmm) {
 static std::size_t get_vmm_size_bytes(const Xbyak_aarch64::VReg &vmm) {
     static constexpr int byte_size_bits = 8;
     return vmm.getBit() / byte_size_bits;
 }
 
-
 static std::size_t calc_vmm_to_preserve_size_bytes(
-						   //        const std::initializer_list<Xbyak::Xmm> &vmm_to_preserve) {
-        const std::initializer_list<Xbyak_aarch64::VReg> &vmm_to_preserve) {						   
+        //        const std::initializer_list<Xbyak::Xmm> &vmm_to_preserve) {
+        const std::initializer_list<Xbyak_aarch64::VReg> &vmm_to_preserve) {
 
     return std::accumulate(vmm_to_preserve.begin(), vmm_to_preserve.end(),
-			   //            std::size_t(0u), [](std::size_t accum, const Xbyak::Xmm &vmm) {
-            std::size_t(0u), [](std::size_t accum, const Xbyak_aarch64::VReg &vmm) {			   
+            //            std::size_t(0u), [](std::size_t accum, const Xbyak::Xmm &vmm) {
+            std::size_t(0u),
+            [](std::size_t accum, const Xbyak_aarch64::VReg &vmm) {
                 return accum + get_vmm_size_bytes(vmm);
             });
 }
 
-  register_preserve_guard_t::register_preserve_guard_t(/*jit_generator *host,*/
-						     //        std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
-        std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,						     
-						     //        std::initializer_list<Xbyak::Xmm> vmm_to_preserve)
-        std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve)						     
+register_preserve_guard_t::register_preserve_guard_t(/*jit_generator *host,*/
+        //        std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
+        std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,
+        //        std::initializer_list<Xbyak::Xmm> vmm_to_preserve)
+        std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve)
     : /*host_(host)
-	, */reg64_stack_(reg64_to_preserve)
+	, */
+    reg64_stack_(reg64_to_preserve)
     , vmm_stack_(vmm_to_preserve)
     , vmm_to_preserve_size_bytes_(
               calc_vmm_to_preserve_size_bytes(vmm_to_preserve)) {
-  /*
+    /*
     for (const auto &reg : reg64_to_preserve){
         host_->push(reg);
     }
   */
-  
+
     if (!vmm_stack_.empty()) {
-      /*
+        /*
         host_->sub(host_->rsp, vmm_to_preserve_size_bytes_);
 
         auto stack_offset = vmm_to_preserve_size_bytes_;
@@ -80,11 +81,11 @@ static std::size_t calc_vmm_to_preserve_size_bytes(
 }
 
 register_preserve_guard_t::~register_preserve_guard_t() {
-  /*
+    /*
     auto tmp_stack_offset = 0;
   */
     while (!vmm_stack_.empty()) {
-      /*
+        /*
         const Xbyak::Xmm &vmm = vmm_stack_.top();
         const auto idx = vmm.getIdx();
         if (vmm.isXMM())
@@ -102,14 +103,14 @@ register_preserve_guard_t::~register_preserve_guard_t() {
       */
     }
 
-    if (vmm_to_preserve_size_bytes_){
-      /*
+    if (vmm_to_preserve_size_bytes_) {
+        /*
         host_->add(host_->rsp, vmm_to_preserve_size_bytes_);
       */
     }
 
     while (!reg64_stack_.empty()) {
-      /*
+        /*
         host_->pop(reg64_stack_.top());
         reg64_stack_.pop();
       */
@@ -123,7 +124,7 @@ size_t register_preserve_guard_t::stack_space_occupied() const {
 
     return stack_space_occupied;
 };
-  /*
+/*
 output_dims_t make_output_dims(const memory_desc_wrapper &dst_d) {
 
     const dim_t n_dims = dst_d.ndims();
@@ -147,7 +148,7 @@ output_dims_t make_output_dims(const memory_desc_wrapper &dst_d) {
 }
   */
 } // namespace injector_utils
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

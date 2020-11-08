@@ -105,7 +105,7 @@ public:
         _op_floor = 1u,
         _op_mxcsr = 4u,
     };
-  
+
     Xbyak_aarch64::WReg W_TMP_0 = w23;
     Xbyak_aarch64::WReg W_TMP_1 = w24;
     Xbyak_aarch64::WReg W_TMP_2 = w25;
@@ -156,14 +156,15 @@ public:
         not_(P_MSB_256.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_256.b);
         pfalse(P_ALL_ZERO.b);
 
-	mov(x7, x0); /* First arg. */
+        mov(x7, x0); /* First arg. */
         mov(x6, x1); /* Sedond arg. */
         mov(x2, x2);
         mov(x1, x3);
         mov(x8, x4);
         mov(x9, x5); /* 6-th arg. */
-	mov(x4, sp); /* Intel64's stack register is 4-th register. */
-        sub_imm(x22, x4, 0x20000, X_TMP_0); //X_TRANSLATOR_STACK:x22, xt_stack_offset:0x20000
+        mov(x4, sp); /* Intel64's stack register is 4-th register. */
+        sub_imm(x22, x4, 0x20000,
+                X_TMP_0); //X_TRANSLATOR_STACK:x22, xt_stack_offset:0x20000
     }
 
     void postamble() {

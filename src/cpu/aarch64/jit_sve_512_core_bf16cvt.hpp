@@ -36,7 +36,6 @@
 #define IDX(a) static_cast<uint32_t>(a.getIdx())
 #endif //#ifdef DNNL_AARCH64
 
-
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -57,18 +56,18 @@ struct jit_call_t {
 #define GET_OFF(field) offsetof(bf16_support::jit_call_t, field)
 
 struct bf16_emulation_t {
-  /*
+    /*
   using opmask_t = const x64::Xbyak::Opmask;
   using Zmm_t = const x64::Xbyak::Zmm;
   using Ymm_t = const x64::Xbyak::Ymm;
   using Xmm_t = const x64::Xbyak::Xmm;
   using reg64_t = const x64::Xbyak::Reg64;
   */
-  using opmask_t = const xa::PReg;
-  using Zmm_t = const xa::ZReg;
-  using Ymm_t = const xa::ZReg;
-  using Xmm_t = const xa::VReg;
-  using reg64_t = const xa::XReg;
+    using opmask_t = const xa::PReg;
+    using Zmm_t = const xa::ZReg;
+    using Ymm_t = const xa::ZReg;
+    using Xmm_t = const xa::VReg;
+    using reg64_t = const xa::XReg;
 
     bf16_emulation_t(jit_generator *host, Zmm_t one, Zmm_t even, Zmm_t selector,
             reg64_t scratch, Zmm_t tr0, Zmm_t tr1)
@@ -85,7 +84,7 @@ struct bf16_emulation_t {
         : bf16_emulation_t(host, one, even, selector, scratch, tr0, tr0) {}
 
     void vdpbf16ps(Zmm_t &acc, Zmm_t wei, Zmm_t inp) {
-      /*
+        /*
         host_->vpsrad(tr0_, wei, 16);
         host_->vpslld(tr0_, tr0_, 16);
 
@@ -102,7 +101,7 @@ struct bf16_emulation_t {
     }
 
     void vcvtneps2bf16(Ymm_t &out, Zmm_t in) {
-      //vcvtneps2bf16(out, in, tr0_, one_, even_, selector_);
+        //vcvtneps2bf16(out, in, tr0_, one_, even_, selector_);
     }
 
     void vcvtneps2bf16(Xmm_t &out, Ymm_t in) {
@@ -115,7 +114,7 @@ struct bf16_emulation_t {
     }
 
 private:
-  /*
+    /*
     void vcvtneps2bf16(const Xbyak::Operand &out, const Xmm_t &in,
             const Xmm_t &tr0, const Xbyak::Operand &one, const Xmm_t &even,
             const Xbyak::Operand &selector) {
@@ -152,12 +151,13 @@ public:
                         fixup_input_code_pinf, fixup_output_code_copy_input);
 
         //host_->xor_(scratch_, scratch_);
-	CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)));
+        CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
+                xa::XReg(IDX(scratch_)));
         //host_->mov(scratch_.cvt32(), 0x1);
-	CG::mov_imm(xa::WReg(IDX(scratch_)), 0x1);
+        CG::mov_imm(xa::WReg(IDX(scratch_)), 0x1);
         //host_->vpbroadcastd(one_, scratch_.cvt32());
-	CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
-	/*
+        CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+        /*
 	int vlen = cpu_isa_traits<isa>::vlen;
 	if (vlen == 64) {
 	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
@@ -172,12 +172,13 @@ public:
 	}
 	*/
         //host_->xor_(scratch_, scratch_);
-	CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)));	
+        CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
+                xa::XReg(IDX(scratch_)));
         //host_->mov(scratch_.cvt32(), 0x7fff);
-	CG::mov_imm(xa::WReg(IDX(scratch_)), 0x7fff);
+        CG::mov_imm(xa::WReg(IDX(scratch_)), 0x7fff);
         //host_->vpbroadcastd(even_, scratch_.cvt32());
-	CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
-	/*
+        CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+        /*
 	if (vlen == 64) {
 	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
 	} else if (vlen == 32) {
@@ -191,12 +192,13 @@ public:
 	}
 	*/
         //host_->xor_(scratch_, scratch_);
-	CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)));	
+        CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
+                xa::XReg(IDX(scratch_)));
         //host_->mov(scratch_.cvt32(), selector_int32);
-	CG::mov_imm(xa::WReg(IDX(scratch_)), selector_int32);
+        CG::mov_imm(xa::WReg(IDX(scratch_)), selector_int32);
         //host_->vpbroadcastd(selector_, scratch_.cvt32());
-	CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
-	/*
+        CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+        /*
 	if (vlen == 64) {
 	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
 	} else if (vlen == 32) {
@@ -211,7 +213,7 @@ public:
 	*/
     }
 
-  //static cpu_isa_t get_isa() { return avx512_core; }
+    //static cpu_isa_t get_isa() { return avx512_core; }
     static cpu_isa_t get_isa() { return sve_512; }
 
 private:
@@ -254,7 +256,7 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
     }
 
     ~jit_avx512_core_cvt_ps_to_bf16_t() { delete bf16_emu_; }
-  /*
+    /*
     void generate() {
         preamble();
 
@@ -361,7 +363,7 @@ private:
 
     bf16_emulation_t *bf16_emu_;
     bool is_dynamic_size_;
-  /*
+    /*
     Xbyak::Opmask ktail_mask = k2;
     Xbyak::Zmm fp32_inp = Xbyak::Zmm(0);
     Xbyak::Zmm fp32_tmp = Xbyak::Zmm(1);
@@ -398,9 +400,10 @@ private:
     Xbyak_aarch64::XReg reg_nelems = Xbyak_aarch64::XReg(3);
 
     Xbyak_aarch64::XReg reg64_tail = Xbyak_aarch64::XReg(2);
-    Xbyak_aarch64::WReg reg32_tail = Xbyak_aarch64::WReg(2);;
+    Xbyak_aarch64::WReg reg32_tail = Xbyak_aarch64::WReg(2);
+    ;
     Xbyak_aarch64::WReg reg8_mask_shift = Xbyak_aarch64::WReg(2);
-    Xbyak_aarch64::WReg reg32_mask = Xbyak_aarch64::WReg(8);  
+    Xbyak_aarch64::WReg reg32_mask = Xbyak_aarch64::WReg(8);
 };
 
 struct jit_avx512_core_cvt_bf16_to_ps_t : public jit_generator {
@@ -409,13 +412,13 @@ struct jit_avx512_core_cvt_bf16_to_ps_t : public jit_generator {
     jit_avx512_core_cvt_bf16_to_ps_t(
             bool with_add = false, size_t row_stride = 0)
         : with_add_(with_add), row_stride_(row_stride) {
-      /*
+        /*
         generate();
         jit_ker_ = (decltype(jit_ker_))getCode();
       */
     }
 
-  //void generate();
+    //void generate();
 
     void jit_ker(float *out, const bfloat16_t *inp, size_t nelems,
             size_t rows = 1) const {
@@ -440,14 +443,14 @@ struct jit_avx512_core_add_cvt_ps_to_bf16_t : public jit_generator {
         bf16_emu_ = new bf16_emulation_t(
                 this, one, even, selector, scratch, fp32_tmp, fp32_tmp);
 
-	/*
+        /*
         generate();
         jit_ker_ = (void (*)(bf16_support::jit_call_t *))getCode();
 	*/
     }
 
     ~jit_avx512_core_add_cvt_ps_to_bf16_t() { delete bf16_emu_; }
-  /*
+    /*
     void generate() {
         preamble();
 
@@ -519,7 +522,7 @@ private:
     void (*jit_ker_)(bf16_support::jit_call_t *);
 
     bf16_emulation_t *bf16_emu_;
-  /*
+    /*
     Xbyak::Opmask ktail_mask = k2;
     Xbyak::Zmm fp32_inp = Xbyak::Zmm(0);
     Xbyak::Zmm fp32_tmp = Xbyak::Zmm(1);
@@ -559,8 +562,9 @@ private:
 
     Xbyak_aarch64::XReg reg64_tail = Xbyak_aarch64::XReg(2);
     Xbyak_aarch64::WReg reg32_tail = Xbyak_aarch64::WReg(2);
-    Xbyak_aarch64::WReg reg8_mask_shift = Xbyak_aarch64::WReg(2);;
-    Xbyak_aarch64::WReg reg32_mask = Xbyak_aarch64::WReg(8);  
+    Xbyak_aarch64::WReg reg8_mask_shift = Xbyak_aarch64::WReg(2);
+    ;
+    Xbyak_aarch64::WReg reg32_mask = Xbyak_aarch64::WReg(8);
 };
 
 // implementation of reorder of part of tensor [s][16c] -> [S][16c][2s]
@@ -572,7 +576,7 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
 
     jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t()
         : simd_w_(16), in_stride_(16) {
-      /*
+        /*
         generate();
         jit_ker_ = (void (*)(bf16_support::jit_call_t *))getCode();
       */
@@ -580,14 +584,14 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
 
     jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t(int in_stride)
         : simd_w_(16), in_stride_(in_stride) {
-      /*
+        /*
         generate();
         jit_ker_ = (void (*)(bf16_support::jit_call_t *))getCode();
       */
     }
 
     ~jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t() {}
-  /*
+    /*
     void generate() {
         preamble();
 
@@ -678,7 +682,7 @@ private:
     int simd_w_;
     int in_stride_;
     void (*jit_ker_)(bf16_support::jit_call_t *);
-  /*
+    /*
     Xbyak::Opmask ktail_mask_lo = k2;
     Xbyak::Opmask ktail_mask_hi = k3;
     Xbyak::Zmm zmm_prm = Xbyak::Zmm(31);
@@ -699,7 +703,8 @@ private:
     Xbyak_aarch64::XReg reg_prm = Xbyak_aarch64::XReg(11);
     Xbyak_aarch64::XReg reg_nelems = Xbyak_aarch64::XReg(3);
 
-    Xbyak_aarch64::WReg reg32_tail = Xbyak_aarch64::WReg(abi_not_param1.getIdx());
+    Xbyak_aarch64::WReg reg32_tail
+            = Xbyak_aarch64::WReg(abi_not_param1.getIdx());
 };
 
 #undef GET_OFF

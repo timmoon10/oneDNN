@@ -92,7 +92,7 @@ enum class cpu_isa_cmp_t {
     // 1. PROPER_SUBSET: isa_1 SUBSET isa_2 and isa_1 != isa_2
     // 2. PROPER_SUPERSET: isa_1 SUPERSET isa_2 and isa_1 != isa_2
 };
-  
+
 const char *get_isa_info();
 
 static inline bool compare_isa(
@@ -146,7 +146,8 @@ struct cpu_isa_traits<sve_128> {
     static constexpr int vlen_shift = 4;
     static constexpr int vlen = 16;
     static constexpr int n_vregs = 16;
-    static constexpr dnnl_cpu_isa_t user_option_val = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_128);
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_128);
     static constexpr const char *user_option_env = "SVE_128";
 };
 
@@ -156,10 +157,11 @@ struct cpu_isa_traits<sve_256> {
     static constexpr int vlen_shift = 5;
     static constexpr int vlen = 32;
     static constexpr int n_vregs = 16;
-    static constexpr dnnl_cpu_isa_t user_option_val = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_256);
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_256);
     static constexpr const char *user_option_env = "SVE_256";
 };
-  
+
 template <>
 struct cpu_isa_traits<sve_512> {
     typedef Xbyak_aarch64::ZRegS Vmm;
