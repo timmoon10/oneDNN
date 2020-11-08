@@ -133,7 +133,7 @@ bool post_ops_ok(std::initializer_list<post_op_type> accepted_post_op_types,
         bool sum_first_only = true);
 
 } // namespace injector
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

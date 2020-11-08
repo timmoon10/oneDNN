@@ -34,9 +34,9 @@
 //#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
 //#include "cpu/x64/jit_primitive_conf.hpp"
 //#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
+#include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
-#include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 
 //#include "cpu/x64/xbyak/xbyak.h"
 
@@ -65,7 +65,7 @@ struct jit_uni_pool_kernel : public jit_generator {
             int nthreads);
 
 private:
-  /*
+    /*
     using Xmm = Xbyak::Xmm;
     using Ymm = Xbyak::Ymm;
     using Zmm = Xbyak::Zmm;
@@ -79,13 +79,11 @@ private:
         return utils::one_of(isa, avx512_common, avx512_core) ? 31 : 15;
     }
   */
-    int vmm_idx_upper_bound() const noexcept {
-      return 31;
-    }
-  
+    int vmm_idx_upper_bound() const noexcept { return 31; }
+
     int reg_idx(int idx) const noexcept { return vmm_idx_upper_bound() - idx; }
 
-  /*
+    /*
     Xmm xreg(int idx) const noexcept { return Xmm(reg_idx(idx)); }
     Ymm yreg(int idx) const noexcept { return Ymm(reg_idx(idx)); }
     Zmm zreg(int idx) const noexcept { return Zmm(reg_idx(idx)); }
@@ -94,8 +92,8 @@ private:
     XReg xreg(int idx) const noexcept { return XReg(reg_idx(idx)); }
     ZReg yreg(int idx) const noexcept { return ZReg(reg_idx(idx)); }
     ZReg zreg(int idx) const noexcept { return ZReg(reg_idx(idx)); }
-    VReg vreg(int idx) const noexcept { return VReg(reg_idx(idx)); }  
-  /*
+    VReg vreg(int idx) const noexcept { return VReg(reg_idx(idx)); }
+    /*
     const Xbyak::AddressFrame &vmmword = (isa == sse41)
             ? xword
             : (isa == avx || isa == avx2) ? yword : zword;
@@ -104,7 +102,7 @@ private:
             ? xword
             : (isa == asimd) ? yword : zword;  
   */
-  /*
+    /*
     Xmm vmm_mask = Xmm(0);
     Ymm ymm_tmp_1 = Ymm(0);
     Vmm vmm_tmp_1 = Vmm(0);
@@ -112,9 +110,9 @@ private:
     XReg vmm_mask = XReg(0);
     ZReg ymm_tmp_1 = ZReg(0);
     VReg vmm_tmp_1 = VReg(0);
-  
+
     // Used only for avx and if c tail is present
-  /*
+    /*
     Vmm vmm_c_tail_mask = Vmm(2);
 
     Xmm xmm_ker_area_h = Xmm(2);
@@ -140,9 +138,9 @@ private:
     ZReg ymm_tmp = ZReg(3);
 
     VReg vmm_k_offset = VReg(1);
-  
+
     // Used only for avx512 when bf16 is present
-  /*
+    /*
     inline Vmm vmm_idx() {
         if (!jpp.is_backward) {
             return (jpp.is_training) ? Vmm(4) : Vmm(1);
@@ -150,7 +148,7 @@ private:
             return Vmm(4);
     }
   */
-  /*
+    /*
     inline VReg vmm_idx() {
         if (!jpp.is_backward) {
             return (jpp.is_training) ? VReg(4) : VReg(1);
@@ -158,7 +156,7 @@ private:
             return VReg(4);
     }
   */
-  
+
     inline uint32_t reg_idx() {
         if (!jpp.is_backward) {
             return (jpp.is_training) ? 4 : 1;
@@ -166,7 +164,7 @@ private:
             return 4;
     }
 
-  /*
+    /*
     Zmm bf16_emu_reserv_1 = Zmm(5);
     Zmm bf16_emu_reserv_2 = Zmm(6);
     Zmm bf16_emu_reserv_3 = Zmm(7);
@@ -178,7 +176,7 @@ private:
     ZReg bf16_emu_reserv_3 = ZReg(7);
     XReg bf16_emu_reserv_4 = XReg(11);
     ZReg bf16_emu_reserv_5 = ZReg(8);
-  
+
     const std::vector<uint32_t> tmp_vec_idx
             //  = {20, 21, 22, 23, 24, 25, 26, 27};
             = {4, 5, 6, 7};
@@ -187,7 +185,7 @@ private:
     ZReg z_tmp2 = ZReg(6);
     ZReg z_tmp3 = ZReg(7);
 
-  /*
+    /*
     Opmask k_c_tail_mask = Opmask(4);
     Opmask k_mask_cvt = Opmask(5);
     Opmask k_store_mask = Opmask(6);
@@ -195,7 +193,7 @@ private:
     PReg k_c_tail_mask = PReg(4);
     PReg k_mask_cvt = PReg(5);
     PReg k_store_mask = PReg(6);
-  
+
     /* Caution: Chose predicate registers not used by x64's implementation. */
     PReg p_256 = PReg(1);
     PReg p_512 = PReg(2);
@@ -216,7 +214,7 @@ private:
     //
     // While this is only required by the backward pass, the quirk above
     // is applied to the forward pass as well to keep things simpler.
-  /*
+    /*
     using reg64_t = const Reg64;
     reg64_t reg_param = rdi; // Always mimic the Unix ABI
     reg64_t reg_input = r8;
@@ -263,7 +261,7 @@ private:
     xreg_t reg_zero_ih = XReg(14);
     xreg_t aux_reg_zero_ih = XReg(15);
     xreg_t ki = XReg(12);
-    xreg_t aux_reg_input_d = XReg(8);  
+    xreg_t aux_reg_input_d = XReg(8);
 
     using wreg_t = const WReg;
     wreg_t w_tmp_0 = WReg(23);
@@ -278,7 +276,7 @@ private:
     xreg_t X_TMP_0 = XReg(23);
     xreg_t X_TRANSLATOR_STACK = XReg(22);
 
-  //Reg32 reg_shuf_mask = esi;
+    //Reg32 reg_shuf_mask = esi;
     WReg reg_shuf_mask = WReg(7);
 
     bool sse_high_half = false;
@@ -319,7 +317,7 @@ private:
         } else
             avg_step(ur_w, ur_bc, pad_l, pad_r, with_c_tail_proccessing);
     }
-  /*
+    /*
     void step_high_half(int ur_w, int ur_bc, int pad_l, int pad_r,
             bool with_c_tail_processing) {
       //add(reg_input, sizeof(float) * 4);
@@ -336,9 +334,9 @@ private:
   */
     void generate() override;
 
-  //void avx_vpadd1(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
+    //void avx_vpadd1(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
     void avx_vpadd1(const ZReg &y0, const XReg &x1, const XReg &xtmp) {
-      /*
+        /*
         assert(y0.getIdx() != x1.getIdx());
         mov(VReg(IDX(xtmp)).b16, VReg(IDX(y0)).b16);
 
@@ -367,16 +365,16 @@ private:
       */
     }
 
-  //void avx_vpadd1(const Xmm &x0, const Xmm &x1, const Xmm &) {
+    //void avx_vpadd1(const Xmm &x0, const Xmm &x1, const Xmm &) {
     void avx_vpadd1(const XReg &x0, const XReg &x1, const XReg &) {
         assert(false /*function should not be used*/);
         //paddd(x0, x1);
     }
 
-  //void avx_pmovzxbd(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
+    //void avx_pmovzxbd(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
     void avx_pmovzxbd(const ZReg &y0, const XReg &x1, const XReg &xtmp) {
-      //Xmm x0(y0.getIdx());
-      /*
+        //Xmm x0(y0.getIdx());
+        /*
         XReg x0(y0.getIdx());
         pshufd(xmm_tmp, x1, 1);
         pmovzxbd(x0, x1);
@@ -385,18 +383,18 @@ private:
       */
     }
 
-  //void avx_pmovzxbd(const Xmm &x0, const Xmm &x1, const Xmm &) {
+    //void avx_pmovzxbd(const Xmm &x0, const Xmm &x1, const Xmm &) {
     void avx_pmovzxbd(const XReg &x0, const XReg &x1, const XReg &) {
         assert(false /*function should not be used*/);
         //pmovzxbd(x0, x1);
     }
-  /*
+    /*
     void avx_pcmpeqd(
             const Ymm &y0, const Ymm &y1, const Ymm &y2, const Xmm &xtmp) {
   */
     void avx_pcmpeqd(
             const ZReg &y0, const ZReg &y1, const ZReg &y2, const XReg &xtmp) {
-      /*
+        /*
         assert(y0.getIdx() != y1.getIdx());
         assert(y0.getIdx() != y2.getIdx());
         XReg x0(y0.getIdx());
@@ -410,8 +408,9 @@ private:
       */
     }
 
-  //void avx_pcmpeqd(const Xmm &x0, const Xmm &x1, const Xmm &, const Xmm &) {
-    void avx_pcmpeqd(const XReg &x0, const XReg &x1, const XReg &, const XReg &) {
+    //void avx_pcmpeqd(const Xmm &x0, const Xmm &x1, const Xmm &, const Xmm &) {
+    void avx_pcmpeqd(
+            const XReg &x0, const XReg &x1, const XReg &, const XReg &) {
         assert(false /*function should not be used*/);
         //pcmpeqd(x0, x1);
     }
@@ -423,13 +422,13 @@ private:
             const memory_desc_wrapper &dst_d);
 
     std::unique_ptr<bf16_emulation_t> bf16_emu_;
-  /*
+    /*
     std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
             postops_injector_;
   */
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
