@@ -17,8 +17,8 @@
 
 //#ifndef CPU_X64_JIT_UNI_POOL_KERNEL_HPP
 //#define CPU_X64_JIT_UNI_POOL_KERNEL_HPP
-#ifndef CPU_AARCH64_JIT_UNI_REORDER_HPP
-#define CPU_AARCH64_JIT_UNI_REORDER_HPP
+#ifndef CPU_AARCH64_JIT_UNI_POOL_KERNEL_HPP
+#define CPU_AARCH64_JIT_UNI_POOL_KERNEL_HPP
 
 #include <cfloat>
 #include <functional>
@@ -36,6 +36,7 @@
 //#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
+#include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 
 //#include "cpu/x64/xbyak/xbyak.h"
 
@@ -149,12 +150,14 @@ private:
             return Vmm(4);
     }
   */
+  /*
     inline VReg vmm_idx() {
         if (!jpp.is_backward) {
             return (jpp.is_training) ? VReg(4) : VReg(1);
         } else
             return VReg(4);
     }
+  */
   
     inline uint32_t reg_idx() {
         if (!jpp.is_backward) {
@@ -239,21 +242,21 @@ private:
     reg64_t aux_reg_input_d = r8;
   */
     using xreg_t = const XReg;
-    xreg_t reg_param = XReg(6); // Always mimic the Unix ABI
+    xreg_t reg_param = XReg(7); // Always mimic the Unix ABI
     xreg_t reg_input = XReg(8);
     xreg_t aux_reg_input = XReg(9);
     xreg_t reg_index = XReg(10);
     xreg_t reg_output = XReg(12);
     xreg_t reg_kd_pad_shift = XReg(13);
-    xreg_t dst_ptr = XReg(6); // Must be rdi due to maskmovdqu
+    xreg_t dst_ptr = XReg(7); // Must be rdi due to maskmovdqu
 
     xreg_t kj = XReg(14);
     xreg_t oi_iter = XReg(15);
     xreg_t reg_kh = XReg(0);
-    xreg_t reg_k_shift = XReg(1);
-    xreg_t tmp_gpr = XReg(2); // Must be rcx because rdi is used above
-    xreg_t reg_ker_area_h = XReg(3);
-    xreg_t reg_nbc = XReg(7);
+    xreg_t reg_k_shift = XReg(3);
+    xreg_t tmp_gpr = XReg(1); // Must be rcx because rdi is used above
+    xreg_t reg_ker_area_h = XReg(2);
+    xreg_t reg_nbc = XReg(6);
 
     xreg_t reg_zero_ptr = XReg(9);
     xreg_t reg_zero_id = XReg(13);
@@ -316,7 +319,7 @@ private:
         } else
             avg_step(ur_w, ur_bc, pad_l, pad_r, with_c_tail_proccessing);
     }
-
+  /*
     void step_high_half(int ur_w, int ur_bc, int pad_l, int pad_r,
             bool with_c_tail_processing) {
       //add(reg_input, sizeof(float) * 4);
@@ -330,7 +333,7 @@ private:
 
         step(ur_w, ur_bc, pad_l, pad_r, with_c_tail_processing);
     }
-
+  */
     void generate() override;
 
   //void avx_vpadd1(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
@@ -420,8 +423,10 @@ private:
             const memory_desc_wrapper &dst_d);
 
     std::unique_ptr<bf16_emulation_t> bf16_emu_;
+  /*
     std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
             postops_injector_;
+  */
 };
 
 } // namespace x64

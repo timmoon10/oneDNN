@@ -43,8 +43,9 @@ struct trans_wrapper_t {
         , x_tail_(xsize % 8)
         , y_tail_(ysize % 8) {
       //using namespace cpu::x64::tr;
-      //using namespace cpu::aarch64::tr;
-        using namespace tr;            
+      //using namespace cpu::aarch64;
+      using namespace cpu::aarch64::tr;
+        //using namespace tr;            
 
         auto create_ker = [=](dim_t ys, dim_t y_inp_str, dim_t y_out_str,
                                   dim_t xs, dim_t x_inp_str, dim_t x_out_str) {
@@ -1222,7 +1223,7 @@ void jit_uni_pooling_bwd_t<isa, d_type>::execute_backward_3d(
         }
     }
 }
-
+  /*
 template struct jit_uni_pooling_fwd_t<sse41, data_type::f32>;
 template struct jit_uni_pooling_bwd_t<sse41, data_type::f32>;
 template struct jit_uni_pooling_fwd_t<avx, data_type::f32>;
@@ -1235,6 +1236,15 @@ template struct jit_uni_pooling_fwd_t<avx512_core, data_type::f32>;
 template struct jit_uni_pooling_bwd_t<avx512_core, data_type::f32>;
 template struct jit_uni_pooling_fwd_t<avx512_core, data_type::bf16>;
 template struct jit_uni_pooling_bwd_t<avx512_core, data_type::bf16>;
+*/
+template struct jit_uni_pooling_fwd_t<asimd, data_type::f32>;
+template struct jit_uni_pooling_bwd_t<asimd, data_type::f32>;
+template struct jit_uni_pooling_fwd_t<sve_128, data_type::f32>;
+template struct jit_uni_pooling_bwd_t<sve_128, data_type::f32>;
+template struct jit_uni_pooling_fwd_t<sve_256, data_type::f32>;
+template struct jit_uni_pooling_bwd_t<sve_256, data_type::f32>;
+template struct jit_uni_pooling_fwd_t<sve_512, data_type::f32>;
+template struct jit_uni_pooling_bwd_t<sve_512, data_type::f32>;
 
 } // namespace x64
 } // namespace cpu

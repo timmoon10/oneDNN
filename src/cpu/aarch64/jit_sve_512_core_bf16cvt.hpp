@@ -28,10 +28,21 @@
 #include "common/bfloat16.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
+#ifdef DNNL_AARCH64
+#ifdef CG
+#undef CG
+#endif
+#define CG host_->Xbyak_aarch64::CodeGenerator
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#endif //#ifdef DNNL_AARCH64
+
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
+
+namespace xa = Xbyak_aarch64;
 
 namespace bf16_support {
 struct jit_call_t {
@@ -53,11 +64,11 @@ struct bf16_emulation_t {
   using Xmm_t = const x64::Xbyak::Xmm;
   using reg64_t = const x64::Xbyak::Reg64;
   */
-  using opmask_t = const Xbyak_aarch64::PReg;
-  using Zmm_t = const Xbyak_aarch64::ZReg;
-  using Ymm_t = const Xbyak_aarch64::ZReg;
-  using Xmm_t = const Xbyak_aarch64::VReg;
-  using reg64_t = const Xbyak_aarch64::XReg;
+  using opmask_t = const xa::PReg;
+  using Zmm_t = const xa::ZReg;
+  using Ymm_t = const xa::ZReg;
+  using Xmm_t = const xa::VReg;
+  using reg64_t = const xa::XReg;
 
     bf16_emulation_t(jit_generator *host, Zmm_t one, Zmm_t even, Zmm_t selector,
             reg64_t scratch, Zmm_t tr0, Zmm_t tr1)
@@ -123,44 +134,80 @@ private:
 
 public:
     void init_vcvtneps2bf16() {
-      /*
         const int selector_int32 =
-      */
                 /* qnan input to qnan output (presenrving input bits 0..21) */
-      /*
                 encode_fixup_selector(
                         fixup_input_code_snan, fixup_output_code_qnan_input)
                 |
-      */
                 /* snan input to qnan output (presenrving input bits 0..21) */
-      /*
                 encode_fixup_selector(
                         fixup_input_code_qnan, fixup_output_code_qnan_input)
                 |
-      */
                 /* neg inf input copied to output */
-      /*
                 encode_fixup_selector(
                         fixup_input_code_ninf, fixup_output_code_copy_input)
                 |
-      */
                 /* pos inf input copied to output */
-      /*
                 encode_fixup_selector(
                         fixup_input_code_pinf, fixup_output_code_copy_input);
-      */
+
+        //host_->xor_(scratch_, scratch_);
+	CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)));
+        //host_->mov(scratch_.cvt32(), 0x1);
+	CG::mov_imm(xa::WReg(IDX(scratch_)), 0x1);
+        //host_->vpbroadcastd(one_, scratch_.cvt32());
+	CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
 	/*
-        host_->xor_(scratch_, scratch_);
-        host_->mov(scratch_.cvt32(), 0x1);
-        host_->vpbroadcastd(one_, scratch_.cvt32());
-
-        host_->xor_(scratch_, scratch_);
-        host_->mov(scratch_.cvt32(), 0x7fff);
-        host_->vpbroadcastd(even_, scratch_.cvt32());
-
-        host_->xor_(scratch_, scratch_);
-        host_->mov(scratch_.cvt32(), selector_int32);
-        host_->vpbroadcastd(selector_, scratch_.cvt32());
+	int vlen = cpu_isa_traits<isa>::vlen;
+	if (vlen == 64) {
+	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+	} else if (vlen == 32) {
+	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+	  CG::mov(xa::ZRegS(IDX(one_)), P_MSB_256/xa::T_m, 0);
+	} else if (vlen == 16) {
+	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+	  CG::mov(xa::ZRegS(IDX(one_)), P_MSB_384/xa::T_m, 0);	  
+	} else {
+	  assert(!"unreachable");
+	}
+	*/
+        //host_->xor_(scratch_, scratch_);
+	CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)));	
+        //host_->mov(scratch_.cvt32(), 0x7fff);
+	CG::mov_imm(xa::WReg(IDX(scratch_)), 0x7fff);
+        //host_->vpbroadcastd(even_, scratch_.cvt32());
+	CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	/*
+	if (vlen == 64) {
+	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	} else if (vlen == 32) {
+	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	  CG::mov(xa::ZRegS(IDX(even_)), P_MSB_256/xa::T_m, 0);
+	} else if (vlen == 16) {
+	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	  CG::mov(xa::ZRegS(IDX(even_)), P_MSB_384/xa::T_m, 0);	  
+	} else {
+	  assert(!"unreachable");
+	}
+	*/
+        //host_->xor_(scratch_, scratch_);
+	CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)));	
+        //host_->mov(scratch_.cvt32(), selector_int32);
+	CG::mov_imm(xa::WReg(IDX(scratch_)), selector_int32);
+        //host_->vpbroadcastd(selector_, scratch_.cvt32());
+	CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	/*
+	if (vlen == 64) {
+	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	} else if (vlen == 32) {
+	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	  CG::mov(xa::ZRegS(IDX(selector_)), P_MSB_256/xa::T_m, 0);
+	} else if (vlen == 16) {
+	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	  CG::mov(xa::ZRegS(IDX(selector_)), P_MSB_384/xa::T_m, 0);	  
+	} else {
+	  assert(!"unreachable");
+	}
 	*/
     }
 

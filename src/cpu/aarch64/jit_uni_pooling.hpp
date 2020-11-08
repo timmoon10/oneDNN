@@ -13,9 +13,12 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 *******************************************************************************/
-
+/*
 #ifndef CPU_X64_JIT_UNI_POOLING_HPP
 #define CPU_X64_JIT_UNI_POOLING_HPP
+*/
+#ifndef CPU_AARCH64_JIT_UNI_POOLING_HPP
+#define CPU_AARCH64_JIT_UNI_POOLING_HPP
 
 #include <assert.h>
 #include <memory>
@@ -30,6 +33,7 @@
 //#include "cpu/x64/jit_uni_pool_kernel.hpp"
 //#include "cpu/x64/jit_uni_reorder.hpp"
 #include "cpu/aarch64/jit_uni_pool_kernel.hpp"
+//#include "/home/kurihara/git_hub/fork/oneDNN/src/cpu/aarch64/jit_uni_reorder.hpp"
 #include "cpu/aarch64/jit_uni_reorder.hpp"
 
 namespace dnnl {
@@ -46,9 +50,11 @@ template <cpu_isa_t isa, impl::data_type_t d_type>
 struct jit_uni_pooling_fwd_t : public primitive_t {
     struct pd_t : public cpu_pooling_fwd_pd_t {
         using cpu_pooling_fwd_pd_t::cpu_pooling_fwd_pd_t;
-
+      /*
         DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", jpp_.isa, ""),
                 jit_uni_pooling_fwd_t);
+      */
+              DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_pooling_fwd_t);
 
         status_t init(engine_t *engine) {
             using namespace utils;
@@ -114,9 +120,11 @@ template <cpu_isa_t isa, impl::data_type_t d_type>
 struct jit_uni_pooling_bwd_t : public primitive_t {
     struct pd_t : public cpu_pooling_bwd_pd_t {
         using cpu_pooling_bwd_pd_t::cpu_pooling_bwd_pd_t;
-
+      /*
         DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", jpp_.isa, ""),
                 jit_uni_pooling_bwd_t);
+      */
+      DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_pooling_bwd_t);
 
         status_t init(engine_t *engine) {
             using namespace utils;

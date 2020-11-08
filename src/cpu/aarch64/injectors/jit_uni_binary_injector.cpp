@@ -20,12 +20,13 @@
 #include "common/primitive.hpp"
 #include "common/primitive_attr.hpp"
 #include "common/primitive_exec_types.hpp"
-#include "cpu/x64/injectors/jit_uni_binary_injector.hpp"
+//#include "cpu/x64/injectors/jit_uni_binary_injector.hpp"
+#include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
-namespace x64 {
+namespace aarch64 {
 namespace binary_injector {
 
 std::vector<const void *> prepare_binary_args(const post_ops_t &post_ops,
@@ -46,7 +47,7 @@ std::vector<const void *> prepare_binary_args(const post_ops_t &post_ops,
 
     return post_ops_binary_rhs_arg_vec;
 }
-
+  /*
 static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
         const memory_desc_t &rhs_arg_md, const memory_desc_wrapper &dst_d,
         bool use_per_oc_spatial_strategy = true) {
@@ -91,21 +92,23 @@ static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
     }
     return broadcasting_strategy_t::unsupported;
 }
-
+  */
 bool binary_args_broadcast_supported(
         const post_ops_t &post_ops, const memory_desc_wrapper &dst_d) {
 
     return std::none_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
             [&](const post_ops_t::entry_t &entry) -> bool {
+	      /*
                 if (entry.is_binary()) {
                     const auto bcast_type = get_rhs_arg_broadcasting_strategy(
                             entry.binary.src1_desc, dst_d);
                     return bcast_type == broadcasting_strategy_t::unsupported;
                 }
+	      */
                 return false;
             });
 }
-
+  /*
 bool binary_args_tail_supported(const post_ops_t &post_ops,
         const memory_desc_wrapper &dst_d, int vlen) {
     const auto dims = injector_utils::make_output_dims(dst_d);
@@ -168,7 +171,8 @@ bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
                 return true;
             });
 }
-
+  */
+  /*
 rhs_arg_static_params_t::rhs_arg_static_params_t(
         std::size_t rhs_dt_helper_vmm_idx, const Xbyak::Reg64 &rhs_addr_reg,
         const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
@@ -177,9 +181,9 @@ rhs_arg_static_params_t::rhs_arg_static_params_t(
         bool use_exact_tail_scalar_bcast)
     : rhs_arg_static_params_t(rhs_dt_helper_vmm_idx, rhs_addr_reg,
             rhs_helper_reg, preserve_gpr_helpers, preserve_vmm_helper,
-            abi_param_offset, dst_d, tail_size, Xbyak::Opmask(2),
-            use_exact_tail_scalar_bcast, false /*is_opmask_set*/) {}
-
+            abi_param_offset, dst_d, tail_size, Xbyak::Opmask(2),*/
+  /*use_exact_tail_scalar_bcast, false*/ /*is_opmask_set*//*) {}*/
+  /*
 rhs_arg_static_params_t::rhs_arg_static_params_t(
         std::size_t rhs_dt_helper_vmm_idx, const Xbyak::Reg64 &rhs_addr_reg,
         const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
@@ -188,9 +192,9 @@ rhs_arg_static_params_t::rhs_arg_static_params_t(
         const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast)
     : rhs_arg_static_params_t(rhs_dt_helper_vmm_idx, rhs_addr_reg,
             rhs_helper_reg, preserve_gpr_helpers, preserve_vmm_helper,
-            abi_param_offset, dst_d, tail_size, tail_opmask,
-            use_exact_tail_scalar_bcast, true /*is_opmask_set*/) {}
-
+            abi_param_offset, dst_d, tail_size, tail_opmask,*/
+  /*use_exact_tail_scalar_bcast, true*/ /*is_opmask_set*//*) {}*/
+  /*
 rhs_arg_static_params_t::rhs_arg_static_params_t(
         std::size_t rhs_dt_helper_vmm_idx, const Xbyak::Reg64 &rhs_addr_reg,
         const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
@@ -1062,14 +1066,21 @@ void jit_uni_binary_injector_t<isa>::compute_vector(size_t idx,
         const rhs_arg_dynamic_params_t &rhs_arg_params) const {
     compute_vector_range({idx}, rhs_arg_idx, post_op, rhs_arg_params);
 }
-
+  */
+  /*
 template class jit_uni_binary_injector_t<avx512_core_bf16>;
 template class jit_uni_binary_injector_t<avx512_core>;
 template class jit_uni_binary_injector_t<avx512_common>;
 template class jit_uni_binary_injector_t<avx2>;
 template class jit_uni_binary_injector_t<avx>;
 template class jit_uni_binary_injector_t<sse41>;
-
+  */
+  /*
+template class jit_uni_binary_injector_t<sve_512>;
+template class jit_uni_binary_injector_t<sve_256>;
+template class jit_uni_binary_injector_t<sve_128>;
+template class jit_uni_binary_injector_t<asimd>;
+  */
 } // namespace binary_injector
 } // namespace x64
 } // namespace cpu
