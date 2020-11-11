@@ -1219,7 +1219,7 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
             }
         }
 
-        const int max_nb_oc = 5;
+        const int max_nb_oc = 2;
         {
             jcp.kernel_kind = expl_bcast;
             jcp.nb_ic_blocking = 1;
@@ -4389,7 +4389,8 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
                 && utils::everyone_is(data_type::f32, src_d.data_type(),
                         diff_weights_d.data_type(), diff_dst_d.data_type())
                 && IMPLICATION(!is_data_layout_nxc,
-                        (one_of(jcp.ic, 1, 2, 3, 4) && jcp.ngroups == 1));
+                        (one_of(jcp.ic, 1, 2, 3, 4, 5, 6, 7, 8)
+                                && jcp.ngroups == 1));
         if (!src_ok) return status::unimplemented;
 
         jcp.ver = ver_fma;
