@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2017-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -20,13 +21,21 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
+#include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
 #include "cpu/aarch64/jit_uni_eltwise.hpp"
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
 #define GET_OFF(field) offsetof(jit_args, field)
+
+#ifndef DNNL_X64_IMPLEMENTATION
+#ifdef CG
+#undef CG
+#endif
+#define CG CodeGeneratorAArch64
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 namespace dnnl {
 namespace impl {
@@ -34,6 +43,9 @@ namespace cpu {
 namespace aarch64 {
 
 using namespace Xbyak;
+#ifndef DNNL_X64_IMPLEMENTATION
+namespace xa = Xbyak_aarch64;
+#endif
 
 struct jit_args {
     const void *src; // fwd: src;  bwd: src/dst based on alg;
@@ -161,6 +173,17 @@ struct jit_uni_kernel : public jit_uni_eltwise_kernel, public jit_generator {
         mov(reg_work_amount, ptr[param + GET_OFF(work_amount)]);
         eltwise_injector_->load_table_addr();
 
+#ifndef DNNL_X64_IMPLEMENTATION
+        CG::ptrue(p_512.b);
+        CG::ptrue(p_256.b, xa::VL32);
+        CG::ptrue(p_128.b, xa::VL16);
+        if (cpu_isa_traits<isa>::vlen == 32) {
+            p_lsb = p_256;
+        } else if (cpu_isa_traits<isa>::vlen == 16) {
+            p_lsb = p_128;
+        }
+#endif
+
         Label reminder_loop_start, reminder_loop_end;
         Label vectorized_loop_start, vectorized_loop_end;
 
@@ -285,6 +308,32 @@ private:
     Zmm bf16_emu_reserv_5 = Zmm(29);
 
     Opmask k_tail_mask = k6;
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    /* Caution: Chose predicate registers not used by x64's implementation,
+       and register indices must be same as jit_uni_eltwise.cpp
+       and convolutions which uses eltwise_injector. */
+    xa::PReg p_lsb {7}; /* If Vmm = Ymm(Xmm), then p_lsb set to p_256, p_128. */
+    xa::PReg p_512 {7};
+    xa::PReg p_256 {6};
+    xa::PReg p_128 {5};
+    xa::PReg p_tmp0 {4};
+    //    xa::PReg p_lsb_32 {3};
+
+    xa::XReg x_tmp_0 {23};
+    xa::XReg x_tmp_1 {24};
+    xa::XReg x_tmp_2 {25};
+    xa::XReg x_tmp_3 {26};
+    xa::XReg x_tmp_4 {27};
+
+    const std::vector<xa::XReg> x_tmp_vec
+            = {x_tmp_0, x_tmp_1, x_tmp_2, x_tmp_3, x_tmp_4};
+    constexpr static int x_tmp_vec_size = 5;
+
+    //  const std::vector<xa::ZReg> z_tmp_vec = {
+    //    z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
+    //  constexpr static int z_tmp_vec_size = 8;
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     std::unique_ptr<jit_bf16_injector> bf16_injector_;
     std::unique_ptr<bf16_emulation_t> bf16_emu_;

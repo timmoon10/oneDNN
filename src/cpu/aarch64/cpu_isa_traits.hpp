@@ -56,7 +56,8 @@ enum cpu_isa_bit_t : unsigned {
     avx512_core_vnni_bit = 1u << 7,
     avx512_core_bf16_bit = 1u << 8,
     simd_bit = 1u << 9,
-    sve_bit = 1u << 10,
+    sve256_bit = 1u << 10,
+    sve_bit = 1u << 11,
 };
 
 enum cpu_isa_t : unsigned {
@@ -71,7 +72,8 @@ enum cpu_isa_t : unsigned {
     avx512_core_vnni = avx512_core_vnni_bit | avx512_core,
     avx512_core_bf16 = avx512_core_bf16_bit | avx512_core_vnni,
     simd = simd_bit | avx512_core_bf16,
-    sve = sve_bit | simd,
+    sve256 = sve256_bit | simd,
+    sve = sve_bit | sve256,
     isa_all = ~0u,
 };
 
@@ -168,6 +170,16 @@ struct cpu_isa_traits<simd> {
 };
 
 template <>
+struct cpu_isa_traits<sve256> {
+    typedef Xbyak::Xbyak_aarch64::ZRegS Vmm;
+    static constexpr int vlen_shift = 5;
+    static constexpr int vlen = 32;
+    static constexpr int n_vregs = 32;
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_sve256;
+    static constexpr const char *user_option_env = "SVE256";
+};
+
+template <>
 struct cpu_isa_traits<sve> {
     typedef Xbyak::Xbyak_aarch64::ZRegS Vmm;
     static constexpr int vlen_shift = 6;
@@ -208,6 +220,7 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
             return mayiuse(avx512_core_vnni, soft)
                     && cpu.has(Cpu::tAVX512_BF16);
         case simd: return true && cpu.has(Cpu::tSIMD);
+        case sve256: return true && cpu.has(Cpu::tSVE);
         case sve: return true && cpu.has(Cpu::tSVE);
         case isa_any: return true;
         case isa_all: return false;
@@ -227,8 +240,9 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
 #define JIT_IMPL_NAME_HELPER(prefix, isa, suffix_if_any) \
     ((isa) == isa_any ? prefix STRINGIFY(any) : \
     ((isa) == simd ? prefix STRINGIFY(simd) : \
+    ((isa) == sve256 ? prefix STRINGIFY(sve256) : \
     ((isa) == sve ? prefix STRINGIFY(sve) : \
-    prefix suffix_if_any)))
+    prefix suffix_if_any))))
 /* clang-format on */
 
 } // namespace aarch64

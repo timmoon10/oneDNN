@@ -2288,8 +2288,11 @@ typedef enum {
     // AARCH64 SIMD (128-bit instructions)
     dnnl_cpu_isa_simd = 0x400,
 
+    // AARCH64 SVE (VL:256-bit)
+    dnnl_cpu_isa_sve256 = 0xc00,
     // AARCH64 SVE
-    dnnl_cpu_isa_sve = 0xc00,
+    dnnl_cpu_isa_sve = 0x1c00,
+
 } dnnl_cpu_isa_t;
 
 /// @} dnnl_api_service

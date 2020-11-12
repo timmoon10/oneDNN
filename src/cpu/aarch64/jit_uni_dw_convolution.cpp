@@ -179,11 +179,17 @@ void jit_uni_dw_convolution_bwd_data_t<isa, diff_dst_type,
                                  int stride_off_h, int ch, int ch_num, int n) {
         auto par_conv = jit_conv_call_s();
 
-        const int i_l_overflow = nstl::max(0, (jcp.kw - 1 - iw - jcp.l_pad));
+        const int i_l_overflow = div_up(
+                nstl::max(0,
+                        ((jcp.kw - 1) * (jcp.dilate_w + 1) - iw - jcp.l_pad)),
+                (jcp.dilate_w + 1));
         const int i_r_overflow
-                = nstl::max(0, (jcp.kw - 1 - (jcp.iw - 1 - iw) - jcp.r_pad));
+                = div_up(nstl::max(0,
+                                 ((jcp.kw - 1) * (jcp.dilate_w + 1)
+                                         - (jcp.iw - 1 - iw) - jcp.r_pad)),
+                        (jcp.dilate_w + 1));
 
-        int ow = iw + jcp.l_pad - i_r_overflow;
+        int ow = iw + jcp.l_pad - i_r_overflow * (jcp.dilate_w + 1);
         int stride_off_w = ow % jcp.stride_w;
         ow /= jcp.stride_w;
 
@@ -200,36 +206,42 @@ void jit_uni_dw_convolution_bwd_data_t<isa, diff_dst_type,
         par_conv.ur_str_w = ur_str_w;
 
         par_conv.ch_blocks = nstl::min(ch + ch_num, jcp.nb_ch) - ch;
-
         return par_conv;
     };
 
+    const int ext_kw = calculate_extended_filter_size(jcp.kw, jcp.dilate_w);
     const int aux_w
-            = nstl::min(jcp.iw, jcp.iw - jcp.kw + jcp.r_pad + jcp.stride_w);
+            = nstl::min(jcp.iw, jcp.iw - ext_kw + jcp.r_pad + jcp.stride_w);
     const int chb_work = utils::div_up(jcp.nb_ch, jcp.nb_ch_blocking);
     parallel_nd(jcp.mb, chb_work, jcp.ih, [&](int n, int chb, int ih) {
         int ch = chb * jcp.nb_ch_blocking;
         int ch_num = jcp.nb_ch_blocking;
 
         const int i_t_overflow
-                = nstl::max(0, (int)(jcp.kh - 1 - ih - jcp.t_pad));
-        const int i_b_overflow = nstl::max(
-                0, (int)(jcp.kh - 1 - (jcp.ih - 1 - ih) - jcp.b_pad));
+                = div_up(nstl::max(0,
+                                 (int)((jcp.kh - 1) * (jcp.dilate_h + 1) - ih
+                                         - jcp.t_pad)),
+                        (jcp.dilate_h + 1));
+        const int i_b_overflow
+                = div_up(nstl::max(0,
+                                 (int)((jcp.kh - 1) * (jcp.dilate_h + 1)
+                                         - (jcp.ih - 1 - ih) - jcp.b_pad)),
+                        (jcp.dilate_h + 1));
 
-        int oh = ih + jcp.t_pad - i_b_overflow;
+        int oh = ih + jcp.t_pad - i_b_overflow * (jcp.dilate_h + 1);
         int stride_off_h = oh % jcp.stride_h;
         oh /= jcp.stride_h;
 
         for (int i_str_w = 0; i_str_w < jcp.stride_w; i_str_w++) {
             // left border
             int iw = i_str_w;
-            int l_border = nstl::min(jcp.kw - 1 - jcp.l_pad, jcp.iw);
+            int l_border = nstl::min(
+                    (jcp.kw - 1) * (jcp.dilate_w + 1) - jcp.l_pad, jcp.iw);
             int ur_str_w = 1;
             for (; iw < l_border; iw += jcp.stride_w) {
                 jit_conv_call_s par_conv
                         = kernel_params(ur_str_w, iw, oh, ih, i_t_overflow,
                                 i_b_overflow, stride_off_h, ch, ch_num, n);
-
                 kernel_->jit_ker(&par_conv);
             }
 
@@ -239,9 +251,7 @@ void jit_uni_dw_convolution_bwd_data_t<isa, diff_dst_type,
                 jit_conv_call_s par_conv
                         = kernel_params(ur_str_w, iw, oh, ih, i_t_overflow,
                                 i_b_overflow, stride_off_h, ch, ch_num, n);
-
                 kernel_->jit_ker(&par_conv);
-
                 iw += ur_str_w * jcp.stride_w;
             }
 
@@ -571,6 +581,7 @@ void jit_uni_dw_convolution_bwd_weights_t<isa, src_type,
 }
 
 template struct jit_uni_dw_convolution_bwd_weights_t<sve, data_type::f32>;
+template struct jit_uni_dw_convolution_bwd_weights_t<sve256, data_type::f32>;
 
 } // namespace aarch64
 } // namespace cpu

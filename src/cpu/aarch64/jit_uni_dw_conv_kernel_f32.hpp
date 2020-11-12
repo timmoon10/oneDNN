@@ -34,7 +34,9 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_fwd_kernel_f32)
 
     jit_uni_dw_conv_fwd_kernel_f32(jit_conv_conf_t ajcp)
-        : jcp(ajcp), eltwise_injector_(nullptr) {
+        : jit_generator(nullptr, 1024 * 1024)
+        , jcp(ajcp)
+        , eltwise_injector_(nullptr) {
         if (jcp.with_eltwise)
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
@@ -75,7 +77,7 @@ private:
     reg64_t reg_input_stack = x17;
     reg64_t reg_output_stack = x18;
     reg64_t reg_bias_stack = x19;
-    reg64_t reg_tmp_addr = x21;
+    reg64_t reg_tmp_addr = x20;
 
     inline void load_src(int ur_ch_blocks, int ur_w);
     inline void compute_loop(int ur_w, int ur_ch_blocks, int pad_l, int pad_r);
@@ -202,8 +204,7 @@ struct jit_uni_dw_conv_bwd_weights_kernel_f32 : public jit_generator {
 private:
     using reg64_t = const xa::XReg;
     const xa::PReg reg_p_all_ones = p2;
-
-    const int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
+    int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
 
     /* XXX: offset between input and accummulators is 3, therefore, assume 'kw'
      * is no larger than 3*/

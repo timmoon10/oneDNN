@@ -178,6 +178,7 @@ static const std::map<conv_impl_key_t, std::vector<pd_create_f>> impl_list_map {
         CPU_INSTANCE_AARCH64(jit_aarch64_sve_512_dw_convolution_bwd_weights_t)
         CPU_INSTANCE_AARCH64(jit_aarch64_sve_512_1x1_convolution_bwd_weights_t)
         CPU_INSTANCE_AARCH64(jit_aarch64_sve_512_convolution_bwd_weights_t<f32>)
+        CPU_INSTANCE_AARCH64(jit_aarch64_sve_256_dw_convolution_bwd_weights_t)
         CPU_INSTANCE(gemm_convolution_bwd_weights_t)
         CPU_INSTANCE(ref_convolution_bwd_weights_t<f32, f32, f32, f32>)
         nullptr,

@@ -80,6 +80,14 @@ if(NOT OpenMP_CXX_FOUND AND MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(OpenMP_CXX_FOUND true)
 endif()
 
+if (CMAKE_CXX_COMPILER MATCHES ".*/FCC$")
+  message(STATUS "Setting OpenMP flags for FCC")
+  set(OpenMP_CXX_FLAGS "-Kopenmp -Nlibomp -fopenmp")
+  set(OpenMP_C_FLAGS "-Kopenmp -Nlibomp -fopenmp")
+  set(OpenMP_CXX_LIBRARIES "")
+  set(OpenMP_CXX_FOUND true)
+endif()
+
 # add flags unconditionally to always utilize openmp-simd for any threading runtime
 if(OpenMP_CXX_FOUND)
     append(CMAKE_C_FLAGS ${OpenMP_C_FLAGS})

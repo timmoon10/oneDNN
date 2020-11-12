@@ -82,6 +82,9 @@ float s8s8_weights_scale_factor();
 
 unsigned get_per_core_cache_size(int level);
 unsigned get_num_cores();
+#if DNNL_AARCH64
+unsigned int get_A64FX_cache_size(int level, bool per_core, int nthreads);
+#endif
 
 constexpr int get_cache_line_size() {
     return 64;

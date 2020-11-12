@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2019-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -61,7 +62,12 @@ struct jit_uni_eltwise_injector_f32 {
         , p_table(p_table)
         , k_mask(k_mask)
         , is_fwd_(is_fwd)
-        , use_dst_(use_dst) {
+        , use_dst_(use_dst)
+#ifndef DNNL_X64_IMPLEMENTATION
+
+#endif // #ifndef DNNL_X64_IMPLEMENTATION
+
+    {
         using namespace alg_kind;
         assert(utils::one_of(isa, sse41, avx2, avx512_common, avx512_core));
         assert(utils::one_of(alg_, eltwise_relu, eltwise_tanh, eltwise_elu,
@@ -121,7 +127,12 @@ private:
     }
 
     static constexpr size_t vlen = cpu_isa_traits<isa>::vlen;
+#ifdef DNNL_X64_IMPLEMENTATION
     static constexpr size_t preserved_vecs_max = 5;
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    /* For AArch64, +1 because of memory operand */
+    static constexpr size_t preserved_vecs_max = 6;
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     static constexpr size_t preserved_gprs_max = 4;
     static constexpr size_t vecs_count = has_avx512() ? 32 : 16;
     static constexpr int n_mantissa_bits = 23;
@@ -134,6 +145,38 @@ private:
     size_t start_idx_tail = 0;
 
     Vmm vmm_mask, vmm_aux0, vmm_aux1, vmm_aux2, vmm_aux3, vmm_aux4;
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    /* Caution: Chose predicate registers not used by x64's implementation,
+       and register indices must be same as jit_uni_eltwise.cpp
+       and convolutions which uses eltwise_injector. */
+    xa::PReg p_lsb {7}; /* If Vmm = Ymm(Xmm), then p_lsb set to p_256, p_128. */
+    xa::PReg p_512 {7};
+    xa::PReg p_256 {6};
+    xa::PReg p_128 {5};
+    xa::PReg p_tmp0 {4};
+    //    xa::PReg p_lsb_32 {3};
+
+    xa::XReg x_tmp_0 {23};
+    xa::XReg x_tmp_1 {24};
+    xa::XReg x_tmp_2 {25};
+    xa::XReg x_tmp_3 {26};
+    xa::XReg x_tmp_4 {27};
+
+    const std::vector<xa::XReg> x_tmp_vec
+            = {x_tmp_0, x_tmp_1, x_tmp_2, x_tmp_3, x_tmp_4};
+    constexpr static int x_tmp_vec_size = 5;
+
+    /* Default tempooral index. Chose a SVE register
+     not to be same as jit_uni_eltwise.(cpp|hpp).
+     This index is changed by assign_regs() in case of eltwise injection.
+  */
+    xa::ZReg z_tmp {31};
+
+    //  const std::vector<xa::ZReg> z_tmp_vec = {
+    //    z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
+    //  constexpr static int z_tmp_vec_size = 8;
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     size_t aux_vecs_count();
     size_t aux_gprs_count();
@@ -185,6 +228,10 @@ private:
     void clip_compute_vector_bwd(const Vmm &vmm_src);
     void pow_compute_vector_bwd(const Vmm &vmm_src);
     void gelu_erf_compute_vector_bwd(const Vmm &vmm_src);
+
+#ifndef DNNL_X64_IMPLEMENTATION
+    void uni_ldr(const Vmm &vmm_dst, const Xbyak::Operand &addr);
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     enum key_t {
         scale = 0, // scale argument
@@ -240,10 +287,29 @@ private:
         const auto scale = te.bcast ? vlen : sizeof(table_entry_val_t);
         return te.off + key_off_val_shift * scale;
     }
+#ifdef DNNL_X64_IMPLEMENTATION
     Xbyak::Address table_val(key_t key, size_t key_off_val_shift = 0) {
         auto off = table_off(key, key_off_val_shift);
         return h->ptr[p_table + off];
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    Vmm table_val(key_t key, size_t key_off_val_shift = 0) {
+        xa::XReg x_addr {h->xtDefaultAddrIdx};
+        uint32_t tableIdx = static_cast<uint32_t>(p_table.getIdx());
+        auto off = table_off(key, key_off_val_shift);
+
+        if (off) {
+            h->CodeGeneratorAArch64::add_imm(
+                    x_addr, xa::XReg {tableIdx}, off, h->X_TMP_0);
+        } else {
+            x_addr = xa::XReg {tableIdx};
+        }
+
+        h->CodeGeneratorAArch64::ld1w(
+                z_tmp.s, p_lsb / xa::T_z, xa::ptr(x_addr));
+        return Vmm(z_tmp.getIdx());
+    }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     // we accept only 32bit hexadecimal table values to avoid any rounding
     using table_entry_val_t = uint32_t;

@@ -15,7 +15,7 @@
 *******************************************************************************/
 
 #ifndef CPU_AARCH64_JIT_SVE_1x1_CONV_KERNEL_HPP
-#define CPU_AARCH64_JIT_SVE_1X1_CONV_KERNEL_HPP
+#define CPU_AARCH64_JIT_SVE_1x1_CONV_KERNEL_HPP
 
 #include "common/c_types_map.hpp"
 #include "common/memory_tracking.hpp"
@@ -24,7 +24,7 @@
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-#define PRFMMIN (-256)
+#define PRFMMIN 0
 #define PRFWMAX 31
 #define LDRMAX 255
 #define LDRWMAX 252
@@ -174,8 +174,6 @@ private:
 
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
 
-    int stack_space_needed = 16;
-    int bcast_loop_work_offt = 0;
     void bcast_loop(int load_loop_blk);
     void reduce_loop(int load_loop_blk, int ur, int substep, bool wraparound);
 

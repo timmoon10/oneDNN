@@ -5,15 +5,22 @@ stages:
     - test
 
 before_script:
-    - git submodule sync --recursive
-    - git submodule update --init --recursive
 
-job_1:
+ClangFormatCheck:
   stage: test
-  image: 0b158dd36e5c
+  image: bce7edfda510
+  script:
+  - ./.github/automation/clang-format.sh
+
+fcc_w/_SSL2:
+  stage: test
+  image: bce7edfda510
   script:
 #    - pwd
 #    - ls
+    - git submodule sync --recursive
+    - git submodule update --init --recursive
+    - source setenv-fcc
     - export ONEDNN_ROOT_DIR=`pwd`
     - cd src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/
     - mkdir build_xed_aarch64
@@ -28,6 +35,6 @@ job_1:
     - mkdir build
     - cd build
     - export LD_LIBRARY_PATH=${XED_ROOT_DIR}/lib:${LD_LIBRARY_PATH} && \
-    - cmake -DDNNL_INDIRECT_JIT_AARCH64=ON ..
+    - cmake -DDNNL_INDIRECT_JIT_AARCH64=ON -DWITH_BLAS=ssl2 ..
     - make -j48
     - make test

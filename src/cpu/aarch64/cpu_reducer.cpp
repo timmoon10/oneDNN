@@ -26,6 +26,14 @@
 
 #include "cpu/aarch64/cpu_reducer.hpp"
 
+#ifndef DNNL_X64_IMPLEMENTATION
+#ifdef CG
+#undef CG
+#endif
+#define CG CodeGeneratorAArch64
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -169,6 +177,7 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
     }
 
     void load_dst(int nloads, int load_len) {
+#ifdef DNNL_X64_IMPLEMENTATION
         for (int i = 0; i < nloads; ++i) {
             if (load_len == typesize)
                 movd(Xmm(i), ptr[reg_dst + i * load_len]);
@@ -177,10 +186,62 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
             else
                 assert(!"unsupported");
         }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::XReg x_reg_dst {IDX(reg_dst)};
+
+        if (load_len == typesize) {
+            uint32_t i = 0;
+            while (i < static_cast<uint32_t>(nloads)) {
+                uint32_t old_i = i;
+                uint32_t count = 0;
+                do {
+                    CG::add_imm(x_tmp_vec[count++], x_reg_dst, i * load_len,
+                            X_DEFAULT_ADDR);
+                    i++;
+                } while (i < static_cast<uint32_t>(nloads)
+                        && count < x_tmp_vec_size);
+
+                for (uint32_t j = old_i; j < old_i + count; j++) {
+                    CG::ldr(xa::SReg {j}, xa::ptr(x_tmp_vec[j]));
+                }
+            }
+        } else if (load_len == vlen) {
+            if (vlen == 64) {
+                CG::mov(X_TMP_0, xa::XReg {IDX(reg_dst)});
+                for (uint32_t i = 0; i < static_cast<uint32_t>(nloads); ++i) {
+                    CG::ldr(xa::ZReg {i}, xa::ptr(x_reg_dst, i, xa::MUL_VL));
+                }
+            } else if (vlen == 32) {
+                uint32_t i = 0;
+                while (i < static_cast<uint32_t>(nloads)) {
+                    uint32_t old_i = i;
+                    uint32_t count = 0;
+                    do {
+                        CG::add_imm(x_tmp_vec[count++], x_reg_dst, i * load_len,
+                                X_DEFAULT_ADDR);
+                        i++;
+                    } while (i < static_cast<uint32_t>(nloads)
+                            && count < x_tmp_vec_size);
+
+                    for (uint32_t j = old_i; j < old_i + count; j++) {
+                        CG::ld1w(xa::ZRegS {j}, p_lsb, xa::ptr(x_tmp_vec[j]));
+                    }
+                }
+            } else if (vlen == 16) {
+                for (uint32_t i = 0; i < static_cast<uint32_t>(nloads); ++i) {
+                    CG::mov(X_TMP_0, xa::XReg {IDX(reg_dst)});
+                    CG::ldr(xa::QReg {i}, xa::post_ptr(X_TMP_0, vlen));
+                }
+            }
+        } else {
+            assert(!"unsupported");
+        }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 
     void store_dst(int nloads, int load_len) {
-        for (int i = 0; i < nloads; ++i) {
+#ifdef DNNL_X64_IMPLEMENTATION
+        for (int i = 0; i < static_cast<uint32_t>(nloads); ++i) {
             if (load_len == typesize)
                 movd(ptr[reg_dst + i * load_len], Xmm(i));
             else if (load_len == vlen)
@@ -188,8 +249,60 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
             else
                 assert(!"unsupported");
         }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        xa::XReg x_reg_dst {IDX(reg_dst)};
+
+        if (load_len == typesize) {
+            uint32_t i = 0;
+            while (i < static_cast<uint32_t>(nloads)) {
+                uint32_t old_i = i;
+                uint32_t count = 0;
+                do {
+                    CG::add_imm(x_tmp_vec[count++], x_reg_dst, i * load_len,
+                            X_DEFAULT_ADDR);
+                    i++;
+                } while (i < static_cast<uint32_t>(nloads)
+                        && count < x_tmp_vec_size);
+
+                for (uint32_t j = old_i; j < old_i + count; j++) {
+                    CG::str(xa::SReg {j}, xa::ptr(x_tmp_vec[j]));
+                }
+            }
+        } else if (load_len == vlen) {
+            if (vlen == 64) {
+                CG::mov(X_TMP_0, xa::XReg {IDX(reg_dst)});
+                for (uint32_t i = 0; i < static_cast<uint32_t>(nloads); ++i) {
+                    CG::str(xa::ZReg {i}, xa::ptr(x_reg_dst, i, xa::MUL_VL));
+                }
+            } else if (vlen == 32) {
+                uint32_t i = 0;
+                while (i < static_cast<uint32_t>(nloads)) {
+                    uint32_t old_i = i;
+                    uint32_t count = 0;
+                    do {
+                        CG::add_imm(x_tmp_vec[count++], x_reg_dst, i * load_len,
+                                X_DEFAULT_ADDR);
+                        i++;
+                    } while (i < static_cast<uint32_t>(nloads)
+                            && count < x_tmp_vec_size);
+
+                    for (uint32_t j = old_i; j < old_i + count; j++) {
+                        CG::st1w(xa::ZRegS {j}, p_lsb, xa::ptr(x_tmp_vec[j]));
+                    }
+                }
+            } else if (vlen == 16) {
+                for (uint32_t i = 0; i < static_cast<uint32_t>(nloads); ++i) {
+                    CG::mov(X_TMP_0, xa::XReg {IDX(reg_dst)});
+                    CG::str(xa::QReg {i}, xa::post_ptr(X_TMP_0, vlen));
+                }
+            }
+        } else {
+            assert(!"unsupported");
+        }
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void accumulate(int nloads, int load_len, size_t base_off) {
         for (int i = 0; i < nloads; ++i) {
             size_t off = base_off + i * load_len;
@@ -202,9 +315,182 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
                 assert(!"unsupported");
         }
     }
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+#if AARCH64_OLD_IMPLEMENTATION
+    void accumulate(int nloads, int load_len, size_t base_off) {
+        const int n_vregs = cpu_isa_traits<isa>::n_vregs;
+        xa::XReg x_sp {IDX(rsp)};
+        xa::XReg x_src {IDX(reg_src)};
+        xa::ZReg z_tmp {n_vregs - 1};
+
+        /* Push a SVE register to prepare 
+	 temporal use for memory operand */
+        CG::sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, vlen);
+        if (vlen == 64)
+            CG::str(z_tmp, xa::ptr(X_TRANSLATOR_STACK));
+        else if (vlen == 32)
+            CG::st1w(z_tmp.s, p_lsb, xa::ptr(X_TRANSLATOR_STACK));
+        else if (vlen == 16)
+            CG::str(xa::QReg {n_vregs - 1}, xa::ptr(X_TRANSLATOR_STACK));
+
+        CG::add_imm(X_TMP_0, xa::XReg {IDX(reg_src)}, base_off, X_TMP_1);
+        for (uint32_t i = 0;
+                i < static_cast<uint32_t>(nloads) && i < n_vregs - 1; ++i) {
+            if (load_len == typesize) {
+                if (data_type == data_type::f32) {
+                    xa::SReg s {i};
+                    xa::SReg s_tmp {n_vregs - 1};
+                    CG::ldr(s_tmp, xa::ptr(X_TMP_0));
+                    CG::fadd(s, s, s_tmp);
+                } else {
+                    xa::VReg4S v {i};
+                    CG::ldr(xa::QReg {n_vregs - 1}, xa::ptr(X_TMP_0));
+                    CG::add(v, v, xa::VReg4S {n_vregs - 1});
+                }
+                CG::add_imm(X_TMP_0, X_TMP_0, load_len, X_TMP_1);
+            } else if (load_len == vlen) {
+                xa::ZRegS z {i};
+                xa::ZRegS z_tmp {n_vregs - 1};
+                CG::ld1w(z_tmp, p_lsb / xa::T_z, xa::ptr(X_TMP_0));
+                if (data_type == data_type::f32) {
+                    CG::fadd(z, p_lsb / xa::T_m, z_tmp);
+                } else {
+                    CG::add(z, p_lsb / xa::T_m, z_tmp);
+                }
+                CG::add_imm(X_TMP_0, X_TMP_0, load_len, X_TMP_1);
+            } else {
+                assert(!"unsupported");
+            }
+        }
+        /* Pop a SVE register */
+        if (vlen == 64)
+            CG::ldr(z_tmp, xa::ptr(X_TRANSLATOR_STACK));
+        else if (vlen == 32)
+            CG::ld1w(z_tmp.s, p_lsb, xa::ptr(X_TRANSLATOR_STACK));
+        else if (vlen == 16)
+            CG::ldr(xa::QReg {n_vregs - 1}, xa::ptr(X_TRANSLATOR_STACK));
+
+        if (static_cast<uint32_t>(nloads) == n_vregs) {
+            /* Push a SVE register to prepare 
+	   temporal use for memory operand */
+            z_tmp = z0;
+            if (vlen == 64)
+                CG::str(z_tmp, xa::ptr(X_TRANSLATOR_STACK));
+            else if (vlen == 32)
+                CG::st1w(z_tmp.s, p_lsb, xa::ptr(X_TRANSLATOR_STACK));
+            else if (vlen == 16)
+                CG::str(xa::QReg {0}, xa::ptr(X_TRANSLATOR_STACK));
+
+            if (load_len == typesize) {
+                if (data_type == data_type::f32) {
+                    xa::SReg s {n_vregs - 1};
+                    xa::SReg s_tmp {0};
+                    CG::ldr(s_tmp, xa::ptr(X_TMP_0));
+                    CG::fadd(s, s, s_tmp);
+                } else {
+                    xa::VReg4S v {n_vregs - 1};
+                    CG::ldr(xa::QReg {0}, xa::ptr(X_TMP_0));
+                    CG::add(v, v, xa::VReg4S {0});
+                }
+                CG::add_imm(X_TMP_0, X_TMP_0, load_len, X_TMP_1);
+            } else if (load_len == vlen) {
+                xa::ZRegS z {n_vregs - 1};
+                xa::ZRegS z_tmp {0};
+                CG::ld1w(z_tmp, p_lsb / xa::T_z, xa::ptr(X_TMP_0));
+                if (data_type == data_type::f32) {
+                    CG::fadd(z, p_lsb / xa::T_m, z_tmp);
+                } else {
+                    CG::add(z, p_lsb / xa::T_m, z_tmp);
+                }
+                CG::add_imm(X_TMP_0, X_TMP_0, load_len, X_TMP_1);
+            } else {
+                assert(!"unsupported");
+            }
+
+            if (vlen == 64)
+                CG::ldr(z_tmp, xa::ptr(X_TRANSLATOR_STACK));
+            else if (vlen == 32)
+                CG::ld1w(z_tmp.s, p_lsb, xa::ptr(X_TRANSLATOR_STACK));
+            else if (vlen == 16)
+                CG::ldr(xa::QReg {0}, xa::ptr(X_TRANSLATOR_STACK));
+        }
+
+        CG::add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, vlen);
+    }
+#else //#if AARCH64_OLD_IMPLEMENTATION
+    void accumulate(int nloads, int load_len, size_t base_off) {
+        const int n_vregs = cpu_isa_traits<isa>::n_vregs;
+        const int n_vregs_h = n_vregs / 2;
+        xa::XReg x_sp {IDX(rsp)};
+        xa::XReg x_src {IDX(reg_src)};
+        xa::ZReg z_tmp {n_vregs - 1};
+
+        assert(nloads <= n_vregs_h);
+        CG::add_imm(X_TMP_0, xa::XReg {IDX(reg_src)}, base_off, X_DEFAULT_ADDR);
+        CG::add_imm(X_TMP_1, xa::XReg {IDX(reg_src)}, base_off + 8 * vlen,
+                X_DEFAULT_ADDR);
+
+        if (load_len == typesize) {
+            if (data_type == data_type::f32) {
+                for (int i = 0; i < nloads; ++i) {
+                    CG::ldr(xa::SReg(n_vregs_h + i),
+                            xa::post_ptr(X_TMP_0, typesize));
+                }
+                for (int i = 0; i < nloads; ++i) {
+                    xa::SReg s(i);
+                    CG::fadd(s, s, xa::SReg(n_vregs_h + i));
+                }
+            } else {
+                for (int i = 0; i < nloads; ++i) {
+                    xa::VReg4S v(i);
+                    CG::ldr(xa::QReg(n_vregs_h + i),
+                            xa::post_ptr(X_TMP_0, vlen));
+                }
+                for (int i = 0; i < nloads; ++i) {
+                    xa::VReg4S v(i);
+                    CG::add(v, v, xa::VReg4S(n_vregs_h + i));
+                }
+            }
+        } else if (load_len == vlen) {
+            if (vlen == 64) {
+                int i = 0;
+                /* imm index must be in the range -8 to 7. */
+                for (i = 0; i < nloads && i < 8; ++i)
+                    CG::ld1w(xa::ZRegS(n_vregs_h + i), p_lsb / xa::T_z,
+                            xa::ptr(X_TMP_0, i, xa::MUL_VL));
+                for (; i < nloads; ++i)
+                    CG::ld1w(xa::ZRegS(n_vregs_h + i), p_lsb / xa::T_z,
+                            xa::ptr(X_TMP_1, i - 8, xa::MUL_VL));
+            } else {
+                for (int i = 0; i < nloads; ++i) {
+                    CG::ld1w(xa::ZRegS(n_vregs_h + i), p_lsb / xa::T_z,
+                            xa::ptr(X_TMP_0));
+                    CG::add_imm(X_TMP_0, X_TMP_0, load_len, X_TMP_1);
+                }
+            }
+
+            for (int i = 0; i < nloads; ++i) {
+                if (data_type == data_type::f32) {
+                    CG::fadd(xa::ZRegS(i), p_lsb / xa::T_m,
+                            xa::ZRegS(n_vregs_h + i));
+                } else {
+                    CG::add(xa::ZRegS(i), p_lsb / xa::T_m,
+                            xa::ZRegS(n_vregs_h + i));
+                }
+            }
+        } else {
+            assert(!"unsupported");
+        }
+    }
+#endif //#if AARCH64_OLD_IMPLEMENTATION
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
     void loop_x() {
+#ifdef DNNL_X64_IMPLEMENTATION
         const int nloads[] = {cpu_isa_traits<isa>::n_vregs, 1, 1};
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+        const int nloads[] = {cpu_isa_traits<isa>::n_vregs / 2, 1, 1};
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
         const int nbranches = sizeof(nloads) / sizeof(nloads[0]);
 
         const int load_len[nbranches] = {vlen, vlen, typesize};
@@ -264,6 +550,17 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
 
         preamble();
 
+#ifndef DNNL_X64_IMPLEMENTATION
+        CG::ptrue(p_512.b);
+        CG::ptrue(p_256.b, xa::VL32);
+        CG::ptrue(p_128.b, xa::VL16);
+        if (vlen == 32) {
+            p_lsb = p_256;
+        } else if (vlen == 16) {
+            p_lsb = p_128;
+        }
+#endif
+
         shl(reg_nx, 2);
 
         Label ny_loop;
@@ -281,6 +578,16 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type>,
         this->ker_ = reinterpret_cast<decltype(this->ker_)>(
                 const_cast<uint8_t *>(this->getCode()));
     }
+
+private:
+    xa::PReg p_lsb {7}; /* If Vmm = Ymm(Xmm), then p_lsb set to p_256, p_128. */
+    xa::PReg p_512 {7};
+    xa::PReg p_256 {6};
+    xa::PReg p_128 {5};
+
+    const std::vector<xa::XReg> x_tmp_vec
+            = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
+    constexpr static int x_tmp_vec_size = 5;
 };
 
 template <impl::data_type_t data_type>
