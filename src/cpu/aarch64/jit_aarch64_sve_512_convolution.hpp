@@ -44,7 +44,6 @@
 #include "cpu/cpu_convolution_pd.hpp"
 
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
-#include "cpu/aarch64/jit_transpose_src_utils.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -248,7 +247,6 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t : public primitive_t {
     jit_aarch64_sve_512_convolution_bwd_weights_t(const pd_t *apd);
     ~jit_aarch64_sve_512_convolution_bwd_weights_t() {
         delete kernel_;
-        if (trans_kernel_) delete trans_kernel_;
         if (acc_ker_) delete acc_ker_;
         delete reducer_bias_;
     }
@@ -280,7 +278,6 @@ private:
     int nthr_, nthr_mb_, nthr_g_, nthr_oc_b_, nthr_ic_b_;
 
     jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 *kernel_;
-    jit_trans_src_t *trans_kernel_;
     cpu_accumulator_1d_t<diff_weights_type> *acc_ker_;
     cpu_reducer_t<diff_weights_type> *reducer_bias_;
 };

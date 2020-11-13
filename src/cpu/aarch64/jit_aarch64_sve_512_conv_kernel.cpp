@@ -46,9 +46,6 @@
 #define KNx_L2_EFFECTIVE_CAPACITY ((512 - 64) * 1024)
 #define A64FX_L2_EFFECTIVE_CAPACITY ((666 - 128) * 1024)
 
-// intel L2 1024KiB L1 32KiB
-// l2 :7MiB / 12core -  l1 : 64 * 2(inclusive cache) ?
-
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -110,7 +107,7 @@ inline bool is_iw_threading_on(const jit_conv_conf_t &jcp) {
     return (jcp.nb_iw > 1);
 }
 inline bool is_owb_prefetching(const jit_conv_conf_t &jcp) {
-    return false; //(jcp.ver == ver_4fma && is_ow_threading_on(jcp));
+    return false; 
 }
 
 } // namespace
@@ -151,12 +148,9 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
     xa::LabelAArch64 no_update_label, store_label, eltwise_label;
 
     auto _test = [&](const int cond) {
-        // *Note 1
         return CGA64::tst(reg_channel, cond);
     };
 
-    // *Note 1
-    //[info]v0.21と同じcodeを展開
     auto zreg_tmp = [=](int idx) { return xa::ZReg(idx); };
     auto zreg_tmp_s = [=](int idx) { return xa::ZRegS(idx); };
 
@@ -182,32 +176,16 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             return CGA64::b(xa::NE, l);
         };
 
-        // *Note 1
         _test(FLAG_IC_FIRST);
         _jmp(no_update_label);
     }
 
-    //[info]取り敢えずv0.21と同一codeを展開
     int reg_ofs = jcp.ur_w * jcp.nb_oc_blocking;
     int num_regs = 32 - reg_ofs;
     int prev_out_ofs = -1;
 
     for (int k = 0; k < jcp.nb_oc_blocking; k++) {
-#if 0
         for (int j = 0; j < ur_w; j++) {
-            const int oc_tail = jcp.oc_tail;
-            Vmm vmm = vmm_out(j, k);
-            // mask only needed for last oc_block
-            if (oc_tail && k + 1 == jcp.nb_oc_blocking)
-                vmm = vmm | k_oc_tail_mask | T_z;
-            size_t aux_output_offset = get_output_offset(j, k);
-            vaddps(vmm,
-                    make_safe_addr(
-                            reg_out, aux_output_offset, reg_out_ofs));
-        }
-#else
-        for (int j = 0; j < ur_w; j++) {
-            //[info]取り敢えずv0.21を参考に展開
             size_t aux_output_offset = get_output_offset(j, k);
             int idx = reg_ofs + ((j + k * ur_w) % num_regs);
             if (j == 0) {
@@ -231,7 +209,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             int idx = reg_ofs + ((j + k * ur_w) % num_regs);
             CGA64::fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
         }
-#endif
     }
 
     if (!jcp.with_sum) {
@@ -246,22 +223,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
         _jmp(eltwise_label);
     }
 
-#if 0
-    if (jcp.with_bias) {
-        for (int k = 0; k < jcp.nb_oc_blocking; k++) {
-            int bias_offset = jcp.typesize_out * k * jcp.oc_block;
-            for (int j = 0; j < ur_w; j++) {
-                Vmm vmm = vmm_out(j, k);
-                // mask only needed for last oc_block
-                if (oc_tail && k + 1 == jcp.nb_oc_blocking)
-                    vmm = vmm | k_oc_tail_mask | T_z;
-                vaddps(vmm, EVEX_compress_addr(reg_bias, bias_offset));
-            }
-            mic_prefetcht1(EVEX_compress_addr(reg_bias, bias_offset + 64));
-        }
-    }
-#else
-    //[info]v0.21と同一codeを展開
     auto bias_load = [=](int bias_offset, int idx) {
         int ofs = bias_offset;
 
@@ -290,11 +251,8 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             prefetch(op, 2, reg_bias, ofs);
         }
     }
-#endif
 
     CGA64::L_aarch64(eltwise_label);
-    //[info]v0.21と同一codeを展開
-    //[info]eltwise処理を一時的に削除
     if (jcp.with_eltwise) {
         CGA64::tst(reg_channel, FLAG_IC_LAST);
         CGA64::b(xa::EQ, store_label);
@@ -333,23 +291,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
     };
 
     CGA64::L_aarch64(store_label);
-#if 0
-    for (int k = 0; k < jcp.nb_oc_blocking; k++)
-        for (int j = 0; j < ur_w; j++) {
-            Vmm vmm = vmm_out(j, k);
-            // mask only needed for last oc_block
-            if (oc_tail && k + 1 == jcp.nb_oc_blocking)
-                vmm = vmm | k_oc_tail_mask;
-            size_t aux_output_offset = get_output_offset(j, k);
-
-            vmovups(EVEX_compress_addr_safe(
-                            reg_out, aux_output_offset, reg_out_long_offt),
-                    vmm);
-            if (!is_owb_prefetching(jcp))
-                mic_prefetcht0(EVEX_compress_addr_safe(
-                        reg_out_prf, aux_output_offset, reg_out_long_offt));
-        }
-#else
     prev_out_ofs = -1;
     for (int k = 0; k < jcp.nb_oc_blocking; k++) {
         for (int j = 0; j < ur_w; j++) {
@@ -358,14 +299,8 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
 
             prev_out_ofs = out_str(j, k, aux_output_offset,
                     prev_out_ofs); // <- reg_tmp_addr
-
-            //if (!is_owb_prefetching(jcp)) {
-            //    std::string op = "ST";
-            //    prefetch(op, 1, reg_out_prf, aux_output_offset);
-            //}
         }
     }
-#endif
 }
 
 template <typename Vmm>
@@ -423,7 +358,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
         CGA64::mov(aux_reg_ker, aux_reg_ker_d);
     }
 
-    //[info]v0.21 codeをそのまま展開
     auto zreg_inp_s = [=](int i_ic, int nb_x_blocking) {
         int idx = i_ic + nb_x_blocking * jcp.ur_w;
         assert(idx < 31);
@@ -725,23 +659,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     CGA64::ldr(reg_kh, xa::ptr(abi_param1_aarch64, GET_OFF(kh_padding)));
     if (jcp.ndims == 5) CGA64::mov(aux_reg_ker_d_org, reg_ker);
 
-//[info]取り敢えずコメント化。
-#if 0
-    const int oc_tail = jcp.oc_tail;
-    if (oc_tail) {
-        Label done;
-        // dummy mask all 1's
-        kxnorw(k_oc_tail_mask, k_oc_tail_mask, k_oc_tail_mask);
-        mov(reg_load_work, ptr[param1 + GET_OFF(load_work)]);
-        cmp(reg_load_work, jcp.nb_oc_blocking * jcp.oc_block);
-        je(done, T_NEAR);
-        Reg32 reg_tail_32 = reg_tail.cvt32();
-        mov(reg_tail_32, (1 << oc_tail) - 1);
-        kmovw(k_oc_tail_mask, reg_tail_32);
-        L(done);
-    }
-#endif
-
     int r_pad = nstl::max(0, jcp.r_pad);
     int n_oi = ow / ur_w;
     int r_pad1 = calculate_end_padding(l_pad, ur_w * n_oi, iw, stride_w,
@@ -942,7 +859,6 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     }
     postamble();
 
-    //[info]eltwise処理を一時的に削除
     if (jcp.with_eltwise) {
         eltwise_injector_->prepare_table();
         binCommit();
@@ -1168,9 +1084,6 @@ status_t jit_aarch64_sve_512_conv_fwd_kernel::init_conf(jit_conv_conf_t &jcp,
     };
 
     if (jcp.ver == ver_fma && mayiuse(sve)) {
-#if 0
-        int try_nb_oc_blocking = 2;
-#endif
         // These conditions define a set of shapes with 'ow = 1' which
         // have a very limited optimization space for performance. Try
         // to optimize by using a larger 'nb_oc_blocking' size.
@@ -1317,7 +1230,6 @@ void jit_aarch64_sve_512_conv_fwd_kernel::init_scratchpad(
         scratchpad.book(key_conv_padded_bias, jcp.oc, jcp.typesize_out);
 }
 
-//[info]v0.21 codeを展開
 template <typename Vmm>
 void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::prepare_output(
         int ur_w) {
@@ -1341,7 +1253,6 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::prepare_output(
     }
 }
 
-//[info]v0.12 code展開
 template <typename Vmm>
 void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         int ur_w) {
@@ -1456,7 +1367,6 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
     }
 }
 
-//[info]v0.21 code展開
 template <typename Vmm>
 void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
         int ur_w, int l_overflow, int r_overflow) {
@@ -1705,7 +1615,6 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
     }
 }
 
-//[info]v0.21 code展開
 template <typename Vmm>
 void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
         int ur_w, int l_overflow, int r_overflow, int k_offset) {
@@ -1921,7 +1830,6 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                             CGA64::fmla(zreg_out_s(jj, ii), reg_p_all_ones,
                                     zreg_inp_s(jj % stride_w, nb_ic_block),
                                     zreg_wei_s(wei_count));
-                            //xa::ZRegS(30), zreg_wei_s());
                         }
                     }
                     wei_count++;
@@ -2035,23 +1943,6 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
     CGA64::ldr(reg_src_prf, xa::ptr(param, GET_OFF(src_prf)));
     CGA64::ldr(reg_dst_prf, xa::ptr(param, GET_OFF(dst_prf)));
     CGA64::ldr(reg_ker_prf, xa::ptr(param, GET_OFF(filt_prf)));
-
-#if 0
-//[info]v1.6 追加コード。取り敢えずコメント化
-    const int ic_tail = jcp.ic_tail;
-    if (ic_tail) {
-        Label masking_done;
-        // dummy mask all 1's
-        kxnorw(k_ic_tail_mask, k_ic_tail_mask, k_ic_tail_mask);
-        mov(reg_load_work, ptr[param1 + GET_OFF(load_work)]);
-        cmp(reg_load_work, jcp.nb_ic_blocking * jcp.ic_block);
-        je(masking_done, T_NEAR);
-        Reg32 reg_tail_32 = reg_tail.cvt32();
-        mov(reg_tail_32, (1 << ic_tail) - 1);
-        kmovw(k_ic_tail_mask, reg_tail_32);
-        L(masking_done);
-    }
-#endif
 
     int l_overflow = nstl::max(0, ((kw - 1) * dilate_w - jcp.l_pad) / stride_w);
     int r_overflow = nstl::max(
@@ -2451,46 +2342,18 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
 
     if (jcp.ver == ver_fma && mayiuse(sve)) {
         int try_nb_ic_blocking = 2;
-#if 0
-        unsigned int ker_inp_size = typesize * jcp.iw * jcp.ic_block
-                * try_nb_ic_blocking * jcp.kh;
-        unsigned int ker_out_size = typesize * jcp.ow * jcp.oc_block;
-        unsigned int ker_wei_size = typesize * jcp.kh * jcp.kw * jcp.ic_block
-                * jcp.oc_block * try_nb_ic_blocking;
-        unsigned int ker_total_size
-                = ker_inp_size + ker_out_size + ker_wei_size;
-#endif
-#if 0
-        bool use_expl_bcast
-                = !(jcp.kw == 1 || (jcp.kw == 5 && jcp.iw < 8)
-                          || (jcp.kw < 5
-                                  && ((jcp.iw <= 5
-                                              || (jcp.iw > 8 && jcp.iw <= 13))
-                                          || ker_total_size > L1_cache_size)))
-                || jcp.stride_h > 1 || jcp.stride_d > 1;
-#else
-        //[info]v0.21の修正内容からL1_cache分のシフト処理部分を削除
         bool use_expl_bcast
                 = !(jcp.kw == 1 || (jcp.kw == 5 && jcp.iw < 8)
                           || (jcp.kw < 5
                                   && ((jcp.iw <= 5
                                           || (jcp.iw > 8 && jcp.iw <= 13)))))
                 || jcp.stride_h > 1 || jcp.stride_d > 1;
-#endif
         if (use_expl_bcast && !jcp.large_w_filter) {
             jcp.kernel_kind = embd_bcast;
-            jcp.ur_w = nstl::min(jcp.iw, 16); //regs);
+            jcp.ur_w = nstl::min(jcp.iw, 16);
             jcp.nb_ic_blocking = jcp.nb_oc_blocking = 1;
-#if 0
-            if (!(jcp.kw > 3
-                        || (jcp.kw == 3 && ker_total_size < L1_cache_size
-                                && jcp.ow > 8))
-                    && jcp.stride_h == 1 && jcp.stride_d == 1)
-#else
-            //[info]v0.21の修正内容からL1_cache分のシフト処理部分を削除
             if (!(jcp.kw > 3 || (jcp.kw == 3 && jcp.ow > 8))
                     && jcp.stride_h == 1 && jcp.stride_d == 1)
-#endif
             if (jcp.nb_ic % try_nb_ic_blocking == 0) {
                 jcp.nb_ic_blocking = try_nb_ic_blocking;
                 jcp.ur_w = 30 / (jcp.nb_ic_blocking + 1);
@@ -3588,16 +3451,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
     CGA64::mov(reg_tmp, 0);
     CGA64::L_aarch64(bias_loop);
     {
-#if 0
-        const int oc_tail = jcp.oc_tail;
-        auto zmm_out = Zmm(1);
-        if (oc_tail) zmm_out = zmm_out | k_oc_mask | T_z;
-        vmovups(zmm_out, ptr[reg_output + reg_tmp]);
-#else
-        //[info]v1.6追加コード分は取り敢えず除外。
         CGA64::add(reg_add_tmp, reg_output, reg_tmp);
         CGA64::ldr(xa::ZReg(1), xa::ptr(reg_add_tmp));
-#endif
         CGA64::fadd(xa::ZRegS(0), xa::ZRegS(0), xa::ZRegS(1));
         const int oc_stride
                 = is_ddst_layout_nxc() ? jcp.ngroups * jcp.oc : jcp.oc_block;
@@ -3607,7 +3462,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
         CGA64::b(xa::GT, bias_loop);
     }
     CGA64::str(
-            xa::ZReg(0), xa::ptr(reg_bias)); //vmovups(ptr[reg_bias], Zmm(0));
+            xa::ZReg(0), xa::ptr(reg_bias));
 
     CGA64::L_aarch64(skip_bias);
 }
@@ -3644,16 +3499,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
     CGA64::mov(reg_tmp, 0);
     CGA64::L_aarch64(bias_loop);
     {
-#if 0
-        const bool oc_tail = jcp.oc_tail;
-        auto zmm_out = Zmm(0);
-        if (oc_tail) zmm_out = zmm_out | k_oc_mask | T_z;
-        vmovups(zmm_out, ptr[reg_output + reg_tmp]);
-#else
-        //[info]v1.6追加コードを取り敢えず除外
         CGA64::add(reg_add_tmp, reg_output, reg_tmp);
         CGA64::ldr(xa::ZReg(0), xa::ptr(reg_add_tmp));
-#endif
         CGA64::fadd(xa::ZRegS(1), xa::ZRegS(1), xa::ZRegS(0));
         CGA64::add_imm(
                 reg_tmp, reg_tmp, oc_mult * jcp.typesize_out, reg_tmp_imm);
@@ -3661,7 +3508,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
         CGA64::b(xa::LT, bias_loop);
     }
     CGA64::str(
-            xa::ZReg(1), xa::ptr(reg_bias)); //vmovups(ptr[reg_bias], Zmm(1));
+            xa::ZReg(1), xa::ptr(reg_bias));
 
     CGA64::L_aarch64(skip_bias);
 }
@@ -4172,24 +4019,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::generate() {
     CGA64::ldr(reg_output, xa::ptr(param, GET_OFF(dst)));
     CGA64::ldr(reg_kernel, xa::ptr(param, GET_OFF(filt)));
 
-#if 0
-//[info]v1.6追加コード。取り敢えずコメント化。
-    const int oc_tail = jcp.oc_tail;
-    if (oc_tail) {
-        Label skip;
-        Reg32 reg_tail_32 = reg_oc_tail.cvt32();
-        if (jcp.nb_oc > 1) {
-            kxnorw(k_oc_mask, k_oc_mask, k_oc_mask);
-            mov(reg_oc_tail, ptr[param + GET_OFF(load_work)]);
-            cmp(reg_oc_tail, 16);
-            je(skip, T_NEAR);
-        }
-        mov(reg_tail_32, (1 << oc_tail) - 1);
-        kmovw(k_oc_mask, reg_tail_32);
-        L(skip);
-    }
-#endif
-
     compute_loop();
 
     postamble();
@@ -4286,7 +4115,6 @@ status_t jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::init_conf(
             = diff_dst_d.matches_one_of_tag(dat_tag_nxc, dat_tag_nCx16c);
     bool is_data_layout_nxc
             = utils::everyone_is(dat_tag_nxc, curr_src_tag, curr_dst_tag);
-    //[info]修正方法不明のため、取り敢えずコメント化。
     if (mayiuse(sve) && is_data_layout_nxc) return status::unimplemented;
 
     /* Optimization: when `output-width == 1' deploy a special case of the

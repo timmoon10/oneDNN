@@ -38,10 +38,8 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
-//[info]取り敢えずコメント化。
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 
-//[info]v0.21変更をそのまま追加
 #define PRFWMAX 31
 #define LDRMAX 255
 #define LDRWMAX 252
@@ -305,8 +303,6 @@ private:
     };
     int ker_reg_base_idx = (jcp.nb_ic_blocking == 1) ? 16 : 24;
 
-    //[info]v0.21のcodeを追加。v1.6追加codeは未反映。
-    //[info]取り敢えずv0.21のcodeを追加したが、全面書き換えが必要か？
     reg64_t param = abi_param1_aarch64;
     reg64_t reg_dst = x1;
     reg64_t reg_ker = x2;
@@ -348,7 +344,6 @@ private:
     reg64_t reg_src_prf_org = x19;
     reg64_t reg_src_org = x20;
     reg64_t reg_oi_org = x25;
-    //[info]レジスタ割り当ては適当
     reg64_t reg_dst_org = x22;
     reg64_t reg_ker_org = x26;
     reg64_t reg_input_org = x22;
@@ -532,14 +527,7 @@ struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
             generate();
             jit_ker = (void (*)(jit_conv_call_s *))getCode32();
         } else {
-#if 0
-            generate_microkernel();
-            jit_microker = (void (*)(float *, const float *, const float *,
-                    int64_t, int64_t))getCode32();
-#else
-            //[info]取り敢えずマスク
             assert(!"none microkernel");
-#endif
         }
     }
 
@@ -720,10 +708,6 @@ private:
     }
 
     void generate();
-#if 0
-//[info]取り敢えずマスク
-    void generate_microkernel();
-#endif
 
     static void balance(const jit_conv_conf_t &j, int &nthr, int &nthr_mb,
             int &nthr_g, int &nthr_oc_b, int &nthr_ic_b, int nthreads);
