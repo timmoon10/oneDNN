@@ -1,0 +1,6 @@
+export TCSDS_PATH="/opt/FJSVstclanga/v1.1.0"
+export PATH=${TCSDS_PATH}/bin:$PATH
+export LD_LIBRARY_PATH="${TCSDS_PATH}/lib64:${LD_LIBRARY_PATH}"
+
+export CC="fcc -Nclang -Kfast -Kopenmp -Knolargepage"
+export CXX="FCC -Nclang -Kfast -Kopenmp -Knolargepage"
