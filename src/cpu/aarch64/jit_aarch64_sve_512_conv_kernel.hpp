@@ -38,7 +38,11 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
+
+#define DISABLE_ELTWISE
+#ifndef DISABLE_ELTWISE
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
+#endif // #ifndef DISABLE_ELTWISE
 
 #define PRFWMAX 31
 #define LDRMAX 255
@@ -59,16 +63,29 @@ struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
 
     _jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t &ajcp, const primitive_attr_t &attr)
+#ifndef DISABLE_ELTWISE
         : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
+#else // #ifndef DISABLE_ELTWISE
+        : jcp(ajcp), attr_(attr) {
+#endif // #ifndef DISABLE_ELTWISE
+
         if (jcp.with_eltwise)
+#ifndef DISABLE_ELTWISE
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
+#else // #ifndef DISABLE_ELTWISE
+            assert(!"Error: Generation of eltwise_injector in not supported");
+#endif // #ifndef DISABLE_ELTWISE
 
         generate();
         jit_ker_ = (void (*)(jit_conv_call_s *))getCode32();
     }
 
+#ifndef DISABLE_ELTWISE
     ~_jit_aarch64_sve_512_conv_fwd_kernel() { delete eltwise_injector_; }
+#else // #ifndef DISABLE_ELTWISE
+    ~_jit_aarch64_sve_512_conv_fwd_kernel() { }
+#endif // #ifndef DISABLE_ELTWISE
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_fwd_kernel)
 
@@ -109,10 +126,6 @@ private:
     reg64_t reg_kh = x12; // ker h size
     reg64_t reg_kj = x13; // ker h workload
 
-#if 0
-    reg64_t reg_tail            = aux_reg_ker;
-    reg64_t reg_load_work       = reg_tail;
-#endif
     /* Temporary registers for ARM insts */
     reg64_t reg_tmp_addr = x14;
     reg64_t reg_prev_bcast_addr = x15;
@@ -187,7 +200,9 @@ private:
         }
     }
 
+#ifndef DISABLE_ELTWISE
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
+#endif // #ifndef DISABLE_ELTWISE
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
