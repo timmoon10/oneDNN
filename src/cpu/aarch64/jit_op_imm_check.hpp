@@ -21,8 +21,8 @@ namespace aarch64 {
 // by the current vector register size in bytes. This instruction is unpredicated.
 template <typename T>
 bool ldr_imm_check(T ofs) {
-    int vlen = cpu_isa_traits<sve>::vlen;
-    int vlen_shift = cpu_isa_traits<sve>::vlen_shift;
+    int vlen = cpu_isa_traits<sve_512>::vlen;
+    int vlen_shift = cpu_isa_traits<sve_512>::vlen_shift;
     int shifted_ofs = ofs >> vlen_shift;
     return ((shifted_ofs) <= LDRMAX) && (shifted_ofs >= LDRMIN)
             && ((ofs % vlen) == 0);
@@ -33,8 +33,8 @@ bool ldr_imm_check(T ofs) {
 // by the current vector register size in bytes. This instruction is unpredicated.
 template <typename T>
 bool str_imm_check(T ofs) {
-    int vlen = cpu_isa_traits<sve>::vlen;
-    int vlen_shift = cpu_isa_traits<sve>::vlen_shift;
+    int vlen = cpu_isa_traits<sve_512>::vlen;
+    int vlen_shift = cpu_isa_traits<sve_512>::vlen_shift;
     int shifted_ofs = ofs >> vlen_shift;
     return ((shifted_ofs) <= STRMAX) && (shifted_ofs >= STRMIN)
             && ((ofs % vlen) == 0);
@@ -56,8 +56,8 @@ bool prfm_imm_check(T ofs) {
 
 template <typename T>
 bool prfw_imm_check(T ofs) {
-    int vlen = cpu_isa_traits<sve>::vlen;
-    int vlen_shift = cpu_isa_traits<sve>::vlen_shift;
+    int vlen = cpu_isa_traits<sve_512>::vlen;
+    int vlen_shift = cpu_isa_traits<sve_512>::vlen_shift;
     int shifted_ofs = ofs >> vlen_shift;
 
     return (shifted_ofs <= PRFWMAX) && (shifted_ofs >= PRFWMIN)
