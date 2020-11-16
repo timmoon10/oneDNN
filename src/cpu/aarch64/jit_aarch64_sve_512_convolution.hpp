@@ -39,8 +39,8 @@
 #include "common/primitive.hpp"
 #include "common/utils.hpp"
 
-#include "cpu/aarch64/cpu_barrier.hpp"
-#include "cpu/aarch64/cpu_reducer.hpp"
+//#include "cpu/aarch64/cpu_barrier.hpp"
+//#include "cpu/aarch64/cpu_reducer.hpp"
 #include "cpu/cpu_convolution_pd.hpp"
 
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
@@ -58,7 +58,7 @@ struct jit_aarch64_sve_512_convolution_fwd_t : public primitive_t {
                 const typename pd_t::base_class *hint_fwd_pd)
             : cpu_convolution_fwd_pd_t(adesc, attr, hint_fwd_pd), jcp_() {}
 
-        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", sve, ""),
+        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", sve_512, ""),
                 jit_aarch64_sve_512_convolution_fwd_t);
 
         status_t init(engine_t *engine) {
@@ -86,15 +86,18 @@ struct jit_aarch64_sve_512_convolution_fwd_t : public primitive_t {
         jit_conv_conf_t jcp_;
     };
 
-    jit_aarch64_sve_512_convolution_fwd_t(const pd_t *apd) : primitive_t(apd) {
-        kernel_ = new jit_aarch64_sve_512_conv_fwd_kernel(
-                pd()->jcp_, *pd()->attr());
-    }
-    ~jit_aarch64_sve_512_convolution_fwd_t() { delete kernel_; }
+    jit_aarch64_sve_512_convolution_fwd_t(const pd_t *apd) : primitive_t(apd) {}
 
     typedef typename prec_traits<src_type>::type src_data_t;
     typedef typename prec_traits<wei_type>::type wei_data_t;
     typedef typename prec_traits<dst_type>::type dst_data_t;
+
+    status_t init(engine_t *engine) override {
+        CHECK(safe_ptr_assign(kernel_,
+                new jit_aarch64_sve_512_conv_fwd_kernel(
+                        pd()->jcp_, *pd()->attr())));
+        return kernel_->create_kernel();
+    }
 
     status_t execute(const exec_ctx_t &ctx) const override {
         if (pd()->ndims() == 3)
@@ -123,6 +126,7 @@ private:
     jit_aarch64_sve_512_conv_fwd_kernel *kernel_;
 };
 
+#if 0
 template <impl::data_type_t diff_dst_type,
         impl::data_type_t wei_type = diff_dst_type,
         impl::data_type_t diff_src_type = diff_dst_type>
@@ -281,6 +285,7 @@ private:
     cpu_accumulator_1d_t<diff_weights_type> *acc_ker_;
     cpu_reducer_t<diff_weights_type> *reducer_bias_;
 };
+#endif
 
 } // namespace aarch64
 } // namespace cpu

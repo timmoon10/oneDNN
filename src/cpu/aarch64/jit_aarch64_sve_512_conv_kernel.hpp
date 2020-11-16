@@ -53,6 +53,8 @@
 /* Get vector offsets, ofs / VL(VL: 512bits = 64Bytes) */
 #define VL_OFS(ofs) ((ofs) >> 6)
 
+using namespace Xbyak_aarch64;
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -76,9 +78,6 @@ struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
 #else // #ifndef DISABLE_ELTWISE
             assert(!"Error: Generation of eltwise_injector in not supported");
 #endif // #ifndef DISABLE_ELTWISE
-
-        generate();
-        jit_ker_ = (void (*)(jit_conv_call_s *))getCode32();
     }
 
 #ifndef DISABLE_ELTWISE
@@ -91,19 +90,17 @@ struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
 
     jit_conv_conf_t jcp;
     const primitive_attr_t &attr_;
-    void (*jit_ker_)(jit_conv_call_s *);
 
 private:
-    using reg64_t = const xa::XReg;
+    using reg64_t = const XReg;
     enum {
         typesize = sizeof(float),
-        unroll_4fma = 4,
         ker_reg_base_idx = 28,
     };
 
-    const xa::PReg reg_p_all_ones = p2;
+    const PReg reg_p_all_ones = p2;
 
-    reg64_t param = abi_param1_aarch64;
+    reg64_t param = abi_param1;
     reg64_t reg_inp = x1; // src base addr (2d)
     reg64_t reg_ker = x2; // ker base addr (2d)
     reg64_t aux_reg_ker_d = x2; // ker addr (3d)
@@ -151,51 +148,51 @@ private:
 
         bool cacheline_aligned = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_aligned == true) {
-            xa::Prfop op = xa::PLDL1KEEP;
+            Prfop op = PLDL1KEEP;
             switch (level) {
                 case 1:
-                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
                     break;
                 case 2:
-                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
                     break;
                 case 3:
-                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
             } else {
-                CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                CGA64::prfm(op, xa::ptr(reg_tmp_addr));
+                add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
+                prfm(op, ptr(reg_tmp_addr));
             }
         } else {
-            xa::PrfopSve op_sve = xa::PLDL1KEEP_SVE;
+            PrfopSve op_sve = PLDL1KEEP_SVE;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
-                                                : xa::PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
+                                                : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
-                                                : xa::PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
+                                                : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
-                                                : xa::PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
+                                                : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid level"); break;
             }
 
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones,
-                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                prfw(op_sve, reg_p_all_ones,
+                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
-                CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
+                prfw(op_sve, reg_p_all_ones, ptr(reg_tmp_addr));
             }
         }
     }
@@ -267,19 +264,19 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
 
     jit_aarch64_sve_512_conv_fwd_kernel(
             const jit_conv_conf_t ajcp, const primitive_attr_t &attr)
-        : jit_ker(nullptr), sve_512_kernel_(nullptr) {
+        : kernel_(nullptr) {
         switch (ajcp.oc_block) {
             case 16:
-                sve_512_kernel_
-                        = new _jit_aarch64_sve_512_conv_fwd_kernel<xa::ZReg>(
+                kernel_
+                        = new _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>(
                                 ajcp, attr);
-                jit_ker = sve_512_kernel_->jit_ker_;
                 return;
             default: assert(!"invalid channel blocking");
         }
     }
 
-    ~jit_aarch64_sve_512_conv_fwd_kernel() { delete sve_512_kernel_; }
+    status_t create_kernel() { return kernel_->create_kernel(); }
+    ~jit_aarch64_sve_512_conv_fwd_kernel() { delete kernel_; }
 
     enum { typesize = sizeof(float) };
 
@@ -291,13 +288,16 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
     static void init_scratchpad(memory_tracking::registrar_t &scratchpad,
             const jit_conv_conf_t &jcp);
 
-    void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_conv_fwd_kernel<xa::ZReg> *sve_512_kernel_;
+    void operator()(jit_conv_call_s *p) const { (*kernel_)(p); }
+    const uint8_t *jit_ker() const { return kernel_->jit_ker(); };
 
 private:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_fwd_kernel);
+    jit_generator *kernel_;
+
 };
 
+#if 0
 template <typename Vmm>
 struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32 : public jit_generator {
 
@@ -312,7 +312,7 @@ struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32 : public jit_generator {
     void (*jit_ker_)(jit_conv_call_s *);
 
 private:
-    using reg64_t = const xa::XReg;
+    using reg64_t = const XReg;
     enum {
         typesize = sizeof(float),
     };
@@ -364,7 +364,7 @@ private:
     reg64_t reg_input_org = x22;
     reg64_t reg_kernel_org = x26;
 
-    const xa::PReg reg_p_all_ones = p2;
+    const PReg reg_p_all_ones = p2;
 
     long long int prefetch(const std::string prfop, int level, reg64_t in,
             long long int ofs, long long int prev_ofs) {
@@ -379,45 +379,45 @@ private:
 
         bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
-            xa::Prfop op = xa::PLDL1KEEP;
+            Prfop op = PLDL1KEEP;
             switch (level) {
                 case 1:
-                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
                     break;
                 case 2:
-                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
                     break;
                 case 3:
-                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
 
             long long int tmp_ofs = ofs - prev_ofs;
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
             } else if ((tmp_ofs <= PRFMMAX) && (tmp_ofs >= 0)) {
-                CGA64::prfm(op,
-                        xa::ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
+                prfm(op,
+                        ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
             } else {
-                CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                CGA64::prfm(op, xa::ptr(reg_tmp_addr));
+                add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
+                prfm(op, ptr(reg_tmp_addr));
                 prev_ofs = ofs;
             }
         } else {
-            xa::PrfopSve op_sve = xa::PLDL1KEEP_SVE;
+            PrfopSve op_sve = PLDL1KEEP_SVE;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
-                                                : xa::PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
+                                                : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
-                                                : xa::PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
+                                                : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
-                                                : xa::PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
+                                                : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
@@ -425,23 +425,23 @@ private:
             long long int tmp_ofs = ofs - prev_ofs;
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones,
-                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                prfw(op_sve, reg_p_all_ones,
+                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
             } else if ((VL_OFS(tmp_ofs) <= PRFWMAX)
                     && (VL_OFS(tmp_ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones,
-                        xa::ptr(reg_tmp_addr,
+                prfw(op_sve, reg_p_all_ones,
+                        ptr(reg_tmp_addr,
                                 static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
-                CGA64::add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_addr));
+                add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
+                prfw(op_sve, reg_p_all_ones, ptr(reg_tmp_addr));
                 prev_ofs = ofs;
             }
         }
         return prev_ofs;
     }
 
-    xa::ZReg reg_wei = xa::ZReg(31);
+    ZReg reg_wei = ZReg(31);
 
     inline void prepare_output(int ur_w);
     inline void store_output(int ur_w);
@@ -510,7 +510,7 @@ struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
             case 16:
                 sve_512_kernel_
                         = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
-                                xa::ZReg>(ajcp);
+                                ZReg>(ajcp);
                 jit_ker = sve_512_kernel_->jit_ker_;
                 return;
             default: assert(!"invalid channel blocking");
@@ -528,7 +528,7 @@ struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
             const jit_conv_conf_t &jcp);
 
     void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<xa::ZReg> *sve_512_kernel_;
+    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<ZReg> *sve_512_kernel_;
 
 private:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_bwd_data_kernel_f32);
@@ -562,7 +562,7 @@ struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
             float *, const float *, const float *, int64_t, int64_t);
 
 private:
-    using reg64_t = const xa::XReg;
+    using reg64_t = const XReg;
     enum { typesize = sizeof(float) };
     static const int max_ur_w;
     static const int min_oh_reduce;
@@ -609,7 +609,7 @@ private:
     reg64_t reg_ker_start_addr = x27;
     reg64_t reg_addr_diff_input = x28;
 
-    const xa::PReg reg_p_all_ones = p2;
+    const PReg reg_p_all_ones = p2;
 
     void prefetch(
             const std::string prfop, int level, reg64_t in, long long int ofs) {
@@ -624,51 +624,51 @@ private:
 
         bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
-            xa::Prfop op;
+            Prfop op;
             switch (level) {
                 case 1:
-                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
                     break;
                 case 2:
-                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
                     break;
                 case 3:
-                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
             } else {
-                CGA64::add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
-                CGA64::prfm(op, xa::ptr(reg_add_tmp));
+                add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
+                prfm(op, ptr(reg_add_tmp));
             }
         } else {
-            xa::PrfopSve op_sve;
+            PrfopSve op_sve;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
-                                                : xa::PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
+                                                : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
-                                                : xa::PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
+                                                : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
-                                                : xa::PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
+                                                : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
 
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones,
-                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                prfw(op_sve, reg_p_all_ones,
+                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
-                CGA64::add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_add_tmp));
+                add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
+                prfw(op_sve, reg_p_all_ones, ptr(reg_add_tmp));
             }
         }
     }
@@ -727,7 +727,7 @@ private:
     static void balance(const jit_conv_conf_t &j, int &nthr, int &nthr_mb,
             int &nthr_g, int &nthr_oc_b, int &nthr_ic_b, int nthreads);
 };
-
+#endif
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

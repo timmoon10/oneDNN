@@ -639,6 +639,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
 
 template struct jit_aarch64_sve_512_convolution_fwd_t<data_type::f32>;
 
+#if 0
 template <data_type_t diff_dst_type, data_type_t wei_type,
         data_type_t diff_src_type>
 void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
@@ -2001,6 +2002,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
 }
 
 template struct jit_aarch64_sve_512_convolution_bwd_weights_t<data_type::f32>;
+#endif
 
 } // namespace aarch64
 } // namespace cpu
