@@ -123,7 +123,7 @@ private:
     void execute_forward_3d(const exec_ctx_t &ctx) const;
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
 
-    jit_aarch64_sve_512_conv_fwd_kernel *kernel_;
+    std::unique_ptr<jit_aarch64_sve_512_conv_fwd_kernel> kernel_;
 };
 
 #if 0

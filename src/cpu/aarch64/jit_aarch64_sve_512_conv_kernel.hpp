@@ -206,7 +206,7 @@ private:
     inline void compute_loop_fma_core(int ur_w, int pad_l, int pad_r);
     inline void compute_loop(int ur_w, int pad_l, int pad_r);
 
-    void generate();
+    void generate() override;
 
     inline size_t get_output_offset(int oi, int n_oc_block) {
         const bool is_nxc_layout = is_dst_layout_nxc();
@@ -267,7 +267,7 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
         : kernel_(nullptr) {
         switch (ajcp.oc_block) {
             case 16:
-                kernel_
+                kernel_ 
                         = new _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>(
                                 ajcp, attr);
                 return;

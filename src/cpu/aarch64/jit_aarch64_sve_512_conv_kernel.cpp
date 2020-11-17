@@ -4489,9 +4489,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::balance(
     assert(nthr_ <= nthreads);
 }
 
-template struct _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>;
 template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<ZReg>;
 #endif
+template struct _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>;
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

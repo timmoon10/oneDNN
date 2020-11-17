@@ -206,6 +206,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
 
     const auto &jcp = pd()->jcp_;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.nb_oc % jcp.nb_oc_blocking == 0);
 
     int oc_chunks = jcp.nb_oc / jcp.nb_oc_blocking;
@@ -280,7 +281,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
                         ic_work = utils::this_block_size(icb * jcp.ic_block,
                                 jcp.ic, icb_step * jcp.ic_block);
                     }
-                    jit_conv_ker_pipeline_ow_thr(kernel_->jit_ker, par_conv,
+                    jit_conv_ker_pipeline_ow_thr(jit_ker, par_conv,
                             src_w, dst_w, wht_w, bias_w, icb, 1, owb, ic_work,
                             oc_work, flags);
 
@@ -309,7 +310,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_conv_ker_pipeline_ow_thr(kernel_->jit_ker, par_conv, src, dst,
+        jit_conv_ker_pipeline_ow_thr(jit_ker, par_conv, src, dst,
                 weights, bias, 0, 0, 0, 0, 0, 0);
     });
 }
@@ -329,6 +330,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
 
     const auto &jcp = pd()->jcp_;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.nb_oc % jcp.nb_oc_blocking == 0);
 
     int oc_chunks = jcp.nb_oc / jcp.nb_oc_blocking;
@@ -436,7 +438,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
                                     + i_t_overflow * dilate_h * src_h_stride;
                             auto aux_wht = wht_w + i_t_overflow * wht_h_stride;
 
-                            jit_conv_ker_pipeline_ow_thr(kernel_->jit_ker,
+                            jit_conv_ker_pipeline_ow_thr(jit_ker,
                                     par_conv, aux_src, dst_c, aux_wht, bias_w,
                                     icb, kh_padding, owb, ic_work, oc_work,
                                     flags);
@@ -468,7 +470,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_conv_ker_pipeline_ow_thr(kernel_->jit_ker, par_conv, src, dst,
+        jit_conv_ker_pipeline_ow_thr(jit_ker, par_conv, src, dst,
                 weights, bias, 0, 0, 0, 0, 0, 0);
     });
 }
@@ -488,6 +490,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
 
     const auto &jcp = pd()->jcp_;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.nb_oc % jcp.nb_oc_blocking == 0);
 
     int oc_chunks = jcp.nb_oc / jcp.nb_oc_blocking;
@@ -598,7 +601,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
                         int kh_padding = nstl::max(
                                 0, jcp.kh - i_t_overflow - i_b_overflow);
                         jit_aarch64_sve_512_conv_3d_ker_pipeline_ow_thr(
-                                kernel_->jit_ker, par_conv,
+                                jit_ker, par_conv,
                                 src_c + i_t_overflow * dilate_h * src_h_stride,
                                 dst_c, wht_w + i_t_overflow * wht_h_stride,
                                 bias_w, icb, kh_padding, kd_padding, owb,
@@ -632,7 +635,7 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_aarch64_sve_512_conv_3d_ker_pipeline_ow_thr(kernel_->jit_ker,
+        jit_aarch64_sve_512_conv_3d_ker_pipeline_ow_thr(jit_ker,
                 par_conv, src, dst, weights, bias, 0, 0, 0, 0, 0, 0, 0);
     });
 }
