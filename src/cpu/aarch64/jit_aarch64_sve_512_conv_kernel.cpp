@@ -1240,7 +1240,7 @@ void jit_aarch64_sve_512_conv_fwd_kernel::init_scratchpad(
     if (jcp.with_bias && jcp.oc != jcp.oc_without_padding)
         scratchpad.book(key_conv_padded_bias, jcp.oc, jcp.typesize_out);
 }
-#if 0
+
 template <typename Vmm>
 void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::prepare_output(
         int ur_w) {
@@ -2515,6 +2515,7 @@ void jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_scratchpad(
     UNUSED(jcp);
 }
 
+#if 0
 // Initialize static data members
 const int jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::max_ur_w = 28;
 const int jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::min_oh_reduce = 9;
@@ -4489,8 +4490,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::balance(
     assert(nthr_ <= nthreads);
 }
 
-template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<ZReg>;
 #endif
+template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<ZReg>;
 template struct _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>;
 } // namespace aarch64
 } // namespace cpu

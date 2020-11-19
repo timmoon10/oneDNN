@@ -642,7 +642,6 @@ void jit_aarch64_sve_512_convolution_fwd_t<src_type, wei_type,
 
 template struct jit_aarch64_sve_512_convolution_fwd_t<data_type::f32>;
 
-#if 0
 template <data_type_t diff_dst_type, data_type_t wei_type,
         data_type_t diff_src_type>
 void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
@@ -656,6 +655,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
 
     const auto &jcp = pd()->jcp_;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
 
     int ic_chunks = jcp.nb_ic / jcp.nb_ic_blocking;
     int g_blocking = 1;
@@ -724,7 +724,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
                                 jcp.oc, ocb_step * jcp.oc_block);
                     }
 
-                    jit_conv_ker_pipeline_iw_thr(kernel_->jit_ker, par_conv,
+                    jit_conv_ker_pipeline_iw_thr(jit_ker, par_conv,
                             diff_src_w, diff_dst_w, wht_w, 0, ocb, 1, iwb,
                             reduce_work, load_work);
                     diff_dst_w += diff_dst_c_stride;
@@ -753,7 +753,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_conv_ker_pipeline_iw_thr(kernel_->jit_ker, par_conv, diff_src,
+        jit_conv_ker_pipeline_iw_thr(jit_ker, par_conv, diff_src,
                 diff_dst, weights, 0, 0, 0, 0, 0, 0);
     });
 }
@@ -771,6 +771,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
 
     const auto &jcp = pd()->jcp_;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
 
     int ic_chunks = jcp.nb_ic / jcp.nb_ic_blocking;
     int g_blocking = 1;
@@ -891,7 +892,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
                             oj = (ij + jcp.t_pad - k_lo) / jcp.stride_h;
                         }
 
-                        jit_conv_ker_pipeline_iw_thr(kernel_->jit_ker, par_conv,
+                        jit_conv_ker_pipeline_iw_thr(jit_ker, par_conv,
                                 diff_src_w + ij * diff_src_h_stride,
                                 diff_dst_w + oj * diff_dst_h_stride,
                                 wht_w + k_lo * wht_h_stride, 0, ocb, k_len, iwb,
@@ -920,7 +921,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_conv_ker_pipeline_iw_thr(kernel_->jit_ker, par_conv, diff_src,
+        jit_conv_ker_pipeline_iw_thr(jit_ker, par_conv, diff_src,
                 diff_dst, weights, 0, 0, 0, 0, 0, 0);
     });
 }
@@ -938,6 +939,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
 
     const auto &jcp = pd()->jcp_;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
 
     int ic_chunks = jcp.nb_ic / jcp.nb_ic_blocking;
     int g_blocking = 1;
@@ -1105,7 +1107,7 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
                         assert(k_len >= 0);
 
                         jit_aarch64_sve_512_conv_3d_ker_pipeline(
-                                kernel_->jit_ker, par_conv,
+                                jit_ker, par_conv,
                                 diff_src_w + ij * diff_src_h_stride,
                                 diff_dst_w + oj * diff_dst_h_stride,
                                 wht_w + k_lo * wht_h_stride, 0, ocb, k_len,
@@ -1134,13 +1136,14 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_aarch64_sve_512_conv_3d_ker_pipeline(kernel_->jit_ker, par_conv,
+        jit_aarch64_sve_512_conv_3d_ker_pipeline(jit_ker, par_conv,
                 diff_src, diff_dst, weights, 0, 0, 1, 1, 0, 0);
     });
 }
 
 template struct jit_aarch64_sve_512_convolution_bwd_data_t<data_type::f32>;
 
+#if 0
 template <data_type_t src_type, data_type_t diff_dst_type,
         data_type_t diff_weights_type>
 jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,

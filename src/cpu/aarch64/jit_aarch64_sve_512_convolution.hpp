@@ -126,7 +126,6 @@ private:
     std::unique_ptr<jit_aarch64_sve_512_conv_fwd_kernel> kernel_;
 };
 
-#if 0
 template <impl::data_type_t diff_dst_type,
         impl::data_type_t wei_type = diff_dst_type,
         impl::data_type_t diff_src_type = diff_dst_type>
@@ -136,7 +135,7 @@ struct jit_aarch64_sve_512_convolution_bwd_data_t : public primitive_t {
                 const convolution_fwd_pd_t *hint_fwd_pd)
             : cpu_convolution_bwd_data_pd_t(adesc, attr, hint_fwd_pd), jcp_() {}
 
-        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", sve, ""),
+        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", sve_512, ""),
                 jit_aarch64_sve_512_convolution_bwd_data_t);
 
         status_t init(engine_t *engine) {
@@ -165,13 +164,19 @@ struct jit_aarch64_sve_512_convolution_bwd_data_t : public primitive_t {
 
     jit_aarch64_sve_512_convolution_bwd_data_t(const pd_t *apd)
         : primitive_t(apd) {
-        kernel_ = new jit_aarch64_sve_512_conv_bwd_data_kernel_f32(pd()->jcp_);
     }
-    ~jit_aarch64_sve_512_convolution_bwd_data_t() { delete kernel_; };
 
     typedef typename prec_traits<diff_dst_type>::type diff_dst_data_t;
     typedef typename prec_traits<wei_type>::type wei_data_t;
     typedef typename prec_traits<diff_src_type>::type diff_src_data_t;
+
+    status_t init(engine_t *engine) override {
+        CHECK(safe_ptr_assign(kernel_,
+                new jit_aarch64_sve_512_conv_bwd_data_kernel_f32(
+                        pd()->jcp_)));
+        return kernel_->create_kernel();
+    }
+
 
     status_t execute(const exec_ctx_t &ctx) const override {
         if (pd()->ndims() == 3)
@@ -191,9 +196,10 @@ private:
     void execute_backward_data_3d(const exec_ctx_t &ctx) const;
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
 
-    jit_aarch64_sve_512_conv_bwd_data_kernel_f32 *kernel_;
+    std::unique_ptr<jit_aarch64_sve_512_conv_bwd_data_kernel_f32> kernel_;
 };
 
+#if 0
 template <impl::data_type_t src_type,
         impl::data_type_t diff_dst_type = src_type,
         impl::data_type_t diff_weights_type = src_type>

@@ -297,14 +297,11 @@ private:
 
 };
 
-#if 0
 template <typename Vmm>
 struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32 : public jit_generator {
 
     _jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
         : jcp(ajcp) {
-        generate();
-        jit_ker_ = (void (*)(jit_conv_call_s *))getCode32();
     }
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_bwd_data_kernel_f32)
@@ -318,7 +315,7 @@ private:
     };
     int ker_reg_base_idx = (jcp.nb_ic_blocking == 1) ? 16 : 24;
 
-    reg64_t param = abi_param1_aarch64;
+    reg64_t param = abi_param1;
     reg64_t reg_dst = x1;
     reg64_t reg_ker = x2;
     reg64_t reg_src = x3;
@@ -450,7 +447,7 @@ private:
             int ur_w, int l_overflow, int r_overflow, int k_offset);
     inline void compute_loop(
             int ur_w, int l_overflow, int r_overflow, int k_offset = 0);
-    void generate();
+    void generate() override;
 
     inline int get_iw_start(int ki, int l_overflow) {
         int res = (jcp.iw - 1 + jcp.r_pad) % jcp.stride_w
@@ -505,19 +502,19 @@ private:
 struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
 
     jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
-        : jit_ker(nullptr), sve_512_kernel_(nullptr) {
+        : kernel_(nullptr) {
         switch (ajcp.ic_block) {
             case 16:
-                sve_512_kernel_
+                kernel_
                         = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
                                 ZReg>(ajcp);
-                jit_ker = sve_512_kernel_->jit_ker_;
                 return;
             default: assert(!"invalid channel blocking");
         }
     }
 
-    ~jit_aarch64_sve_512_conv_bwd_data_kernel_f32() { delete sve_512_kernel_; }
+    status_t create_kernel() { return kernel_->create_kernel(); }
+    ~jit_aarch64_sve_512_conv_bwd_data_kernel_f32() { delete kernel_; }
 
     enum { typesize = sizeof(float) };
 
@@ -527,13 +524,15 @@ struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
     static void init_scratchpad(memory_tracking::registrar_t &scratchpad,
             const jit_conv_conf_t &jcp);
 
-    void (*jit_ker)(jit_conv_call_s *);
-    _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<ZReg> *sve_512_kernel_;
+    void operator()(jit_conv_call_s *p) const { (*kernel_)(p); }
+    const uint8_t *jit_ker() const { return kernel_->jit_ker(); };
 
 private:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_bwd_data_kernel_f32);
+    jit_generator *kernel_;
 };
 
+#if 0
 struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
 
     jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(const jit_conv_conf_t &ajcp)
