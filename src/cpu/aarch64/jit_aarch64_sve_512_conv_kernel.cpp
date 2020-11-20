@@ -1706,11 +1706,11 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
         return prev_ofs;
     };
 
-    auto bcast_load_30 = [&](int jj, int nb_oc_block, int aux_output_offset,
+    auto bcast_load_sw = [&](int jj, int nb_oc_block, int aux_output_offset,
                                  int prev_ofs, int jj_end) {
         if (((aux_output_offset & 0x3) == 0) && (aux_output_offset < LDRWMAX)
                 && (aux_output_offset >= 0)) {
-            ld1rw(zreg_inp_s(jj / stride_w, nb_oc_block), reg_p_all_ones,
+            ld1rw(zreg_inp_s(jj % stride_w, nb_oc_block), reg_p_all_ones,
                     ptr(aux_reg_dst,
                             static_cast<int32_t>(aux_output_offset)));
         } else {
@@ -1718,7 +1718,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                     && ((aux_output_offset - prev_ofs) < LDRWMAX)
                     && (((aux_output_offset - prev_ofs) & 0x3) == 0)) {
 
-                ld1rw(zreg_inp_s(jj / stride_w, nb_oc_block),
+                ld1rw(zreg_inp_s(jj % stride_w, nb_oc_block),
                         reg_p_all_ones,
                         ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(
@@ -1737,7 +1737,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                             reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
                 }
 
-                ld1rw(zreg_inp_s(jj / stride_w, nb_oc_block),
+                ld1rw(zreg_inp_s(jj % stride_w, nb_oc_block),
                         reg_p_all_ones, ptr(reg_prev_bcast_addr));
                 prev_ofs = aux_output_offset;
             }
@@ -1835,7 +1835,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                                     zreg_wei_s(wei_count));
                         } else {
                             int aux_output_offset = get_dst_offset(jj, oc, ki);
-                            prev_ofs = bcast_load_30(jj, nb_ic_block,
+                            prev_ofs = bcast_load_sw(jj, nb_ic_block,
                                     aux_output_offset, prev_ofs, jj_end);
 
                             fmla(zreg_out_s(jj, ii), reg_p_all_ones,
@@ -2365,11 +2365,11 @@ status_t jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_conf(
             jcp.nb_ic_blocking = jcp.nb_oc_blocking = 1;
             if (!(jcp.kw > 3 || (jcp.kw == 3 && jcp.ow > 8))
                     && jcp.stride_h == 1 && jcp.stride_d == 1)
-            if (jcp.nb_ic % try_nb_ic_blocking == 0) {
-                jcp.nb_ic_blocking = try_nb_ic_blocking;
-                jcp.ur_w = 30 / (jcp.nb_ic_blocking + 1);
-                if (jcp.iw < jcp.ur_w) jcp.ur_w = jcp.iw;
-            }
+                if (jcp.nb_ic % try_nb_ic_blocking == 0) {
+                    jcp.nb_ic_blocking = try_nb_ic_blocking;
+                    jcp.ur_w = 30 / (jcp.nb_ic_blocking + 1);
+                    if (jcp.iw < jcp.ur_w) jcp.ur_w = jcp.iw;
+                }
         } else {
             jcp.kernel_kind = expl_bcast;
             jcp.nb_oc_blocking = 1;
