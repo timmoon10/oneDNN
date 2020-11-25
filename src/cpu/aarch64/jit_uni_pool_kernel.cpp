@@ -376,8 +376,9 @@ inline void jit_uni_pool_kernel<isa>::uni_broadcast_reg_val(
 
 template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
-    //Vmm val_to_store(idx);
-    VReg val_to_store(idx);
+    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    Vmm val_to_store(idx);
+    //VReg val_to_store(idx);
     XReg rsp = sp;
     sub_imm(XReg(idx), XReg(idx), val_to_store.getBit(), x_tmp_0);
 
@@ -399,8 +400,9 @@ inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
 
 template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::pop_vmm_val(const int idx) {
-    //Vmm val_to_load(idx);
-    VReg val_to_load(idx);
+    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    Vmm val_to_load(idx);
+    //VReg val_to_load(idx);
     XReg rsp = sp;
     int vlen = cpu_isa_traits<isa>::vlen;
     if (vlen == 64) { //vmovups(Ymm, mem)
@@ -2292,11 +2294,11 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             } else if (vlen == 32) {
                                 dup(ZRegS(IDX(vmm_tmp)),
                                         ZRegS(IDX(xmm_tmp))[0]);
-                                mov(ZRegS(IDX(vmm_tmp)), P_MSB_384 / T_m, 0);
+                                mov(ZRegS(IDX(vmm_tmp)), P_MSB_256 / T_m, 0);
                             } else if (vlen == 16) {
                                 dup(VReg4S(IDX(vmm_tmp)),
                                         VReg4S(IDX(xmm_tmp))[0]);
-                                mov(ZRegS(IDX(vmm_tmp)), P_MSB_256 / T_m, 0);
+                                mov(ZRegS(IDX(vmm_tmp)), P_MSB_384 / T_m, 0);
                             } else {
                                 assert(!"unreachable");
                             }
@@ -2936,10 +2938,19 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
     add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(zero_ptr), x_tmp_0);
     ldr(XReg(IDX(reg_zero_ptr)), ptr(x_tmp_addr));
 
-    //Vmm vzero = vmm_tmp;
-    VReg vzero = vmm_tmp;
-
     int vlen = cpu_isa_traits<isa>::vlen;
+    if(vlen == 64){
+      using Vmm = typename Xbyak_aarch64::ZReg;
+    }else if(vlen == 32){
+      using Vmm = typename Xbyak_aarch64::ZReg;
+    }else if(vlen == 16){
+      using Vmm = typename Xbyak_aarch64::VReg;
+    }else{
+      assert(!"unreachable");
+    }
+    Vmm vzero = vmm_tmp;
+    //VReg vzero = vmm_tmp
+
     if (vlen == 64) {
         eor(ZReg(IDX(vzero)).d, ZReg(IDX(vzero)).d, ZReg(IDX(vzero)).d);
     } else if (vlen == 32) {
@@ -3218,7 +3229,7 @@ void jit_uni_pool_kernel<isa>::generate() {
         }
 
         //xor_(oi_iter, oi_iter);
-        eor(oi_iter, oi_iter, oi_iter);
+        eor(XReg(IDX(oi_iter)), XReg(IDX(oi_iter)), XReg(IDX(oi_iter)));
         if (n_oi > 0) {
             Label ow_loop;
             L(ow_loop);

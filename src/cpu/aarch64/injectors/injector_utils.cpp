@@ -41,14 +41,14 @@ static std::size_t calc_vmm_to_preserve_size_bytes(
             });
 }
 
-register_preserve_guard_t::register_preserve_guard_t(/*jit_generator *host,*/
+register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
         //        std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
         std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,
         //        std::initializer_list<Xbyak::Xmm> vmm_to_preserve)
         std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve)
-    : /*host_(host)
-	, */
-    reg64_stack_(reg64_to_preserve)
+        //std::initializer_list<Xbyak_aarch64::ZReg> vmm_to_preserve)
+    : host_(host)
+    , reg64_stack_(reg64_to_preserve)
     , vmm_stack_(vmm_to_preserve)
     , vmm_to_preserve_size_bytes_(
               calc_vmm_to_preserve_size_bytes(vmm_to_preserve)) {
@@ -124,7 +124,7 @@ size_t register_preserve_guard_t::stack_space_occupied() const {
 
     return stack_space_occupied;
 };
-/*
+
 output_dims_t make_output_dims(const memory_desc_wrapper &dst_d) {
 
     const dim_t n_dims = dst_d.ndims();
@@ -146,7 +146,7 @@ output_dims_t make_output_dims(const memory_desc_wrapper &dst_d) {
 
     return output_dims_t();
 }
-  */
+
 } // namespace injector_utils
 } // namespace aarch64
 } // namespace cpu

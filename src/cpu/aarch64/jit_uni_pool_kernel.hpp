@@ -79,6 +79,19 @@ private:
         return utils::one_of(isa, avx512_common, avx512_core) ? 31 : 15;
     }
   */
+    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    //int vlen = cpu_isa_traits<isa>::vlen;
+  /*
+    if(cpu_isa_traits<isa>::vlen == 64){
+      using Vmm = typename Xbyak_aarch64::ZReg;
+    }else if(cpu_isa_traits<isa>::vlen == 32){
+      using Vmm = typename Xbyak_aarch64::ZReg;
+    }else if(cpu_isa_traits<isa>::vlen == 16){
+      using Vmm = typename Xbyak_aarch64::VReg;
+    }else{
+      assert(!"unreachable");
+    }
+  */
     int vmm_idx_upper_bound() const noexcept { return 31; }
 
     int reg_idx(int idx) const noexcept { return vmm_idx_upper_bound() - idx; }
@@ -89,10 +102,10 @@ private:
     Zmm zreg(int idx) const noexcept { return Zmm(reg_idx(idx)); }
     Vmm vreg(int idx) const noexcept { return Vmm(reg_idx(idx)); }
   */
-    XReg xreg(int idx) const noexcept { return XReg(reg_idx(idx)); }
+    VReg xreg(int idx) const noexcept { return VReg(reg_idx(idx)); }
     ZReg yreg(int idx) const noexcept { return ZReg(reg_idx(idx)); }
     ZReg zreg(int idx) const noexcept { return ZReg(reg_idx(idx)); }
-    VReg vreg(int idx) const noexcept { return VReg(reg_idx(idx)); }
+    Vmm vreg(int idx) const noexcept { return Vmm(reg_idx(idx)); }
     /*
     const Xbyak::AddressFrame &vmmword = (isa == sse41)
             ? xword
@@ -107,9 +120,9 @@ private:
     Ymm ymm_tmp_1 = Ymm(0);
     Vmm vmm_tmp_1 = Vmm(0);
   */
-    XReg vmm_mask = XReg(0);
+    VReg vmm_mask = VReg(0);
     ZReg ymm_tmp_1 = ZReg(0);
-    VReg vmm_tmp_1 = VReg(0);
+    Vmm vmm_tmp_1 = Vmm(0);
 
     // Used only for avx and if c tail is present
     /*
@@ -126,18 +139,18 @@ private:
 
     Vmm vmm_k_offset = Vmm(1);
   */
-    VReg vmm_c_tail_mask = VReg(2);
+    Vmm vmm_c_tail_mask = Vmm(2);
 
-    XReg xmm_ker_area_h = XReg(2);
-    XReg xmm_one = XReg(2);
-    XReg xmm_tmp = XReg(3);
+    VReg xmm_ker_area_h = VReg(2);
+    VReg xmm_one = VReg(2);
+    VReg xmm_tmp = VReg(3);
 
-    VReg vmm_ker_area_h = VReg(2);
-    VReg vmm_one = VReg(2);
-    VReg vmm_tmp = VReg(3);
+    Vmm vmm_ker_area_h = Vmm(2);
+    Vmm vmm_one = Vmm(2);
+    Vmm vmm_tmp = Vmm(3);
     ZReg ymm_tmp = ZReg(3);
 
-    VReg vmm_k_offset = VReg(1);
+    Vmm vmm_k_offset = Vmm(1);
 
     // Used only for avx512 when bf16 is present
     /*
@@ -335,7 +348,7 @@ private:
     void generate() override;
 
     //void avx_vpadd1(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
-    void avx_vpadd1(const ZReg &y0, const XReg &x1, const XReg &xtmp) {
+    void avx_vpadd1(const ZReg &y0, const VReg &x1, const VReg &xtmp) {
         /*
         assert(y0.getIdx() != x1.getIdx());
         mov(VReg(IDX(xtmp)).b16, VReg(IDX(y0)).b16);
@@ -366,13 +379,13 @@ private:
     }
 
     //void avx_vpadd1(const Xmm &x0, const Xmm &x1, const Xmm &) {
-    void avx_vpadd1(const XReg &x0, const XReg &x1, const XReg &) {
+    void avx_vpadd1(const VReg &x0, const VReg &x1, const VReg &) {
         assert(false /*function should not be used*/);
         //paddd(x0, x1);
     }
 
     //void avx_pmovzxbd(const Ymm &y0, const Xmm &x1, const Xmm &xtmp) {
-    void avx_pmovzxbd(const ZReg &y0, const XReg &x1, const XReg &xtmp) {
+    void avx_pmovzxbd(const ZReg &y0, const VReg &x1, const VReg &xtmp) {
         //Xmm x0(y0.getIdx());
         /*
         XReg x0(y0.getIdx());
@@ -384,7 +397,7 @@ private:
     }
 
     //void avx_pmovzxbd(const Xmm &x0, const Xmm &x1, const Xmm &) {
-    void avx_pmovzxbd(const XReg &x0, const XReg &x1, const XReg &) {
+    void avx_pmovzxbd(const VReg &x0, const VReg &x1, const VReg &) {
         assert(false /*function should not be used*/);
         //pmovzxbd(x0, x1);
     }
@@ -393,7 +406,7 @@ private:
             const Ymm &y0, const Ymm &y1, const Ymm &y2, const Xmm &xtmp) {
   */
     void avx_pcmpeqd(
-            const ZReg &y0, const ZReg &y1, const ZReg &y2, const XReg &xtmp) {
+            const ZReg &y0, const ZReg &y1, const ZReg &y2, const VReg &xtmp) {
         /*
         assert(y0.getIdx() != y1.getIdx());
         assert(y0.getIdx() != y2.getIdx());
@@ -410,7 +423,7 @@ private:
 
     //void avx_pcmpeqd(const Xmm &x0, const Xmm &x1, const Xmm &, const Xmm &) {
     void avx_pcmpeqd(
-            const XReg &x0, const XReg &x1, const XReg &, const XReg &) {
+            const VReg &x0, const VReg &x1, const VReg &, const VReg &) {
         assert(false /*function should not be used*/);
         //pcmpeqd(x0, x1);
     }

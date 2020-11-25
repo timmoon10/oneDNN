@@ -63,7 +63,7 @@ struct vmm_size_t<Xbyak_aarch64::VReg> {
 class register_preserve_guard_t {
 
 public:
-    register_preserve_guard_t(/*jit_generator *host,*/
+    register_preserve_guard_t(jit_generator *host,
             //            std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
             std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,
             //std::initializer_list<Xbyak::Xmm> vmm_to_preserve = {});
@@ -76,7 +76,7 @@ public:
     size_t stack_space_occupied() const;
 
 private:
-    //jit_generator *host_;
+    jit_generator *host_;
     //std::stack<Xbyak::Reg64> reg64_stack_;
     std::stack<Xbyak_aarch64::XReg> reg64_stack_;
     //std::stack<Xbyak::Xmm> vmm_stack_;
