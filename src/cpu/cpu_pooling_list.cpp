@@ -25,6 +25,7 @@
 #include "cpu/x64/jit_uni_pooling.hpp"
 using namespace dnnl::impl::cpu::x64;
 #elif DNNL_AARCH64
+#include "cpu/aarch64/jit_uni_i8i8_pooling.hpp"
 #include "cpu/aarch64/jit_uni_pooling.hpp"
 using namespace dnnl::impl::cpu::aarch64;
 #endif
@@ -53,6 +54,8 @@ const pd_create_f impl_list[] = {
         CPU_INSTANCE_X64(jit_uni_pooling_bwd_t<avx, f32>)
         CPU_INSTANCE_X64(jit_uni_pooling_fwd_t<sse41, f32>)
         CPU_INSTANCE_X64(jit_uni_pooling_bwd_t<sse41, f32>)
+	CPU_INSTANCE_AARCH64(jit_uni_pooling_fwd_t<sve_512, f32>)
+        CPU_INSTANCE_AARCH64(jit_uni_pooling_bwd_t<sve_512, f32>)	
         CPU_INSTANCE(nchw_pooling_fwd_t<bf16>)
         CPU_INSTANCE(nchw_pooling_bwd_t<bf16>)
         CPU_INSTANCE(nchw_pooling_fwd_t<f32>)
@@ -61,8 +64,6 @@ const pd_create_f impl_list[] = {
         CPU_INSTANCE(nhwc_pooling_bwd_t<bf16>)
         CPU_INSTANCE(nhwc_pooling_fwd_t<f32>)
         CPU_INSTANCE(nhwc_pooling_bwd_t<f32>)
-        CPU_INSTANCE_AARCH64(jit_uni_pooling_fwd_t<sve_512, f32>)
-        CPU_INSTANCE_AARCH64(jit_uni_pooling_bwd_t<sve_512, f32>)	
         CPU_INSTANCE(ref_pooling_fwd_t<f32>)
         CPU_INSTANCE(ref_pooling_fwd_t<bf16, f32>)
         CPU_INSTANCE(ref_pooling_bwd_t<f32>)
@@ -71,6 +72,7 @@ const pd_create_f impl_list[] = {
         CPU_INSTANCE_X64(jit_uni_i8i8_pooling_fwd_t<avx512_core>)
         CPU_INSTANCE_X64(jit_uni_i8i8_pooling_fwd_t<avx2>)
         CPU_INSTANCE_X64(jit_uni_i8i8_pooling_fwd_t<sse41>)
+	CPU_INSTANCE_AARCH64(jit_uni_i8i8_pooling_fwd_t<sve_512>)
         CPU_INSTANCE(ref_pooling_fwd_t<s32>)
         CPU_INSTANCE(ref_pooling_fwd_t<s8, s32>)
         CPU_INSTANCE(ref_pooling_fwd_t<u8, s32>)

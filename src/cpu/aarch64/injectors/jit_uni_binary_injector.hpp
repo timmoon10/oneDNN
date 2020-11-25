@@ -43,6 +43,12 @@ namespace cpu {
 namespace aarch64 {
 namespace binary_injector {
 
+struct Address_t {
+  Xbyak_aarch64::XReg base_reg = Xbyak_aarch64::XReg(0);
+  bool isBroadcast_ = 0;
+  bool isBroadcast() const { return isBroadcast_; }
+};
+
 /*
  * Extracts pointers to tensors passed by user as binary postops rhs (right-hand-side)
  * arguments (arg1 from binary postop) from execution context. Those pointers are placed
@@ -54,7 +60,7 @@ namespace binary_injector {
 std::vector<const void *> prepare_binary_args(const post_ops_t &post_ops,
         const dnnl::impl::exec_ctx_t &ctx,
         const unsigned first_arg_idx_offset = 0);
-/*
+
 bool binary_args_matches_tag(format_tag_t tag, const post_ops_t &post_ops);
 
 enum class broadcasting_strategy_t {
@@ -65,7 +71,7 @@ enum class broadcasting_strategy_t {
     no_broadcast, // [n, c, d, h, w]
     unsupported
 };
-  */
+
 bool binary_args_broadcast_supported(
         const post_ops_t &post_ops, const memory_desc_wrapper &dst_d);
 /*
@@ -111,46 +117,64 @@ bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
  * when user during storing ignores values from vmm above tail size, setting this option to
  * false can result in better performance.
  */
-/*
 struct rhs_arg_static_params_t {
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
+			    /*
             const Xbyak::Reg64 &rhs_addr_reg,
             const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
+			    */
+	    const Xbyak_aarch64::XReg &rhs_addr_reg,
+            const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
             bool preserve_vmm_helper, std::size_t abi_param_offset,
             const memory_desc_wrapper &dst_d, std::size_t tail_size = 0u,
             bool use_exact_tail_scalar_bcast = false);
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
+			    /*
             const Xbyak::Reg64 &rhs_addr_reg,
             const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
+			    */
+	    const Xbyak_aarch64::XReg &rhs_addr_reg,
+            const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
             bool preserve_vmm_helper, std::size_t abi_param_offset,
             const memory_desc_wrapper &dst_d, std::size_t tail_size,
-            const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast);
+			    //const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast);
+            const Xbyak_aarch64::PReg &tail_opmask, bool use_exact_tail_scalar_bcast);
 
     bool is_opmask_set() const noexcept { return is_opmask_set_; }
 
     mutable std::size_t rhs_dt_helper_vmm_idx;
+  /*
     Xbyak::Reg64 rhs_addr_reg;
     Xbyak::Reg64 rhs_helper_reg;
+  */
+    Xbyak_aarch64::XReg rhs_addr_reg;
+    Xbyak_aarch64::XReg rhs_helper_reg;
     bool preserve_gpr_helpers;
     bool preserve_vmm_helper;
     std::size_t abi_param_offset;
     memory_desc_wrapper dst_d;
     std::size_t tail_size;
-    Xbyak::Opmask tail_opmask;
+  //Xbyak::Opmask tail_opmask;
+    Xbyak_aarch64::PReg tail_opmask;
     bool use_exact_tail_scalar_bcast;
 
 private:
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
+			    /*
             const Xbyak::Reg64 &rhs_addr_reg,
             const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
+			    */
+            const Xbyak_aarch64::XReg &rhs_addr_reg,
+            const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
             bool preserve_vmm_helper, std::size_t abi_param_offset,
             const memory_desc_wrapper &dst_d, std::size_t tail_size,
-            const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast,
+			    //const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast,
+	    const Xbyak_aarch64::PReg &tail_opmask, bool use_exact_tail_scalar_bcast,
             bool is_opmask_set);
 
     bool is_opmask_set_;
 };
-  */
+
 /*
  * Represents params required by jit_uni_binary_injector_t that don't change
  * during it's entire lifetime.
@@ -165,24 +189,26 @@ private:
  * arguments that don't change during entire lifetime of jit_uni_binary_injector_t
  * object.
  */
-/*
 struct static_params_t {
-    static_params_t(const Xbyak::Reg64 &param1,
+  //static_params_t(const Xbyak::Reg64 &param1,
+    static_params_t(const Xbyak_aarch64::XReg &param1,
             bool use_per_oc_spatial_strategy,
             const rhs_arg_static_params_t &rhs_arg_static_params)
         : param1(param1)
         , use_per_oc_spatial_strategy(use_per_oc_spatial_strategy)
         , rhs_arg_static_params(rhs_arg_static_params) {}
 
-    static_params_t(const Xbyak::Reg64 &param1,
+  //static_params_t(const Xbyak::Reg64 &param1,
+    static_params_t(const Xbyak_aarch64::XReg &param1,
             const rhs_arg_static_params_t &rhs_arg_static_params)
         : static_params_t(param1, true, rhs_arg_static_params) {}
 
-    Xbyak::Reg64 param1;
+  //Xbyak::Reg64 param1;
+    Xbyak_aarch64::XReg param1;
     bool use_per_oc_spatial_strategy;
     rhs_arg_static_params_t rhs_arg_static_params;
 };
-  */
+
 /*
  * Represents params passed to compute_vector_range method of
  * jit_uni_binary_injector_t that can be different for each call.
@@ -206,24 +232,29 @@ struct static_params_t {
  * operand intended to use in per_oc broadcast strategies.
  * @param vmm_tail_idx - vmm idxes that contains data don't fill the whole vector (tail).
  */
-/*
 struct rhs_arg_dynamic_params_t {
-    std::map<int, Xbyak::Address> vmm_idx_to_out_elem_off_addr;
+  //std::map<int, Xbyak::Address> vmm_idx_to_out_elem_off_addr;
+  //std::map<int, Address_t> vmm_idx_to_out_elem_off_addr;
+  std::map<int, Xbyak_aarch64::AdrNoOfs> vmm_idx_to_out_elem_off_addr;
     std::map<int, int> vmm_idx_to_out_elem_off_val;
-    std::map<int, Xbyak::Operand> vmm_idx_to_out_off_oprnd;
+  //std::map<int, Xbyak::Operand> vmm_idx_to_out_off_oprnd;
+  //std::map<int, Xbyak_aarch64::Operand> vmm_idx_to_out_off_oprnd;
+    std::map<int, Xbyak_aarch64::XReg> vmm_idx_to_out_off_oprnd;
 
-    std::map<int, Xbyak::Address> vmm_idx_to_oc_elem_off_addr;
+  //std::map<int, Xbyak::Address> vmm_idx_to_oc_elem_off_addr;
+  //std::map<int, Address_t> vmm_idx_to_oc_elem_off_addr;
+    std::map<int, Xbyak_aarch64::AdrNoOfs> vmm_idx_to_oc_elem_off_addr;
     std::map<int, int> vmm_idx_to_oc_elem_off_val;
-    std::map<int, Xbyak::Operand> vmm_idx_to_oc_off_oprnd;
+  //std::map<int, Xbyak::Operand> vmm_idx_to_oc_off_oprnd;
+  //std::map<int, Xbyak_aarch64::Operand> vmm_idx_to_oc_off_oprnd;
+    std::map<int, Xbyak_aarch64::XReg> vmm_idx_to_oc_off_oprnd;
     std::unordered_set<int> vmm_tail_idx_;
 };
-*/
 /*
  * Main mechanism responsbile for injecting binary postops supporting various
  * isa: sse41, avx, avx2, avx512 with core, bf16 extensions as well as data
  * types: f32, bf16, s32, u8, s8.
  */
-/*
 template <cpu_isa_t isa>
 class jit_uni_binary_injector_t {
 public:
@@ -231,106 +262,122 @@ public:
             jit_generator *host, const static_params_t &static_params);
 
     using Vmm = typename cpu_isa_traits<isa>::Vmm;
-  */
-/*
+  
+    /*
      * Generates code of binary post_op injected to host primitive. Applied to
      * ordered set of vector registers' indexes. Function loads appropriate
      * slice of rhs tensor for computations based on internally determined
      * broadcast strategy and information about stored data in particular vmm
      * described inside rhs_arg_params.
      */
-/*
   void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params) const;
-  */
-/*
+    /*
      * Generates code of binary post_op injected to host primitive. Applied to
      * range <start_idx, end_idx) of vector registers' indexes. Function loads
      * appropriate slice of rhs tensor for computations based on internally
      * determined broadcast strategy and information about stored data in particular
      * vmm described inside rhs_arg_params.
      */
-/*
     void compute_vector_range(size_t start_idx, size_t end_idx,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params) const;
-  */
-/*
+    /*
      * Generates code of binary post_op injected to host primitive. Applied to
      * a single vector register index. Function loads appropriate slice of rhs tensor
      * for computations based on internally determined broadcast strategy and information
      * about stored data in particular vmm described inside rhs_arg_params.
      */
-/*
+  /*
     void compute_vector(size_t idx, std::size_t rhs_arg_idx,
             const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params) const;
+  */
 
 private:
-  */
-/*
+    /*
      * Determines if hint passed by user is valid (is inside range
      * <start_idx, end_idx>). If not it returns new vmm idx value that will be
      * used as temporary vmm in future computations.
      */
-/*
     int adjust_temp_vmm_hint(
             int user_hint, int start_idx, int end_idx, int max_vmm_idx) const;
-  */
-/*
+    /*
      * Taking into account rhs_broadcasting_strategy and information from user
      * about tensor slice (rhs_arg_params) stored in Vmm(vmm_idx) calculates
      * address of rhs tensor slice needed for binary operation and returns
      * ptr to it.
      */
-/*
-    Xbyak::Address prepare_rhs_arg_addr(std::size_t vmm_idx,
+    //Xbyak::Address prepare_rhs_arg_addr(std::size_t vmm_idx,
+    //Address_t prepare_rhs_arg_addr(std::size_t vmm_idx,
+  Xbyak_aarch64::AdrNoOfs prepare_rhs_arg_addr(std::size_t vmm_idx,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params,
             const broadcasting_strategy_t rhs_broadcasting_strategy) const;
-  */
-/*
+    /*
      * Loads data and applies particular binary operation.
      */
-/*
     void inject_binary(const dnnl_post_ops::entry_t &post_op, Vmm dst,
-            const Xbyak::Address &rhs_addr, bool with_tail) const;
-  */
-/*
+		       //const Xbyak::Address &rhs_addr, bool with_tail) const;
+		       //const Address_t &rhs_addr, bool with_tail) const;
+            const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const;
+    /*
      * Helper functions responsible for preparing rhs tensor slice address.
      */
-/*
     void append_offset_from_operand(
+				    /*
             const std::map<int, Xbyak::Operand> &vmm_idx_to_elem_addr_off,
             int vmm_idx, const Xbyak::Reg64 &addr_reg,
             const Xbyak::Reg64 &tmp_reg, std::size_t elem_size_bytes) const;
+				    */
+				    //const std::map<int, Xbyak_aarch64::Operand> &vmm_idx_to_elem_addr_off,
+	    const std::map<int, Xbyak_aarch64::XReg> &vmm_idx_to_elem_addr_off,
+            int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
+            const Xbyak_aarch64::XReg &tmp_reg, std::size_t elem_size_bytes) const;
     void append_offset_under_mem_addr(
+				      /*
             const std::map<int, Xbyak::Address> &vmm_idx_to_elem_addr_off,
             int vmm_idx, const Xbyak::Reg64 &addr_reg,
             const Xbyak::Reg64 &tmp_reg, std::size_t elem_size_bytes) const;
+				      */
+				      //const std::map<int, Address_t> &vmm_idx_to_elem_addr_off,
+            const std::map<int, Xbyak_aarch64::AdrNoOfs> &vmm_idx_to_elem_addr_off,
+            int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
+            const Xbyak_aarch64::XReg &tmp_reg, std::size_t elem_size_bytes) const;
     void append_value_offset(const std::map<int, int> &vmm_idx_to_elem_val_off,
-            int vmm_idx, const Xbyak::Reg64 &addr_reg,
+			     //int vmm_idx, const Xbyak::Reg64 &addr_reg,
+            int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
             std::size_t elem_size_bytes) const;
 
-    template <typename T>
     void execute_binary(alg_kind_t binary_alg, const Vmm &dst, const Vmm &lhs,
-            const T &rhs) const;
-  */
-/*
+            const Vmm &rhs) const;
+
+    void execute_binary(alg_kind_t binary_alg, const Vmm &dst, const Vmm &lhs,
+			//const Address_t &rhs) const;
+			const Xbyak_aarch64::AdrNoOfs &rhs) const;
+    /*
      * Used in scalar broadcast strategy, broadcasting single value of given
      * data type over entire vector Vmm register.
      */
-/*
+  /*
     void execute_broadcast(const dnnl_data_type_t &data_type,
             const Vmm &tmp_reg, const Xbyak::Address &rhs_addr,
             bool with_tail = false) const;
+  */
     void load_rhs(const dnnl_data_type_t &data_type, const Vmm &tmp_reg,
-            const Xbyak::Address &rhs_addr, bool with_tail = false) const;
+		  //const Xbyak::Address &rhs_addr, bool with_tail = false) const;
+		  //const Address_t &rhs_addr, bool with_tail = false) const;
+		  const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail = false) const;  
+  /*
     void execute_broadcast_tail(const dnnl_data_type_t &data_type,
             const Vmm &tmp_reg, const Xbyak::Address &rhs_addr) const;
+  */
     void load_rhs_tail(const dnnl_data_type_t &data_type, const Vmm &tmp_reg,
-            const Xbyak::Address &rhs_addr) const;
+		       //const Xbyak::Address &rhs_addr) const;
+		       //const Address_t &rhs_addr) const;
+            const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+  /*
     void execute_broadcast_no_tail(const dnnl_data_type_t &data_type,
             const Vmm &tmp_reg, const Xbyak::Address &rhs_addr) const;
     void execute_broadcast_s8u8_no_tail(const data_type_t &data_type,
@@ -339,29 +386,29 @@ private:
             const Xbyak::Address &rhs_addr) const;
     void cvt_to_f32(const Vmm &tmp_reg) const;
   */
-/*
+    /*
      * Returns pair consisting of flag indication preservation is needed for vmm
      * index in second member that should be used as temporary vmm inside inject
      * binary.
      */
-/*
     std::pair<bool, int> should_preserve_vmm(int curr_idx, int vmm_hint,
             int max_vmm_idx, bool dt_helper_vmm_needed) const;
-  */
-/*
+    /*
      * Used in isa != avx512 where m32bcst is not supported, replaces ptr_b
      * with ptr.
      */
-/*
+  /*
     Xbyak::Address remove_bcast_bit(const Xbyak::Address &rhs_addr) const;
+  */
 
     jit_generator *host_;
     const rhs_arg_static_params_t rhs_arg_static_params_;
-    const Xbyak::Reg64 param1_;
+  //const Xbyak::Reg64 param1_;
+    const Xbyak_aarch64::XReg param1_;
     const bool use_per_oc_spatial_strategy_;
-    static constexpr bool is_avx512_ = std::is_same<Vmm, Xbyak::Zmm>::value;
-  */
-/*
+  //static constexpr bool is_avx512_ = std::is_same<Vmm, Xbyak::Zmm>::value;
+    static constexpr bool is_sve_512_ = std::is_same<Vmm, Xbyak_aarch64::ZReg>::value;
+    /*
      * Instructions from SSE/AVX used to compute binary result like vaddps where
      * second operand is memory, require mem operand to be 16/32 byte explicitly
      * aligned. (Intel Manual chapter 2.4).
@@ -369,11 +416,11 @@ private:
      * When using benchdnn zmalloc_protect doesn't guarantee that tensor memory
      * address is 64 byte aligned, which can cause segmentation fault.
      */
-/*
     static constexpr bool binary_op_with_unaligned_mem_operand_allowed_
-            = !utils::one_of(isa, avx, sse41);
+    //= !utils::one_of(isa, avx, sse41);
+    = !utils::one_of(isa, asimd, sve_512);
 };
-  */
+  
 } // namespace binary_injector
 } // namespace aarch64
 } // namespace cpu
