@@ -1634,7 +1634,12 @@ struct jit_bnorm_t : public jit_generator {
 
             if (isa == sse41) {
                 movups(vbuf, vscale);
+#ifdef DNNL_X64_IMPLEMENTATION
                 divps(vbuf, vsqrtvar);
+#else // #ifdef DNNL_X64_IMPLEMENTATION
+                CG::fdiv(xa::VReg4S(IDX(vbuf)), xa::VReg4S(IDX(vbuf)),
+                        xa::VReg4S(IDX(vsqrtvar)));
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
                 movups(vdiv, vbuf);
             } else {
 #ifdef DNNL_X64_IMPLEMENTATION
@@ -2938,8 +2943,8 @@ jit_uni_batch_normalization_bwd_t<isa>::~jit_uni_batch_normalization_bwd_t() {
 /* struct instantiation */
 template struct jit_uni_batch_normalization_fwd_t<sse41>;
 template struct jit_uni_batch_normalization_bwd_t<sse41>;
-template struct jit_uni_batch_normalization_fwd_t<avx2>;
-template struct jit_uni_batch_normalization_bwd_t<avx2>;
+//template struct jit_uni_batch_normalization_fwd_t<avx2>;
+//template struct jit_uni_batch_normalization_bwd_t<avx2>;
 template struct jit_uni_batch_normalization_fwd_t<avx512_common>;
 template struct jit_uni_batch_normalization_bwd_t<avx512_common>;
 
