@@ -1798,8 +1798,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                     && ((aux_output_offset - prev_ofs) < LDRWMAX)
                     && (((aux_output_offset - prev_ofs) & 0x3) == 0)) {
 
-                CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block),
-                        reg_p_all_ones,
+                CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
                         xa::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(
                                         aux_output_offset - prev_ofs)));
@@ -1817,8 +1816,8 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                             reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
                 }
 
-                CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block),
-                        reg_p_all_ones, xa::ptr(reg_prev_bcast_addr));
+                CGA64::ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
+                        xa::ptr(reg_prev_bcast_addr));
                 prev_ofs = aux_output_offset;
             }
         }
