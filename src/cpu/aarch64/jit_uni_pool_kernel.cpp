@@ -2563,7 +2563,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                 }
             } else {
                 if (is_tail_processing(bci) && !jpp.is_c_padded) {
-                    /*
+
                     ZReg z_indvr(IDX(indvr));
                     pfalse(p_tmp1.b);
                     // 32-bit context -> 16-bit conext
@@ -2578,7 +2578,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     zip1(z_indvr.h, z_indvr.h, z_tmp0.h);
                     uxtb(ZRegS(IDX(indvr)),
                             PReg(IDX(k_c_tail_mask)) / T_m, z_indvr.s);
-		    */
+
                 } else {
                     /* get mem address */
                     add_imm(x_tmp_addr, XReg(IDX(reg_index)), step_index,

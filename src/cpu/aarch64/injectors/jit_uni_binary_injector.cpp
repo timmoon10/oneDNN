@@ -610,10 +610,6 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
     const bool scalar_f32
       = rhs_addr->isBroadcast() && rhs_arg_data_type == data_type::f32;
       */
-    /*
-    bool scalar_f32
-            = rhs_addr.isBroadcast() && rhs_arg_data_type == data_type::f32;
-    */
     const bool scalar_f32 = false;
     const bool with_tail_not_fusable_to_binary_op
       //= with_tail && !(scalar_f32 && is_avx512_);
@@ -1184,7 +1180,6 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
     switch (binary_alg) {
         case alg_kind::binary_add:
 	  //host_->uni_vaddps(dst, lhs, rhs);
-	  //if(infoA == infoB){
 	  CG::fadd(xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s, xa::ZReg(IDX(rhs)).s);
 	  break;
 	  /*
