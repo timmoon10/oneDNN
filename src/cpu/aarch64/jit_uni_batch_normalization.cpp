@@ -2943,8 +2943,8 @@ jit_uni_batch_normalization_bwd_t<isa>::~jit_uni_batch_normalization_bwd_t() {
 /* struct instantiation */
 template struct jit_uni_batch_normalization_fwd_t<sse41>;
 template struct jit_uni_batch_normalization_bwd_t<sse41>;
-//template struct jit_uni_batch_normalization_fwd_t<avx2>;
-//template struct jit_uni_batch_normalization_bwd_t<avx2>;
+template struct jit_uni_batch_normalization_fwd_t<avx2>;
+template struct jit_uni_batch_normalization_bwd_t<avx2>;
 template struct jit_uni_batch_normalization_fwd_t<avx512_common>;
 template struct jit_uni_batch_normalization_bwd_t<avx512_common>;
 
