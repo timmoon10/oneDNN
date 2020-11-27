@@ -17,11 +17,21 @@
 //#include "cpu/x64/injectors/injector_utils.hpp"
 #include "cpu/aarch64/injectors/injector_utils.hpp"
 
+#ifdef DNNL_AARCH64
+#ifdef CG
+#undef CG
+#endif
+#define CG host_->Xbyak_aarch64::CodeGenerator
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#endif //#ifdef DNNL_AARCH64
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
 namespace injector_utils {
+
+namespace xa = Xbyak_aarch64;
 
 //static std::size_t get_vmm_size_bytes(const Xbyak::Xmm &vmm) {
 static std::size_t get_vmm_size_bytes(const Xbyak_aarch64::VReg &vmm) {
@@ -52,68 +62,81 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
     , vmm_stack_(vmm_to_preserve)
     , vmm_to_preserve_size_bytes_(
               calc_vmm_to_preserve_size_bytes(vmm_to_preserve)) {
-    /*
+
     for (const auto &reg : reg64_to_preserve){
-        host_->push(reg);
+      //host_->push(reg);
+      CG::str(xa::XReg(IDX(reg)), xa::pre_ptr(xa::XReg(22), -8));
     }
-  */
 
     if (!vmm_stack_.empty()) {
-        /*
-        host_->sub(host_->rsp, vmm_to_preserve_size_bytes_);
-
-        auto stack_offset = vmm_to_preserve_size_bytes_;
-        for (const auto &vmm : vmm_to_preserve) {
-            stack_offset -= get_vmm_size_bytes(vmm);
-            const auto idx = vmm.getIdx();
-            if (vmm.isXMM())
-                host_->uni_vmovups(
-                        host_->ptr[host_->rsp + stack_offset], Xbyak::Xmm(idx));
-            else if (vmm.isYMM())
-                host_->uni_vmovups(
-                        host_->ptr[host_->rsp + stack_offset], Xbyak::Ymm(idx));
-            else
-                host_->uni_vmovups(
-                        host_->ptr[host_->rsp + stack_offset], Xbyak::Zmm(idx));
-        }
-      */
+      //host_->sub(host_->rsp, vmm_to_preserve_size_bytes_);
+      CG::sub(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_);
+      
+      auto stack_offset = vmm_to_preserve_size_bytes_;
+      for (const auto &vmm : vmm_to_preserve) {
+	stack_offset -= get_vmm_size_bytes(vmm);
+	const auto idx = vmm.getIdx();
+	if (/*vmm.isXMM()*/false){
+	  /*
+	    host_->uni_vmovups(
+	    host_->ptr[host_->rsp + stack_offset], Xbyak::Xmm(idx));
+	    
+            }else if (vmm.isYMM()){
+	    host_->uni_vmovups(
+	    host_->ptr[host_->rsp + stack_offset], Xbyak::Ymm(idx));
+	  */
+	}else{
+	  /*
+	    host_->uni_vmovups(
+	    host_->ptr[host_->rsp + stack_offset], Xbyak::Zmm(idx));
+	  */
+	  CG::add_imm(xa::XReg(28), xa::XReg(4), stack_offset, xa::XReg(23));
+	  CG::str(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
+	}
+      }
     }
 }
+  
+  register_preserve_guard_t::~register_preserve_guard_t() {
 
-register_preserve_guard_t::~register_preserve_guard_t() {
-    /*
     auto tmp_stack_offset = 0;
-  */
+
     while (!vmm_stack_.empty()) {
-        /*
-        const Xbyak::Xmm &vmm = vmm_stack_.top();
+      //const Xbyak::Xmm &vmm = vmm_stack_.top();
+	const xa::VReg &vmm = vmm_stack_.top();
         const auto idx = vmm.getIdx();
-        if (vmm.isXMM())
+        if (/*vmm.isXMM()*/false){
+	  /*
             host_->uni_vmovups(
                     Xbyak::Xmm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
-        else if (vmm.isYMM())
+        }else if (vmm.isYMM()){
             host_->uni_vmovups(
                     Xbyak::Ymm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
-        else
+	  */
+        }else{
+	  /*
             host_->uni_vmovups(
                     Xbyak::Zmm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
+	  */
+	  CG::add_imm(xa::XReg(28), xa::XReg(4), tmp_stack_offset, xa::XReg(23));
+	  CG::ldr(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
+	}
 
         tmp_stack_offset += get_vmm_size_bytes(vmm);
         vmm_stack_.pop();
-      */
     }
 
     if (vmm_to_preserve_size_bytes_) {
         /*
         host_->add(host_->rsp, vmm_to_preserve_size_bytes_);
       */
+      CG::add_imm(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_, xa::XReg(23));
     }
 
     while (!reg64_stack_.empty()) {
-        /*
-        host_->pop(reg64_stack_.top());
-        reg64_stack_.pop();
-      */
+      //host_->pop(reg64_stack_.top());
+      CG::ldr(xa::XReg(IDX(reg64_stack_.top())), xa::post_ptr(xa::XReg(22), 8));
+      reg64_stack_.pop();
     }
 }
 
