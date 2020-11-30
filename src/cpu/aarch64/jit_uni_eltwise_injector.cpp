@@ -84,6 +84,17 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     }
     assert(preserved_gprs_count == aux_gprs_count());
 
+#ifndef DNNL_X64_IMPLEMENTATION
+    CG::ptrue(p_512.b);
+    CG::ptrue(p_256.b, xa::VL32);
+    CG::ptrue(p_128.b, xa::VL16);
+    if (vlen == 32) {
+        p_lsb = p_256;
+    } else if (vlen == 16) {
+        p_lsb = p_128;
+    }
+#endif
+
     if (save_state_) {
         h->push(p_table);
         for (size_t i = 0; i < preserved_gprs_count; ++i)
@@ -102,21 +113,20 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
 
         while (i < preserved_vecs_count) {
             int count = 0;
+            int ii = i;
             do {
                 CG::add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
                 i++;
-            } while (i < preserved_vecs_count && i < x_tmp_vec_size);
+            } while (i < preserved_vecs_count && count < x_tmp_vec_size);
 
             if (vlen != 32)
                 for (int j = 0; j < count; j++)
-                    CG::st1w(xa::ZRegS(preserved_vec_idxs[j]), p_lsb,
+                    CG::st1w(xa::ZRegS(preserved_vec_idxs[ii++]), p_lsb,
                             xa::ptr(x_tmp_vec[j]));
             else
                 for (int j = 0; j < count; j++)
-                    CG::str(xa::QReg(preserved_vec_idxs[j]),
+                    CG::str(xa::QReg(preserved_vec_idxs[ii++]),
                             xa::ptr(x_tmp_vec[j]));
-
-            i += count;
         }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
@@ -124,17 +134,6 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     }
 
     assign_regs();
-
-#ifndef DNNL_X64_IMPLEMENTATION
-    CG::ptrue(p_512.b);
-    CG::ptrue(p_256.b, xa::VL32);
-    CG::ptrue(p_128.b, xa::VL16);
-    if (vlen == 32) {
-        p_lsb = p_256;
-    } else if (vlen == 16) {
-        p_lsb = p_128;
-    }
-#endif
 }
 
 template <cpu_isa_t isa>
@@ -159,21 +158,20 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
 
         while (i < tail_vecs_to_preserve) {
             int count = 0;
+            int ii = i;
             do {
                 CG::add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
                 i++;
-            } while (i < tail_vecs_to_preserve && i < x_tmp_vec_size);
+            } while (i < tail_vecs_to_preserve && count < x_tmp_vec_size);
 
             if (vlen != 32)
                 for (int j = 0; j < count; j++)
-                    CG::ld1w(xa::ZRegS(preserved_vec_idxs[idx_off + j]),
+                    CG::ld1w(xa::ZRegS(preserved_vec_idxs[idx_off + ii++]),
                             p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
             else
                 for (int j = 0; j < count; j++)
-                    CG::ldr(xa::QReg(preserved_vec_idxs[idx_off + j]),
+                    CG::ldr(xa::QReg(preserved_vec_idxs[idx_off + ii++]),
                             xa::ptr(x_tmp_vec[j]));
-
-            i += count;
         }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
     }
@@ -193,21 +191,20 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
 
         while (i < tail_vecs_to_preserve) {
             int count = 0;
+            int ii = i;
             do {
                 CG::add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
                 i++;
-            } while (i < tail_vecs_to_preserve && i < x_tmp_vec_size);
+            } while (i < tail_vecs_to_preserve && count < x_tmp_vec_size);
 
             if (vlen != 32)
                 for (int j = 0; j < count; j++)
-                    CG::st1w(xa::ZRegS(preserved_vec_idxs[idx_off + j]),
+                    CG::st1w(xa::ZRegS(preserved_vec_idxs[idx_off + ii++]),
                             p_lsb / xa::T_z, xa::ptr(x_tmp_vec[j]));
             else
                 for (int j = 0; j < count; j++)
-                    CG::str(xa::QReg(preserved_vec_idxs[idx_off + j]),
+                    CG::str(xa::QReg(preserved_vec_idxs[idx_off + ii++]),
                             xa::ptr(x_tmp_vec[j]));
-
-            i += count;
         }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 
