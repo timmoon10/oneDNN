@@ -32,19 +32,13 @@ void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
 #define BAR_SENSE_OFF offsetof(ctx_t, sense)
     using namespace Xbyak_aarch64;
 
-    XReg reg_tmp = [&]() {
-        /* returns register which is neither reg_ctx nor reg_nthr */
-        const int regs[] = {0, 3, 1};
-        for (size_t i = 0; i < sizeof(regs) / sizeof(regs[0]); ++i)
-            if (!utils::one_of(i, reg_ctx.getIdx(), reg_nthr.getIdx()))
-                return XReg(i);
-        return XReg(0); /* should not happen */
-    }();
-
     XReg x_tmp_0(23);
     XReg x_tmp_1(24);
     XReg x_tmp_2(25);
-    XReg x_tmp_3(26);
+
+    XReg reg_tmp(27);
+    XReg sp_tmp1(28);
+    XReg sp_tmp2(29);
     XReg sp(31);
 
     Label barrier_exit_label, barrier_exit_restore_label, spin_label;
@@ -52,16 +46,12 @@ void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
     code.cmp(reg_nthr, 1);
     code.b(LS, barrier_exit_label);
 
-    code.sub(sp, sp, 8);
-    code.mov(x_tmp_3, sp);
-    code.str(reg_tmp, ptr(x_tmp_3));
+    code.mov(sp_tmp1, reg_tmp);
 
     /* take and save current sense */
     code.add_imm(x_tmp_0, reg_ctx, BAR_SENSE_OFF, x_tmp_0);
     code.ldr(reg_tmp, ptr(x_tmp_0));
-    code.sub(sp, sp, 8);
-    code.mov(x_tmp_3, sp);
-    code.str(reg_tmp, ptr(x_tmp_3));
+    code.mov(sp_tmp2, reg_tmp);
     code.mov(reg_tmp, 1);
 
 #if 0
@@ -75,8 +65,7 @@ void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
     code.ldaddal(reg_tmp, reg_tmp, ptr(x_tmp_1));
     code.add_imm(reg_tmp, reg_tmp, 1, x_tmp_0);
     code.cmp(reg_tmp, reg_nthr);
-    code.ldr(reg_tmp, ptr(sp));
-    code.add(sp, sp, 8);
+    code.mov(reg_tmp, sp_tmp2);
     code.b(NE, spin_label);
 
     /* the last thread {{{ */
@@ -99,8 +88,7 @@ void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
 //#endif //#ifdef DNNL_INDIRECT_JIT_AARCH64
 
     code.CodeGenerator::L(barrier_exit_restore_label);
-    code.ldr(reg_tmp, ptr(sp));
-    code.add(sp, sp, 8);
+    code.mov(reg_tmp, sp_tmp1);
 
     code.CodeGenerator::L(barrier_exit_label);
 #undef BAR_CTR_OFF
@@ -111,8 +99,9 @@ void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
 struct jit_t : public jit_generator {
 
     void generate() override {
+        this->preamble();
         simple_barrier::generate(*this, abi_param1, abi_param2);
-        ret();
+        this->postamble();
     }
 
     // TODO: Need to check status

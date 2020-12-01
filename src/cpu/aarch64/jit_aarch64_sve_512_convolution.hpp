@@ -39,8 +39,8 @@
 #include "common/primitive.hpp"
 #include "common/utils.hpp"
 
-//#include "cpu/aarch64/cpu_barrier.hpp"
-//#include "cpu/aarch64/cpu_reducer.hpp"
+#include "cpu/aarch64/cpu_barrier.hpp"
+#include "cpu/aarch64/cpu_reducer.hpp"
 #include "cpu/cpu_convolution_pd.hpp"
 
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
@@ -199,7 +199,6 @@ private:
     std::unique_ptr<jit_aarch64_sve_512_conv_bwd_data_kernel_f32> kernel_;
 };
 
-#if 0
 template <impl::data_type_t src_type,
         impl::data_type_t diff_dst_type = src_type,
         impl::data_type_t diff_weights_type = src_type>
@@ -210,7 +209,7 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t : public primitive_t {
             : cpu_convolution_bwd_weights_pd_t(adesc, attr, hint_fwd_pd)
             , jcp_() {}
 
-        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", sve, ""),
+        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit:", sve_512, ""),
                 jit_aarch64_sve_512_convolution_bwd_weights_t);
 
         status_t init(engine_t *engine) {
@@ -243,7 +242,7 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t : public primitive_t {
         jit_conv_conf_t jcp_;
         typename cpu_reducer_t<diff_weights_type>::conf_t reducer_bia_conf_;
 
-    private:
+        private:
         void init_balancers() {
             const size_t max_buffer_size = jcp_.nthr * 3 * 5 * 5 * 16 * 16;
             if (with_bias()) {
@@ -254,16 +253,14 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t : public primitive_t {
         }
     };
 
-    jit_aarch64_sve_512_convolution_bwd_weights_t(const pd_t *apd);
-    ~jit_aarch64_sve_512_convolution_bwd_weights_t() {
-        delete kernel_;
-        if (acc_ker_) delete acc_ker_;
-        delete reducer_bias_;
-    }
+    jit_aarch64_sve_512_convolution_bwd_weights_t(const pd_t *apd)
+        : primitive_t(apd) {}
 
     typedef typename prec_traits<src_type>::type src_data_t;
     typedef typename prec_traits<diff_dst_type>::type diff_dst_data_t;
     typedef typename prec_traits<diff_weights_type>::type diff_weights_data_t;
+
+    status_t init(engine_t *engine) override;
 
     status_t execute(const exec_ctx_t &ctx) const override {
         execute_backward_weights(ctx);
@@ -274,7 +271,6 @@ private:
     void execute_backward_weights(const exec_ctx_t &ctx) const;
     void prepare_scratchpad_data(const exec_ctx_t &ctx) const;
     struct thread_info_t;
-    void compute_diff_weights_nxc(const thread_info_t *) const;
     void compute_diff_weights(const thread_info_t *) const;
     void compute_diff_weights_2d(const thread_info_t *) const;
     void compute_diff_weights_3d(const thread_info_t *) const;
@@ -291,7 +287,6 @@ private:
     cpu_accumulator_1d_t<diff_weights_type> *acc_ker_;
     cpu_reducer_t<diff_weights_type> *reducer_bias_;
 };
-#endif
 
 } // namespace aarch64
 } // namespace cpu

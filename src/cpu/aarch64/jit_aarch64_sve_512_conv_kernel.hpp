@@ -532,14 +532,14 @@ private:
     jit_generator *kernel_;
 };
 
-#if 0
 struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
 
     jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(const jit_conv_conf_t &ajcp)
-        : jit_generator(nullptr, 1024 * 1024), jcp(ajcp) {
+        : jcp(ajcp) {}
+
+    void generate() override {
         if (jcp.harness != harness_nxc) {
-            generate();
-            jit_ker = (void (*)(jit_conv_call_s *))getCode32();
+            generate_kernel();
         } else {
             assert(!"none microkernel");
         }
@@ -556,9 +556,6 @@ struct jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 : public jit_generator {
             const jit_conv_conf_t &jcp);
 
     jit_conv_conf_t jcp;
-    void (*jit_ker)(jit_conv_call_s *);
-    void (*jit_microker)(
-            float *, const float *, const float *, int64_t, int64_t);
 
 private:
     using reg64_t = const XReg;
@@ -566,7 +563,7 @@ private:
     static const int max_ur_w;
     static const int min_oh_reduce;
 
-    reg64_t param = abi_param1_aarch64;
+    reg64_t param = abi_param1;
     reg64_t reg_input = x1;
     reg64_t reg_kernel = x2;
     reg64_t reg_output = x3;
@@ -721,12 +718,12 @@ private:
         return ow * jcp.stride_w + kw * (jcp.dilate_w + 1) - l_pad;
     }
 
-    void generate();
+    void generate_kernel();
 
     static void balance(const jit_conv_conf_t &j, int &nthr, int &nthr_mb,
             int &nthr_g, int &nthr_oc_b, int &nthr_ic_b, int nthreads);
 };
-#endif
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

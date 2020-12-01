@@ -35,9 +35,7 @@
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
 
-#if 0
 #include "cpu/aarch64/cpu_barrier.hpp"
-#endif
 
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 #include "cpu/platform.hpp"
@@ -2515,7 +2513,6 @@ void jit_aarch64_sve_512_conv_bwd_data_kernel_f32::init_scratchpad(
     UNUSED(jcp);
 }
 
-#if 0
 // Initialize static data members
 const int jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::max_ur_w = 28;
 const int jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::min_oh_reduce = 9;
@@ -4023,7 +4020,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_loop() {
     }
 }
 
-void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::generate() {
+void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::generate_kernel() {
     preamble();
     ptrue(reg_p_all_ones.b);
 
@@ -4490,7 +4487,6 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::balance(
     assert(nthr_ <= nthreads);
 }
 
-#endif
 template struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<ZReg>;
 template struct _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>;
 } // namespace aarch64

@@ -1143,17 +1143,10 @@ void jit_aarch64_sve_512_convolution_bwd_data_t<diff_dst_type, wei_type,
 
 template struct jit_aarch64_sve_512_convolution_bwd_data_t<data_type::f32>;
 
-#if 0
 template <data_type_t src_type, data_type_t diff_dst_type,
         data_type_t diff_weights_type>
-jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
-        diff_weights_type>::
-        jit_aarch64_sve_512_convolution_bwd_weights_t(const pd_t *apd)
-    : primitive_t(apd)
-    , kernel_(nullptr)
-    , trans_kernel_(nullptr)
-    , acc_ker_(nullptr)
-    , reducer_bias_(nullptr) {
+status_t jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
+        diff_weights_type>::init(engine_t *engine){
     const auto &j = pd()->jcp_;
 
     nthr_ = j.nthr;
@@ -1162,12 +1155,20 @@ jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     nthr_oc_b_ = j.nthr_oc_b;
     nthr_ic_b_ = j.nthr_ic_b;
 
-    kernel_ = new jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(j);
+    CHECK(safe_ptr_assign(
+            kernel_, new jit_aarch64_sve_512_conv_bwd_weights_kernel_f32(j)));
+    CHECK(kernel_->create_kernel());
 
-    if (nthr_mb_ > 1) acc_ker_ = new cpu_accumulator_1d_t<diff_weights_type>();
+    if (nthr_mb_ > 1){
+        CHECK(safe_ptr_assign(
+                acc_ker_, new cpu_accumulator_1d_t<diff_weights_type>()));
+        CHECK(acc_ker_->create_kernel());
+    }
 
-    reducer_bias_
-            = new cpu_reducer_t<diff_weights_type>(pd()->reducer_bia_conf_);
+    CHECK(safe_ptr_assign(reducer_bias_,
+            new cpu_reducer_t<diff_weights_type>(pd()->reducer_bia_conf_)));
+    CHECK(reducer_bias_->create_kernel());
+    return status::success;
 }
 
 template <data_type_t src_type, data_type_t diff_dst_type,
@@ -1263,139 +1264,6 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
 template <data_type_t src_type, data_type_t diff_dst_type,
         data_type_t diff_weights_type>
 void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
-        diff_weights_type>::compute_diff_weights_nxc(const thread_info_t *ti)
-        const {
-    const auto &jcp = kernel_->jcp;
-
-    const int wei_size
-            = jcp.ngroups * jcp.oc * jcp.ic * jcp.kh * jcp.kw * jcp.kd;
-    diff_weights_data_t *diff_wei = ti->ithr_mb == 0
-            ? (diff_weights_data_t *)ti->diff_weights
-            : ti->wei_bia_reduction + (ti->ithr_mb - 1) * wei_size;
-
-    auto diff_weights_offset
-            = [&](int g, int i_kd, int i_kh, int i_kw, int i_ic, int i_oc) {
-                  const int oc_block_size = 1;
-                  const int ic_block_size = jcp.oc_block * oc_block_size;
-                  const int kw_block_size = jcp.ic_block * ic_block_size;
-                  const int kh_block_size = jcp.kw * kw_block_size;
-                  const int kd_block_size = jcp.kh * kh_block_size;
-                  const int icb_block_size = jcp.kd * kd_block_size;
-                  const int ocb_block_size = jcp.nb_ic * icb_block_size;
-                  const int g_block_size = jcp.nb_oc * ocb_block_size;
-
-                  int icb = i_ic / jcp.ic_block;
-                  int ocb = i_oc / jcp.oc_block;
-                  i_ic = i_ic % jcp.ic_block;
-                  i_oc = i_oc % jcp.oc_block;
-
-                  return g * g_block_size + ocb * ocb_block_size
-                          + icb * icb_block_size + i_kd * kd_block_size
-                          + i_kh * kh_block_size + i_kw * kw_block_size
-                          + i_ic * ic_block_size + i_oc * oc_block_size;
-              };
-    auto src_offset
-            = [&](int g, int i_mb, int i_id, int i_ih, int i_ic, int i_iw) {
-                  const int ic_block_size = 1;
-                  const int g_block_size = jcp.ic * ic_block_size;
-                  const int iw_block_size = jcp.ngroups * g_block_size;
-                  const int ih_block_size = jcp.iw * iw_block_size;
-                  const int id_block_size = jcp.ih * ih_block_size;
-                  const int mb_block_size = jcp.id * id_block_size;
-
-                  return g * g_block_size + i_mb * mb_block_size
-                          + i_id * id_block_size + i_ih * ih_block_size
-                          + i_iw * iw_block_size + i_ic * ic_block_size;
-              };
-    auto diff_dst_offset
-            = [&](int g, int i_mb, int i_od, int i_oh, int i_ow, int i_oc) {
-                  const int oc_block_size = 1;
-                  const int g_block_size = jcp.oc * oc_block_size;
-                  const int ow_block_size = jcp.ngroups * g_block_size;
-                  const int oh_block_size = jcp.ow * ow_block_size;
-                  const int od_block_size = jcp.oh * oh_block_size;
-                  const int mb_block_size = jcp.od * od_block_size;
-
-                  return g * g_block_size + i_mb * mb_block_size
-                          + i_od * od_block_size + i_oh * oh_block_size
-                          + i_ow * ow_block_size + i_oc * oc_block_size;
-              };
-    auto zero_diff_weights = [&]() {
-        PRAGMA_OMP_SIMD()
-        for (dim_t i = 0; i < wei_size; i++)
-            diff_wei[i] = 0;
-    };
-
-    int kd_step = jcp.dilate_d + 1;
-    int kh_step = jcp.dilate_h + 1;
-    int stride_d = jcp.stride_d;
-    int stride_h = jcp.stride_h;
-    int f_pad = jcp.f_pad;
-    int t_pad = jcp.t_pad;
-
-    dim_t work_amount = jcp.mb * jcp.od * jcp.oh * jcp.nb_ow;
-    dim_t i_work {0}, i_work_end {0};
-    balance211(work_amount, jcp.nthr_mb, ti->ithr_mb, i_work, i_work_end);
-
-    int i_mb {0}, i_od {0}, i_oh {0}, i_owb {0};
-    nd_iterator_init(
-            i_work, i_mb, jcp.mb, i_od, jcp.od, i_oh, jcp.oh, i_owb, jcp.nb_ow);
-
-    zero_diff_weights();
-    while (i_work < i_work_end) {
-        int kd_start = nstl::max(
-                0, div_up(jcp.f_pad - jcp.stride_d * i_od, kd_step));
-        int kd_end = nstl::min(
-                jcp.kd - 1, (jcp.id - 1 + f_pad - stride_d * i_od) / kd_step);
-        int i_id_base = stride_d * i_od - f_pad;
-        int kh_start = nstl::max(
-                0, div_up(jcp.t_pad - jcp.stride_h * i_oh, +kh_step));
-        int kh_end = nstl::min(
-                jcp.kh - 1, (jcp.ih - 1 + t_pad - stride_h * i_oh) / kh_step);
-        int i_ih_base = jcp.stride_h * i_oh + -jcp.t_pad;
-        int i_ow_base = i_owb * jcp.ow_block;
-        int i_ow_end = nstl::min(jcp.ow, i_ow_base + jcp.ow_block);
-
-        // The kernel is small so these loops produce measurable overhead. Since
-        // these are simple loops, the compiler will likely make the loops just
-        // as well as we can with the jitted assembly, so there is not
-        // necessarily a reason to move these loops into assembly. Avoid placing
-        // computationally heavy operations within the loops.
-        for_(int i_ow = i_ow_base; i_ow < i_ow_end; i_ow += jcp.ur_ow)
-        for_(int i_oc = 0; i_oc < jcp.oc; i_oc += jcp.oc_block)
-        for_(int g = 0; g < jcp.ngroups; g++)
-        for_(int i_kd = kd_start; i_kd <= kd_end; i_kd++)
-        for (int i_kh = kh_start; i_kh <= kh_end; i_kh++) {
-            // Some Optimization Observations: It may be
-            // worthwhile to move the kd and kh loops below the
-            // icb loop in the kernel to further amortize the
-            // ddst register loads. Alternatively, these
-            // dimensions are independent on the weights kernel,
-            // so can be used as a threading dimension that does
-            // not require reduction.
-
-            // The compiler seems to do a good job at optimizing these
-            // computations. The offset functions likely need to be located
-            // so that they will be inlined.
-            int i_iw = i_ow * jcp.stride_w - jcp.l_pad;
-            int i_id = i_id_base + i_kd * kd_step;
-            int i_ih = i_ih_base + i_kh * kh_step;
-            int ddst_offset = diff_dst_offset(g, i_mb, i_od, i_oh, i_ow, i_oc);
-            int s_off_base = src_offset(g, i_mb, i_id, i_ih, 0, i_iw);
-            int dwei_off_base = diff_weights_offset(g, i_kd, i_kh, 0, 0, i_oc);
-            kernel_->jit_microker(&diff_wei[dwei_off_base],
-                    &ti->src[s_off_base], &ti->diff_dst[ddst_offset], i_iw,
-                    i_ow);
-        }
-        nd_iterator_step(
-                i_mb, jcp.mb, i_od, jcp.od, i_oh, jcp.oh, i_owb, jcp.nb_ow);
-        i_work++;
-    }
-}
-
-template <data_type_t src_type, data_type_t diff_dst_type,
-        data_type_t diff_weights_type>
-void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         diff_weights_type>::compute_diff_weights(const thread_info_t *ti)
         const {
     const memory_desc_wrapper src_d(pd()->src_md());
@@ -1403,6 +1271,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     const memory_desc_wrapper diff_weights_d(pd()->diff_weights_md(0));
 
     const auto &jcp = kernel_->jcp;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     const int padded_oc = rnd_up(jcp.oc, jcp.oc_block);
     const int wei_size = jcp.ngroups * padded_oc * rnd_up(jcp.ic, jcp.ic_block)
             * jcp.kh * jcp.kw * jcp.kd;
@@ -1442,7 +1311,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
                     ? g * jcp.oc + oc_b * jcp.oc_block
                     : _oc;
 
-            jit_conv_ker_pipeline_bwd_w(kernel_->jit_ker, p,
+            jit_conv_ker_pipeline_bwd_w(jit_ker, p,
                     &ti->src[src_d.blk_off(img, ic_off_idx)],
                     &ti->diff_dst[diff_dst_d.blk_off(img, oc_off_idx)],
                     diff_wei + wht_blk_off(diff_weights_d, g, oc_b, ic_b), 0,
@@ -1462,7 +1331,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         // sense here as call parameters to avoid execution of prefetch
         // instructions with nullptr, other parameters are not used in real
         // jit call here
-        jit_conv_ker_pipeline_bwd_w(kernel_->jit_ker, p,
+        jit_conv_ker_pipeline_bwd_w(jit_ker, p,
                 &ti->src[src_d.blk_off(img + 1, ic_off_idx)],
                 &ti->diff_dst[diff_dst_d.blk_off(img + 1, oc_off_idx)],
                 diff_wei
@@ -1482,6 +1351,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     const memory_desc_wrapper diff_weights_d(pd()->diff_weights_md(0));
 
     const auto &jcp = kernel_->jcp;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     const int padded_oc = rnd_up(jcp.oc, jcp.oc_block);
     const int wei_size = jcp.ngroups * padded_oc * rnd_up(jcp.ic, jcp.ic_block)
             * jcp.kh * jcp.kw;
@@ -1540,7 +1410,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
             auto src = src_h + src_d.blk_off(0, ic_off_idx);
             auto diff_dst = diff_dst_h + diff_dst_d.blk_off(0, oc_off_idx);
 
-            jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
+            jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(jit_ker, p,
                     src, diff_dst,
                     diff_wei + wht_blk_off(diff_weights_d, g, oc_b, ic_b),
                     diff_bia + _oc * jcp.oc_block, (img == img_first), oh_s,
@@ -1562,7 +1432,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
+        jit_aarch64_sve_512_conv_2d_ker_bwd_w_pipeline(jit_ker, p,
                 ti->src + src_d.blk_off(img + 1, ic_off_idx),
                 ti->diff_dst + diff_dst_d.blk_off(img + 1, oc_off_idx),
                 diff_wei
@@ -1583,6 +1453,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     const memory_desc_wrapper diff_weights_d(pd()->diff_weights_md(0));
 
     const auto &jcp = kernel_->jcp;
+    const jit_conv_ker_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     const int padded_oc = rnd_up(jcp.oc, jcp.oc_block);
     const int wei_size = jcp.ngroups * padded_oc * rnd_up(jcp.ic, jcp.ic_block)
             * jcp.kh * jcp.kw * jcp.kd;
@@ -1652,7 +1523,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
             auto dst = &ti->diff_dst[diff_dst_d.blk_off(img, oc_off_idx)
                     + od_s * output_step];
 
-            jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
+            jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(jit_ker, p,
                     src, dst,
                     diff_wei + wht_blk_off(diff_weights_d, g, oc_b, ic_b),
                     diff_bia + _oc * 16, (img == img_first), od_s, od_e,
@@ -1674,7 +1545,7 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
         // on the last iteration of loop above. Only valid pointers make sense
         // here as call parameters to avoid execution of prefetch instructions
         // with nullptr, other parameters are not used in real jit call here
-        jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(kernel_->jit_ker, p,
+        jit_aarch64_sve_512_conv_3d_ker_bwd_w_pipeline(jit_ker, p,
                 &ti->src[src_d.blk_off(img + 1, ic_off_idx)],
                 &ti->diff_dst[diff_dst_d.blk_off(img + 1, oc_off_idx)],
                 diff_wei
@@ -1922,11 +1793,6 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
                 if (nthr_mb_ > 1) reduce_diff_weights(&thread_info);
                 if (pd()->with_bias()) compute_diff_bias(&thread_info);
                 break;
-            case harness_nxc:
-                compute_diff_weights_nxc(&thread_info);
-                if (nthr_mb_ > 1) reduce_diff_weights_3d(&thread_info);
-                if (pd()->with_bias()) compute_diff_bias(&thread_info);
-                break;
             default: assert(!"Invalid harness type");
         }
     });
@@ -1934,10 +1800,6 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
     parallel(nthr_, [&](const int ithr, const int nthr) {
         thread_info_t thread_info(this, ctx, ithr);
         switch (pd()->jcp_.harness) {
-            case harness_nxc:
-                compute_diff_weights_nxc(&thread_info);
-                if (pd()->with_bias()) compute_diff_bias(&thread_info);
-                break;
             case harness_2d_reduction:
                 compute_diff_weights_2d(&thread_info);
                 break;
@@ -2008,7 +1870,6 @@ void jit_aarch64_sve_512_convolution_bwd_weights_t<src_type, diff_dst_type,
 }
 
 template struct jit_aarch64_sve_512_convolution_bwd_weights_t<data_type::f32>;
-#endif
 
 } // namespace aarch64
 } // namespace cpu
