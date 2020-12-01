@@ -620,7 +620,7 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
             || with_tail_not_fusable_to_binary_op
             || !binary_op_with_unaligned_mem_operand_allowed_;
 
-    if (process_rhs_arg_using_tmp_vmm) {
+    if (/*process_rhs_arg_using_tmp_vmm*/false) {
 
         const Vmm tmp_vmm = Vmm(rhs_arg_static_params_.rhs_dt_helper_vmm_idx);
 
@@ -1246,10 +1246,8 @@ template class jit_uni_binary_injector_t<sse41>;
   */
 
 template class jit_uni_binary_injector_t<sve_512>;
-  /*
 template class jit_uni_binary_injector_t<sve_256>;
 template class jit_uni_binary_injector_t<sve_128>;
-  */
 template class jit_uni_binary_injector_t<asimd>;
 
 } // namespace binary_injector

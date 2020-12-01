@@ -33,7 +33,7 @@
 //#include "cpu/x64/injectors/jit_uni_postops_injector.hpp"
 //#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
 //#include "cpu/x64/jit_primitive_conf.hpp"
-//#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
+#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
 #include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
@@ -435,10 +435,10 @@ private:
             const memory_desc_wrapper &dst_d);
 
     std::unique_ptr<bf16_emulation_t> bf16_emu_;
-    /*
+
     std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
             postops_injector_;
-  */
+
 };
 
 } // namespace aarch64

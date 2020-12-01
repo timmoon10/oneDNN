@@ -54,7 +54,7 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
       */
 
         if (jpp.with_postops) {
-            /*
+
         static constexpr bool use_per_oc_spatial_strategy = false;
         static constexpr bool preserve_gpr = true;
         static constexpr bool preserve_vmm = true;
@@ -69,8 +69,10 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
         if (high_half_block_empty) postop_tail -= sse41_single_block_size;
 
         const binary_injector::rhs_arg_static_params_t rhs_sp {
-                static_cast<std::size_t>(this->xmm4.getIdx()), this->rax,
-                this->rdx, preserve_gpr, preserve_vmm,
+							       //static_cast<std::size_t>(this->xmm4.getIdx()), this->rax,
+							       static_cast<std::size_t>(VReg(4).getIdx()), XReg(0),
+							       //this->rdx, preserve_gpr, preserve_vmm,
+							       XReg(2), preserve_gpr, preserve_vmm,
                 GET_OFF(post_ops_binary_rhs_arg_vec),
                 memory_desc_wrapper(*dst_md), postop_tail, k_c_tail_mask,
                 use_exact_tail_scalar_bcast};
@@ -81,7 +83,7 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
         postops_injector_
                 = utils::make_unique<injector::jit_uni_postops_injector_t<isa>>(
                         this, jpp.post_ops, bsp);
-      */
+
         }
 }
 
@@ -690,8 +692,8 @@ bool jit_uni_pool_kernel<isa>::post_ops_ok(jit_pool_conf_t &jpp,
 template <cpu_isa_t isa>
 void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
         const std::function<bool(int)> &is_tail_predicate) {
-    assert(!"unreachable");
-    /*
+  //assert(!"unreachable");
+
     binary_injector::rhs_arg_dynamic_params_t rhs_arg_params;
     const int end_idx = vmm_idx_upper_bound() + 1;
     const int start_idx = end_idx - (ur_bc * ur_w);
@@ -709,8 +711,10 @@ void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
             for (int bci = 0; bci < ur_bc; bci++) {
                 const auto vmm_idx
                         = vreg(reg_ind(0, bci, jj, ur_bc, ur_w)).getIdx();
+		add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(c_elem_off), x_tmp_0);
                 rhs_arg_params.vmm_idx_to_oc_elem_off_addr.emplace(
-                        vmm_idx, ptr[reg_param + GET_OFF(c_elem_off)]);
+								   //vmm_idx, ptr[reg_param + GET_OFF(c_elem_off)]);
+								   vmm_idx, ptr(x_tmp_addr));
                 rhs_arg_params.vmm_idx_to_oc_elem_off_val.emplace(
                         vmm_idx, bci * c_block + sse_elem_off);
                 if (is_tail_predicate && is_tail_predicate(bci))
@@ -719,7 +723,7 @@ void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
         }
     }
     postops_injector_->compute_vector_range(start_idx, end_idx, rhs_arg_params);
-  */
+
 }
 
 template <cpu_isa_t isa>
