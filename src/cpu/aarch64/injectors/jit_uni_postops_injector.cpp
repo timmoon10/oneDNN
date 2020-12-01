@@ -60,7 +60,7 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const binary_injector::static_params_t &binary_static_params)
     : jit_uni_postops_injector_t(host, post_ops, binary_static_params,
             eltwise_injector::static_params_t(), lambda_jit_injectors_t()) {}
-  /*
+
 template <cpu_isa_t isa>
 jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const post_ops_t &post_ops,
@@ -68,7 +68,7 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const lambda_jit_injectors_t &lambda_jit_injectors)
     : jit_uni_postops_injector_t(host, post_ops, binary_static_params,
             eltwise_injector::static_params_t(), lambda_jit_injectors) {}
-
+  /*
 template <cpu_isa_t isa>
 jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const post_ops_t &post_ops,
@@ -76,7 +76,7 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const eltwise_injector::static_params_t &eltwise_static_params)
     : jit_uni_postops_injector_t(host, post_ops, binary_static_params,
             eltwise_static_params, lambda_jit_injectors_t()) {}
-*/
+  */
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::compute_vector_range(size_t start_idx,
         size_t end_idx,
@@ -197,6 +197,8 @@ template class jit_uni_postops_injector_t<avx>;
 template class jit_uni_postops_injector_t<sse41>;
   */
 template class jit_uni_postops_injector_t<sve_512>;
+template class jit_uni_postops_injector_t<sve_256>;
+template class jit_uni_postops_injector_t<sve_128>;
 template class jit_uni_postops_injector_t<asimd>;
 } // namespace injector
 } // namespace x64
