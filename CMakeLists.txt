@@ -129,6 +129,10 @@ include("cmake/version.cmake")
 include("cmake/coverage.cmake")
 include("cmake/build_types.cmake")
 include("cmake/testing.cmake")
+if (CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
+      CMAKE_C_COMPILER MATCHES ".*/fcc$")
+    include("cmake/BLAS.cmake")
+endif()
 
 # Handle cases when OpenMP runtime is requested but not found: override CPU
 # runtime to be sequential
