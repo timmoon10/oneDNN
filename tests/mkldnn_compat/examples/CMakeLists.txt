@@ -47,7 +47,7 @@ foreach(src ${sources})
         register_exe(mkldnn-compat-${example_name} ${src} "" ${LIBM})
 
         # Adding test for CPU
-        add_test("mkldnn-compat-cpu-${example_name}" "mkldnn-compat-${example_name}" cpu)
+        add_dnnl_test("mkldnn-compat-cpu-${example_name}" "mkldnn-compat-${example_name}" cpu)
         maybe_configure_windows_test("mkldnn-compat-cpu-${example_name}" TEST)
 
         # Adding test for GPU
