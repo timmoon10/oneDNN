@@ -65,6 +65,9 @@ void generate(
 
     /* the last thread {{{ */
     code.mov(code.qword[reg_ctx + BAR_CTR_OFF], 0); // reset ctx
+#ifdef DNNL_INDIRECT_JIT_AARCH64
+    code.CodeGeneratorAArch64::dmb(Xbyak_aarch64::ISH);
+#endif //#ifdef DNNL_INDIRECT_JIT_AARCH64
 
     // notify waiting threads
     code.not_(reg_tmp);
