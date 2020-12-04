@@ -420,7 +420,8 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_max_op(
       }else{
 	//vmovdqu8(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
 	add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
-	ldr(z_tmp0, ptr(x_tmp_addr));
+	//ldr(z_tmp0, ptr(x_tmp_addr));
+	ld1b(z_tmp0.b, mask(0)/T_z, ptr(x_tmp_addr));
 	mov(ZRegB(IDX(vreg_src(jj))), mask(0)/T_m, z_tmp0.b);
       }
     } else{
@@ -590,12 +591,23 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
 	  //vpmovsxbd(vr_src, ptr[aux_reg_src_w + offset]);
 	  add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
 	  if(masked){
-	    ldr(z_tmp0, ptr(x_tmp_addr));
+	    //ldr(z_tmp0, ptr(x_tmp_addr));
+	    //ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
+	    //ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
+	    ptrue(p_128.b, VL8);
+	    and_(p_128.b, p_512/T_z, p_128.b, mask(ll).b);
+	    ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
+	    //ld1w(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
+	    //ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
 	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
 	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
 	    sxtb(ZReg(IDX(vr_src)).s, mask(ll)/T_m, z_tmp0.s);
+	    ptrue(p_128.b, VL16);
 	  }else{
-	    ldr(z_tmp0, ptr(x_tmp_addr));
+	    //ldr(z_tmp0, ptr(x_tmp_addr));
+	    ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
+	    //ld1b(z_tmp0.b, p_512/T_z, ptr(x_tmp_addr));
+	    //ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
 	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
 	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
 	    sxtb(ZReg(IDX(vr_src)).s, p_512/T_m, z_tmp0.s);
@@ -605,12 +617,20 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
 	  //vpmovzxbd(vr_src, ptr[aux_reg_src_w + offset]);
 	  add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
 	  if(masked){
-	    ldr(z_tmp0, ptr(x_tmp_addr));
+	    //ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
+	    //ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
+	    ptrue(p_128.b, VL8);
+	    and_(p_128.b, p_512/T_z, p_128.b, mask(ll).b);
+	    ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
+	    //ld1w(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
 	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
 	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
 	    uxtb(ZReg(IDX(vr_src)).s, mask(ll)/T_m, z_tmp0.s);
+	    ptrue(p_128.b, VL16);
 	  }else{
-	    ldr(z_tmp0, ptr(x_tmp_addr));
+	    //ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
+	    //ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
+	    ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
 	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
 	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
 	    uxtb(ZReg(IDX(vr_src)).s, p_512/T_m, z_tmp0.s);

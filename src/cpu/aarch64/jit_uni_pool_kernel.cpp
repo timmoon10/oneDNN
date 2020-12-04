@@ -661,13 +661,12 @@ template <cpu_isa_t isa>
 bool jit_uni_pool_kernel<isa>::post_ops_ok(jit_pool_conf_t &jpp,
         const primitive_attr_t &attr, const memory_desc_wrapper &dst_d) {
     const auto &post_ops = attr.post_ops_;
-    //const auto &entries = post_ops.entry_;
+    const auto &entries = post_ops.entry_;
     jpp.with_postops = false;
     jpp.with_eltwise = false;
     jpp.with_binary = false;
 
     if (!jpp.is_backward) {
-        /*
         for (const auto &entry : entries) {
             if (entry.is_eltwise()) {
                 jpp.with_eltwise = true;
@@ -681,7 +680,6 @@ bool jit_uni_pool_kernel<isa>::post_ops_ok(jit_pool_conf_t &jpp,
             } else
                 return false;
         }
-      */
 
         jpp.with_postops = jpp.with_eltwise || jpp.with_binary;
     }
@@ -1017,7 +1015,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
         }
 
         if (jpp.with_postops) {
-            /*apply_postops(ur_bc, ur_w, c_block, is_tail_processing);*/
+            apply_postops(ur_bc, ur_w, c_block, is_tail_processing);
         }
 
         for (int jj = 0; jj < ur_w; jj++) {
@@ -1161,7 +1159,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
     L(kh_label);
     {
         for (int ki = 0; ki < kw; ki++) {
-            int jj_start = nstl::max(0, utils::div_up(pad_l - ki, stride_w));
+	  int jj_start = nstl::max(0, utils::div_up(pad_l - ki, stride_w)); //test
             int jj_end = ur_w
                     - utils::div_up(
                             nstl::max(0, ki + pad_r - (kw - 1)), stride_w);
@@ -2184,9 +2182,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
     }
 
     if (jpp.with_postops) {
-        /*
         apply_postops(ur_bc, ur_w, c_block, is_tail_processing);
-      */
     }
 
     for_(int jj = 0; jj < ur_w; jj++)
