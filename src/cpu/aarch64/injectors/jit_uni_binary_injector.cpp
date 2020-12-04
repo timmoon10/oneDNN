@@ -1200,7 +1200,8 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
   //const std::type_info& infoB = typeid(rhs);
     switch (binary_alg) {
         case alg_kind::binary_add:
-	  CG::ldr(xa::ZReg(31), xa::ptr(rhs.getXn()));
+	  //CG::ldr(xa::ZReg(31), xa::ptr(rhs.getXn()));
+	  //CG::ld1w(xa::ZRegS(24), xa::PReg(0)/xa::T_z, xa::ptr(rhs.getXn()));
 	    CG::fadd(xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s, xa::ZReg(31).s);
 	  break;
 	  /*
