@@ -112,13 +112,14 @@ void jit_uni_postops_injector_t<isa>::compute_vector_range(
         }
     }
 }
-/*
+
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::prepare_table(bool gen_table) {
-    for (auto &alg_elt_inject : alg_to_eltwise_injector_)
-        alg_elt_inject.second.prepare_table(gen_table);
+    assert(!"unimplemented");
+    /*    for (auto &alg_elt_inject : alg_to_eltwise_injector_)
+        alg_elt_inject.second.prepare_table(gen_table); */
 }
-  */
+
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::compute_vector(size_t idx,
         const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params) {

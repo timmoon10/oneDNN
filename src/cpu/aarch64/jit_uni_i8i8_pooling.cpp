@@ -270,7 +270,9 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
     jit_uni_i8i8_pooling_fwd_ker_t(
             const jit_pool_conf_t &jpp_, const memory_desc_t *dst_md)
-        : jpp(jpp_), postops_injector_(nullptr) {
+        : jit_generator(nullptr, MAX_CODE_SIZE, true, isa)
+        , jpp(jpp_)
+        , postops_injector_(nullptr) {
 
         if (jpp.with_postops) {
 
@@ -415,12 +417,14 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_max_op(
         if (jpp.src_dt == s32) {
             //vmovups(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
+            std::cout << __LINE__ << std::endl;
             ld1w(z_tmp0.s, mask(0) / T_z, ptr(x_tmp_addr));
             mov(ZRegS(IDX(vreg_src(jj))), PReg(0) / T_m, z_tmp0.s);
         } else {
             //vmovdqu8(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             //ldr(z_tmp0, ptr(x_tmp_addr));
+            std::cout << __LINE__ << std::endl;
             ld1b(z_tmp0.b, mask(0) / T_z, ptr(x_tmp_addr));
             mov(ZRegB(IDX(vreg_src(jj))), mask(0) / T_m, z_tmp0.b);
         }
@@ -592,14 +596,16 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             //vpmovsxbd(vr_src, ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             if (masked) {
-                zip1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
-                zip1(mask(ll).h, P_ALL_ONE.h, mask(ll).h);
+                std::cout << __LINE__ << std::endl;
+                zip1(mask(ll).b, mask(ll).b, mask(ll).b);
+                zip1(mask(ll).h, mask(ll).h, mask(ll).h);
                 ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
-                uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
-                uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
+                pfalse(p9.b);
+                uzp1(mask(ll).b, mask(ll).b, p9.b);
+                uzp1(mask(ll).b, mask(ll).b, p9.b);
                 sxtb(ZReg(IDX(vr_src)).s, mask(ll) / T_m, z_tmp0.s);
-                ptrue(p_128.b, VL16);
             } else {
+                std::cout << __LINE__ << std::endl;
                 ld1b(z_tmp0.s, p_512 / T_z, ptr(x_tmp_addr));
                 sxtb(ZReg(IDX(vr_src)).s, p_512 / T_m, z_tmp0.s);
             }
@@ -608,13 +614,14 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             //vpmovzxbd(vr_src, ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             if (masked) {
-                zip1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
-                zip1(mask(ll).h, P_ALL_ONE.h, mask(ll).h);
+                std::cout << __LINE__ << std::endl;
+                zip1(mask(ll).b, mask(ll).b, mask(ll).b);
+                zip1(mask(ll).h, mask(ll).h, mask(ll).h);
                 ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
-                uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
-                uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
+                pfalse(p9.b);
+                uzp1(mask(ll).b, mask(ll).b, p9.b);
+                uzp1(mask(ll).b, mask(ll).b, p9.b);
                 uxtb(ZReg(IDX(vr_src)).s, mask(ll) / T_m, z_tmp0.s);
-                ptrue(p_128.b, VL16);
             } else {
                 ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
                 zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
@@ -1689,6 +1696,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::init_mask() {
     sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8 * max_num_ll);
 
     for (int ll = 0; ll < max_num_ll; ll++) {
+        std::cout << "jpp.tail[ll]:" << jpp.tail[ll] << std::endl;
         mov_imm(reg_mask, jpp.tail[ll]);
         str(reg_mask, ptr(X_TRANSLATOR_STACK, 8 * ll));
     }
@@ -1857,11 +1865,8 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::generate() {
     //emms();
     postamble();
 
-    if (jpp.with_eltwise && postops_injector_) {
-        /*
-      postops_injector_->prepare_table();
-      */
-    }
+    if (jpp.with_eltwise && postops_injector_)
+        postops_injector_->prepare_table();
 }
 
 template <cpu_isa_t isa>
