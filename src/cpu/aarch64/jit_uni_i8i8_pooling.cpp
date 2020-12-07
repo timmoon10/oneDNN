@@ -141,7 +141,7 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
   */
     PReg k_cmp_mask = PReg(7);
 
-    PReg mask(int idx) { return PReg(6 - idx); }
+  PReg mask(int idx) { return PReg(6 - idx); } /* 6, 5, 4, 3 */
 
     PReg p_256 = PReg(1);
     PReg p_512 = PReg(2);
@@ -153,7 +153,7 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     PReg P_MSB_256 = PReg(13);
     PReg P_MSB_384 = PReg(14);
     PReg P_ALL_ONE = PReg(15);
-  
+
     // ref to any of XYZ-regs via xreg/yreg/vreg functions
     VReg xmm_tmp = xreg(0); // temp to init vreg_tmp
     Vmm vreg_tmp = vreg(0); // max pooling : holds minimum values for data_type
@@ -579,7 +579,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
     switch (jpp.src_dt) {
         case s32:
 	  //vmovups(vr_src, ptr[aux_reg_src_w + offset]);
-	  add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
+	  add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset*data_type_size(s32), x_tmp_0);
 	  if(masked){
 	    ld1w(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
 	    mov(ZRegS(IDX(vr_src)), mask(ll)/T_m, z_tmp0.s);
@@ -591,25 +591,15 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
 	  //vpmovsxbd(vr_src, ptr[aux_reg_src_w + offset]);
 	  add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
 	  if(masked){
-	    //ldr(z_tmp0, ptr(x_tmp_addr));
-	    //ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
-	    //ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
-	    ptrue(p_128.b, VL8);
-	    and_(p_128.b, p_512/T_z, p_128.b, mask(ll).b);
-	    ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
-	    //ld1w(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
-	    //ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
-	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
-	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
+	    zip1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
+	    zip1(mask(ll).h, P_ALL_ONE.h, mask(ll).h);
+	    ld1b(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
+	    uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
+	    uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
 	    sxtb(ZReg(IDX(vr_src)).s, mask(ll)/T_m, z_tmp0.s);
 	    ptrue(p_128.b, VL16);
 	  }else{
-	    //ldr(z_tmp0, ptr(x_tmp_addr));
-	    ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
-	    //ld1b(z_tmp0.b, p_512/T_z, ptr(x_tmp_addr));
-	    //ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
-	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
-	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
+	    ld1b(z_tmp0.s, p_512/T_z, ptr(x_tmp_addr));
 	    sxtb(ZReg(IDX(vr_src)).s, p_512/T_m, z_tmp0.s);
 	  }
 	  break;
@@ -617,19 +607,14 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
 	  //vpmovzxbd(vr_src, ptr[aux_reg_src_w + offset]);
 	  add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
 	  if(masked){
-	    //ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
-	    //ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
-	    ptrue(p_128.b, VL8);
-	    and_(p_128.b, p_512/T_z, p_128.b, mask(ll).b);
-	    ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
-	    //ld1w(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
-	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
-	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
+	    zip1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
+	    zip1(mask(ll).h, P_ALL_ONE.h, mask(ll).h);
+	    ld1b(z_tmp0.s, mask(ll)/T_z, ptr(x_tmp_addr));
+	    uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
+	    uzp1(mask(ll).b, P_ALL_ONE.b, mask(ll).b);
 	    uxtb(ZReg(IDX(vr_src)).s, mask(ll)/T_m, z_tmp0.s);
 	    ptrue(p_128.b, VL16);
 	  }else{
-	    //ld1w(z_tmp0.s, p_128/T_z, ptr(x_tmp_addr));
-	    //ld1b(z_tmp0.b, p_128/T_z, ptr(x_tmp_addr));
 	    ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
 	    zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
 	    zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
@@ -1517,11 +1502,14 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_c_block() {
 
 template <>
 //void jit_uni_i8i8_pooling_fwd_ker_t<sse41>::init_mask() {}
-void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::init_mask() {}
+void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::init_mask() {
+  assert(!"unreached");
+    }
 
 template <>
 //void jit_uni_i8i8_pooling_fwd_ker_t<avx2>::init_mask() {
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::init_mask() {
+  assert(!"unreached");
   /*
     using namespace data_type;
     using cpu_isa = cpu_isa_traits<avx2>;
@@ -1637,56 +1625,18 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::init_mask() {
 template <>
  //void jit_uni_i8i8_pooling_fwd_ker_t<avx512_core>::init_mask() {
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::init_mask() {
-
   using namespace data_type;
 
-    size_t data_size = 4;
-    if (jpp.alg == pooling_max) {
-        switch (jpp.src_dt) {
-            case s32: data_size = 4; break;
-            case s8:
-            case u8: data_size = 1; break;
-            default: assert(!"unsupported src data type");
-        }
-    }
-    size_t nsimd = 512 / (data_size * 8);
-    size_t nbit = 64 / nsimd;
+  sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8 * max_num_ll);
 
-    for (int ll = 0; ll < max_num_ll; ll++) {
-      /*
-        mov(reg_mask, jpp.tail[ll]);
-        kmovq(mask(ll), reg_mask);
-      */
-      uint64_t tail_x86_64 = jpp.tail[ll];
-        uint64_t tail_aarch64 = 0x000000;
-        uint16_t w_tail_aarch64[4] = {0x0000, 0x0000, 0x0000, 0x0000};
-
-        if (nbit == 1) {
-            tail_aarch64 = tail_x86_64;
-        } else {
-            for (unsigned int ii = 0; ii < nsimd; ii++) {
-                tail_aarch64
-                        = tail_aarch64 + ((tail_x86_64 & 0x0001) << ii * nbit);
-                tail_x86_64 = tail_x86_64 >> 1;
-            }
-        }
-        w_tail_aarch64[0] = (uint16_t)((tail_aarch64)&0x000000000000ffff);
-        w_tail_aarch64[1]
-                = (uint16_t)((tail_aarch64 >> 16) & 0x000000000000ffff);
-        w_tail_aarch64[2]
-                = (uint16_t)((tail_aarch64 >> 32) & 0x000000000000ffff);
-        w_tail_aarch64[3]
-                = (uint16_t)((tail_aarch64 >> 48) & 0x000000000000ffff);
-
-        movz(XReg(reg_mask.getIdx()), uint64_t(w_tail_aarch64[0]), 0);
-        movk(XReg(reg_mask.getIdx()), uint64_t(w_tail_aarch64[1]), 16);
-        movk(XReg(reg_mask.getIdx()), uint64_t(w_tail_aarch64[2]), 32);
-	movk(XReg(reg_mask.getIdx()), uint64_t(w_tail_aarch64[3]), 48);
-        sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
-        str(XReg(reg_mask.getIdx()), ptr(X_TRANSLATOR_STACK));
-        ldr(PReg(mask(ll).getIdx()), ptr(X_TRANSLATOR_STACK));
-        add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
-    }
+  for (int ll =0; ll<max_num_ll; ll++) {
+    mov_imm(reg_mask, jpp.tail[ll]);
+    str(reg_mask, ptr(X_TRANSLATOR_STACK, 8*ll));
+  }
+  for(int ll=0; ll<max_num_ll; ll++) {
+    ldr(PReg(mask(ll)), ptr(X_TRANSLATOR_STACK));
+    add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+  }
 }
 
 template <cpu_isa_t isa>
