@@ -718,7 +718,7 @@ struct jit_resampling_call_s {
     float weight_back = 0.0f;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

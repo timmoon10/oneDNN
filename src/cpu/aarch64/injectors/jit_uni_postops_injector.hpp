@@ -76,7 +76,7 @@ public:
     jit_uni_postops_injector_t(jit_generator *host, const post_ops_t &post_ops,
             const binary_injector::static_params_t &binary_static_params,
             const lambda_jit_injectors_t &lambda_jit_injectors);
-  /*
+    /*
     jit_uni_postops_injector_t(jit_generator *host, const post_ops_t &post_ops,
             const binary_injector::static_params_t &binary_static_params,
             const eltwise_injector::static_params_t &eltwise_static_params);
@@ -120,7 +120,7 @@ public:
 private:
     post_ops_t post_ops_;
     jit_generator *host_;
-  /*
+    /*
     std::map<dnnl::impl::alg_kind_t, jit_uni_eltwise_injector_f32<isa>>
             alg_to_eltwise_injector_;
   */

@@ -33,8 +33,8 @@
 //#include "cpu/x64/injectors/jit_uni_postops_injector.hpp"
 //#include "cpu/x64/jit_avx512_core_bf16cvt.hpp"
 //#include "cpu/x64/jit_primitive_conf.hpp"
-#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
 #include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
+#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
@@ -81,7 +81,7 @@ private:
   */
     using Vmm = typename cpu_isa_traits<isa>::Vmm;
     //int vlen = cpu_isa_traits<isa>::vlen;
-  /*
+    /*
     if(cpu_isa_traits<isa>::vlen == 64){
       using Vmm = typename Xbyak_aarch64::ZReg;
     }else if(cpu_isa_traits<isa>::vlen == 32){
@@ -438,7 +438,6 @@ private:
 
     std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
             postops_injector_;
-
 };
 
 } // namespace aarch64
