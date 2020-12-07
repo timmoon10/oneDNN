@@ -38,11 +38,11 @@ template <cpu_isa_t isa>
 struct jit_uni_i8i8_pooling_fwd_t : public primitive_t {
     struct pd_t : public cpu_pooling_fwd_pd_t {
         using cpu_pooling_fwd_pd_t::cpu_pooling_fwd_pd_t;
-      /*
+        /*
         DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit_int:", isa, ""),
                 jit_uni_i8i8_pooling_fwd_t);
       */
-      DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_i8i8_pooling_fwd_t);
+        DECLARE_COMMON_PD_T("jit:sve_512", jit_uni_i8i8_pooling_fwd_t);
 
         status_t init(engine_t *engine) {
             bool ok = true && mayiuse(isa) && utils::one_of(ndims(), 3, 4, 5)
@@ -93,7 +93,7 @@ private:
     std::unique_ptr<jit_uni_i8i8_pooling_fwd_ker_t<isa>> ker_;
 };
 
-} // namespace x64
+} // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

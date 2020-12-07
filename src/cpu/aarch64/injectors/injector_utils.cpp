@@ -56,28 +56,28 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
         std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,
         //        std::initializer_list<Xbyak::Xmm> vmm_to_preserve)
         std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve)
-        //std::initializer_list<Xbyak_aarch64::ZReg> vmm_to_preserve)
+    //std::initializer_list<Xbyak_aarch64::ZReg> vmm_to_preserve)
     : host_(host)
     , reg64_stack_(reg64_to_preserve)
     , vmm_stack_(vmm_to_preserve)
     , vmm_to_preserve_size_bytes_(
               calc_vmm_to_preserve_size_bytes(vmm_to_preserve)) {
 
-    for (const auto &reg : reg64_to_preserve){
-      //host_->push(reg);
-      CG::str(xa::XReg(IDX(reg)), xa::pre_ptr(xa::XReg(22), -8));
+    for (const auto &reg : reg64_to_preserve) {
+        //host_->push(reg);
+        CG::str(xa::XReg(IDX(reg)), xa::pre_ptr(xa::XReg(22), -8));
     }
 
     if (!vmm_stack_.empty()) {
-      //host_->sub(host_->rsp, vmm_to_preserve_size_bytes_);
-      CG::sub(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_);
-      
-      auto stack_offset = vmm_to_preserve_size_bytes_;
-      for (const auto &vmm : vmm_to_preserve) {
-	stack_offset -= get_vmm_size_bytes(vmm);
-	const auto idx = vmm.getIdx();
-	if (/*vmm.isXMM()*/false){
-	  /*
+        //host_->sub(host_->rsp, vmm_to_preserve_size_bytes_);
+        CG::sub(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_);
+
+        auto stack_offset = vmm_to_preserve_size_bytes_;
+        for (const auto &vmm : vmm_to_preserve) {
+            stack_offset -= get_vmm_size_bytes(vmm);
+            const auto idx = vmm.getIdx();
+            if (/*vmm.isXMM()*/ false) {
+                /*
 	    host_->uni_vmovups(
 	    host_->ptr[host_->rsp + stack_offset], Xbyak::Xmm(idx));
 	    
@@ -85,42 +85,44 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
 	    host_->uni_vmovups(
 	    host_->ptr[host_->rsp + stack_offset], Xbyak::Ymm(idx));
 	  */
-	}else{
-	  /*
+            } else {
+                /*
 	    host_->uni_vmovups(
 	    host_->ptr[host_->rsp + stack_offset], Xbyak::Zmm(idx));
 	  */
-	  CG::add_imm(xa::XReg(28), xa::XReg(4), stack_offset, xa::XReg(23));
-	  CG::str(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
-	}
-      }
+                CG::add_imm(
+                        xa::XReg(28), xa::XReg(4), stack_offset, xa::XReg(23));
+                CG::str(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
+            }
+        }
     }
 }
-  
-  register_preserve_guard_t::~register_preserve_guard_t() {
+
+register_preserve_guard_t::~register_preserve_guard_t() {
 
     auto tmp_stack_offset = 0;
 
     while (!vmm_stack_.empty()) {
-      //const Xbyak::Xmm &vmm = vmm_stack_.top();
-	const xa::VReg &vmm = vmm_stack_.top();
+        //const Xbyak::Xmm &vmm = vmm_stack_.top();
+        const xa::VReg &vmm = vmm_stack_.top();
         const auto idx = vmm.getIdx();
-        if (/*vmm.isXMM()*/false){
-	  /*
+        if (/*vmm.isXMM()*/ false) {
+            /*
             host_->uni_vmovups(
                     Xbyak::Xmm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
         }else if (vmm.isYMM()){
             host_->uni_vmovups(
                     Xbyak::Ymm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
 	  */
-        }else{
-	  /*
+        } else {
+            /*
             host_->uni_vmovups(
                     Xbyak::Zmm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
 	  */
-	  CG::add_imm(xa::XReg(28), xa::XReg(4), tmp_stack_offset, xa::XReg(23));
-	  CG::ldr(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
-	}
+            CG::add_imm(
+                    xa::XReg(28), xa::XReg(4), tmp_stack_offset, xa::XReg(23));
+            CG::ldr(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
+        }
 
         tmp_stack_offset += get_vmm_size_bytes(vmm);
         vmm_stack_.pop();
@@ -130,13 +132,15 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
         /*
         host_->add(host_->rsp, vmm_to_preserve_size_bytes_);
       */
-      CG::add_imm(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_, xa::XReg(23));
+        CG::add_imm(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_,
+                xa::XReg(23));
     }
 
     while (!reg64_stack_.empty()) {
-      //host_->pop(reg64_stack_.top());
-      CG::ldr(xa::XReg(IDX(reg64_stack_.top())), xa::post_ptr(xa::XReg(22), 8));
-      reg64_stack_.pop();
+        //host_->pop(reg64_stack_.top());
+        CG::ldr(xa::XReg(IDX(reg64_stack_.top())),
+                xa::post_ptr(xa::XReg(22), 8));
+        reg64_stack_.pop();
     }
 }
 
