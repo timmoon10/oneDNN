@@ -39,11 +39,11 @@ namespace eltwise_injector {
 struct static_params_t {
 
     static_params_t(bool save_state = true,
-            //Xbyak::Reg64 p_table = Xbyak::util::rax,
-            Xbyak_aarch64::XReg p_table = Xbyak_aarch64::XReg(0),
-            //Xbyak::Opmask k_mask = Xbyak::Opmask(1), bool is_fwd = true,
-            Xbyak_aarch64::PReg k_mask = Xbyak_aarch64::PReg(1),
-            bool is_fwd = true, bool use_dst = false)
+		    //Xbyak::Reg64 p_table = Xbyak::util::rax,
+		    Xbyak_aarch64::XReg p_table = Xbyak_aarch64::XReg(0),
+		    //Xbyak::Opmask k_mask = Xbyak::Opmask(1), bool is_fwd = true,
+		    Xbyak_aarch64::PReg k_mask = Xbyak_aarch64::PReg(1), bool is_fwd = true,
+            bool use_dst = false)
         : save_state(save_state)
         , p_table(p_table)
         , k_mask(k_mask)
@@ -51,7 +51,7 @@ struct static_params_t {
         , use_dst(use_dst) {}
 
     bool save_state;
-    /*
+  /*
     Xbyak::Reg64 p_table;
     Xbyak::Opmask k_mask;
   */
@@ -61,7 +61,7 @@ struct static_params_t {
     bool use_dst;
 };
 } // namespace eltwise_injector
-/*
+  /*
 template <cpu_isa_t isa>
 struct jit_uni_eltwise_injector_f32 {
     using Vmm = typename cpu_isa_traits<isa>::Vmm;
@@ -309,7 +309,7 @@ private:
     mapped_table_t entry_map_;
 };
   */
-} // namespace aarch64
+} // namespace x64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl

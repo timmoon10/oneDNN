@@ -51,26 +51,26 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
                 bf16_emu_reserv_1, bf16_emu_reserv_2, bf16_emu_reserv_3,
                 bf16_emu_reserv_4, bf16_emu_reserv_5);
 
-    if (jpp.with_postops) {
+        if (jpp.with_postops) {
 
         static constexpr bool use_per_oc_spatial_strategy = false;
         static constexpr bool preserve_gpr = true;
         static constexpr bool preserve_vmm = true;
         static constexpr bool use_exact_tail_scalar_bcast = false;
         static constexpr int sse41_single_block_size
-                //                = cpu_isa_traits<sse41>::vlen / sizeof(float);
-                = cpu_isa_traits<asimd>::vlen / sizeof(float);
+	  //                = cpu_isa_traits<sse41>::vlen / sizeof(float);
+                = cpu_isa_traits<asimd>::vlen / sizeof(float);	
         size_t postop_tail = static_cast<size_t>(jpp.c_tail);
-        //        const bool high_half_block_empty = isa == sse41
-        const bool high_half_block_empty = isa == asimd
+	//        const bool high_half_block_empty = isa == sse41
+        const bool high_half_block_empty = isa == asimd	
                 && static_cast<size_t>(jpp.c_tail) > sse41_single_block_size;
         if (high_half_block_empty) postop_tail -= sse41_single_block_size;
 
         const binary_injector::rhs_arg_static_params_t rhs_sp {
-                //static_cast<std::size_t>(this->xmm4.getIdx()), this->rax,
-                static_cast<std::size_t>(VReg(4).getIdx()), XReg(0),
-                //this->rdx, preserve_gpr, preserve_vmm,
-                XReg(2), preserve_gpr, preserve_vmm,
+							       //static_cast<std::size_t>(this->xmm4.getIdx()), this->rax,
+							       static_cast<std::size_t>(VReg(4).getIdx()), XReg(0),
+							       //this->rdx, preserve_gpr, preserve_vmm,
+							       XReg(2), preserve_gpr, preserve_vmm,
                 GET_OFF(post_ops_binary_rhs_arg_vec),
                 memory_desc_wrapper(*dst_md), postop_tail, k_c_tail_mask,
                 use_exact_tail_scalar_bcast};
@@ -81,7 +81,8 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
         postops_injector_
                 = utils::make_unique<injector::jit_uni_postops_injector_t<isa>>(
                         this, jpp.post_ops, bsp);
-    }
+
+        }
 }
 
 template <cpu_isa_t isa>
@@ -430,10 +431,11 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
         /*TODO: maybe use vpmovzxwd + vpslld,
              * in order to free up vmm_idx() register */
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
-            int vlen = cpu_isa_traits<isa>::vlen;
+	  int vlen = cpu_isa_traits<isa>::vlen;
             if (vlen == 64) {
                 //get mem address
-                add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
+                add_imm(
+                        x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (is_c_tail_proccessing) {
                     assert(!"unreachable");
                 } else {
@@ -446,7 +448,8 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 }
             } else if (vlen == 32) {
                 //get mem address
-                add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
+                add_imm(
+                        x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (is_c_tail_proccessing) {
                     assert(!"unreachable");
                 } else {
@@ -460,7 +463,8 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                 }
             } else if (vlen == 16) {
                 //get mem address
-                add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
+                add_imm(
+                        x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
                 if (is_c_tail_proccessing) {
                     assert(!"unreachable");
                 } else {
@@ -480,7 +484,7 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
 
             ld1w(ZRegS(idx), p_256 / T_z, ptr(x_tmp_addr));
-            int vlen = cpu_isa_traits<isa>::vlen;
+	    int vlen = cpu_isa_traits<isa>::vlen;
             if (vlen == 64) {
                 mov(z_tmp0.h, 31);
                 and_(z_tmp0.b, p_512, ZRegB(reg_idx()));
@@ -496,7 +500,8 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                     mov(z_tmp3.h, p_tmp1 / T_m, z_tmp2.h);
                 }
                 mov(ZRegH(idx), 0);
-                mov(ZRegH(idx), PReg(IDX(k_mask_cvt)) / T_m, z_tmp3.h);
+                mov(ZRegH(idx), PReg(IDX(k_mask_cvt)) / T_m,
+                        z_tmp3.h);
             } else if (vlen == 32) {
                 mov(z_tmp0.h, 15);
                 and_(z_tmp0.b, p_512, ZRegB(reg_idx()));
@@ -506,7 +511,8 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                     mov(z_tmp3.h, p_tmp1 / T_m, z_tmp2.h);
                 }
                 mov(ZRegH(idx), 0);
-                mov(ZRegH(idx), PReg(IDX(k_mask_cvt)) / T_m, z_tmp3.h);
+                mov(ZRegH(idx), PReg(IDX(k_mask_cvt)) / T_m,
+                        z_tmp3.h);
                 mov(ZRegH(idx), P_MSB_256 / T_m, 0);
             } else if (vlen == 16) {
                 mov(z_tmp0.h, 15);
@@ -517,7 +523,8 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
                     mov(z_tmp3.h, p_tmp1 / T_m, z_tmp2.h);
                 }
                 mov(ZRegH(idx), 0);
-                mov(ZRegH(idx), PReg(IDX(k_mask_cvt)) / T_m, z_tmp3.h);
+                mov(ZRegH(idx), PReg(IDX(k_mask_cvt)) / T_m,
+                        z_tmp3.h);
                 mov(ZRegH(idx), P_MSB_384 / T_m, 0);
             } else {
                 assert(!"unreachable");
@@ -578,16 +585,17 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
         //get mem address
         add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
-            int vlen = cpu_isa_traits<isa>::vlen;
+	  int vlen = cpu_isa_traits<isa>::vlen;
             if (vlen == 64) {
-                st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
+                st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)),
+                        ptr(x_tmp_addr));
             } else if (vlen == 32) {
-                bic(p_tmp0.b, P_ALL_ONE / T_z, PRegB(IDX(k_c_tail_mask)),
-                        P_MSB_256.b);
+                bic(p_tmp0.b, P_ALL_ONE / T_z,
+                        PRegB(IDX(k_c_tail_mask)), P_MSB_256.b);
                 st1h(ZRegH(idx), p_tmp0, ptr(x_tmp_addr));
             } else if (vlen == 16) {
-                bic(p_tmp0.b, P_ALL_ONE / T_z, PRegB(IDX(k_c_tail_mask)),
-                        P_MSB_384.b);
+                bic(p_tmp0.b, P_ALL_ONE / T_z,
+                        PRegB(IDX(k_c_tail_mask)), P_MSB_384.b);
                 st1h(ZRegH(idx), p_tmp0, ptr(x_tmp_addr));
             } else {
                 assert(!"unreachable");
@@ -656,8 +664,8 @@ bool jit_uni_pool_kernel<isa>::post_ops_ok(jit_pool_conf_t &jpp,
             if (entry.is_eltwise()) {
                 jpp.with_eltwise = true;
             } else if (entry.is_binary()) {
-                //if (isa != avx512_core
-                if (isa != sve_512
+	      //if (isa != avx512_core
+                if (isa != sve_512	      
                         && entry.binary.src1_desc.data_type == data_type::bf16)
                     return false;
 
@@ -675,30 +683,29 @@ bool jit_uni_pool_kernel<isa>::post_ops_ok(jit_pool_conf_t &jpp,
 template <cpu_isa_t isa>
 void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
         const std::function<bool(int)> &is_tail_predicate) {
-    //assert(!"unreachable");
+  //assert(!"unreachable");
 
     binary_injector::rhs_arg_dynamic_params_t rhs_arg_params;
     const int end_idx = vmm_idx_upper_bound() + 1;
     const int start_idx = end_idx - (ur_bc * ur_w);
     const bool sse41_postops_disabled
-            //= isa == sse41 && disable_postops_when_sse_high_half_processed_;
+      //= isa == sse41 && disable_postops_when_sse_high_half_processed_;
             = isa == asimd && disable_postops_when_sse_high_half_processed_;
 
     if (jpp.with_binary && !sse41_postops_disabled) {
 
         static constexpr int sse41_simd_w
-                //                = cpu_isa_traits<sse41>::vlen / sizeof(float);
-                = cpu_isa_traits<asimd>::vlen / sizeof(float);
+	  //                = cpu_isa_traits<sse41>::vlen / sizeof(float);
+                = cpu_isa_traits<asimd>::vlen / sizeof(float);	
         const int sse_elem_off = sse_high_half ? sse41_simd_w : 0;
         for (int jj = 0; jj < ur_w; jj++) {
             for (int bci = 0; bci < ur_bc; bci++) {
                 const auto vmm_idx
                         = vreg(reg_ind(0, bci, jj, ur_bc, ur_w)).getIdx();
-                add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(c_elem_off),
-                        x_tmp_0);
+		add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(c_elem_off), x_tmp_0);
                 rhs_arg_params.vmm_idx_to_oc_elem_off_addr.emplace(
-                        //vmm_idx, ptr[reg_param + GET_OFF(c_elem_off)]);
-                        vmm_idx, ptr(x_tmp_addr));
+								   //vmm_idx, ptr[reg_param + GET_OFF(c_elem_off)]);
+								   vmm_idx, ptr(x_tmp_addr));
                 rhs_arg_params.vmm_idx_to_oc_elem_off_val.emplace(
                         vmm_idx, bci * c_block + sse_elem_off);
                 if (is_tail_predicate && is_tail_predicate(bci))
@@ -707,6 +714,7 @@ void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
         }
     }
     postops_injector_->compute_vector_range(start_idx, end_idx, rhs_arg_params);
+
 }
 
 template <cpu_isa_t isa>
@@ -892,13 +900,13 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                         assert(!"unreachable");
                     }
                     if (jpp.is_bf16) {
-                        if (!isa_has_bf16(jpp.isa)) {
+		      if (!isa_has_bf16(jpp.isa)){
                             bf16_emu_->vcvtneps2bf16(inpyr, zreg(inpr_i));
-                        } else {
-                            /*
+		      }else{
+			/*
                             vcvtneps2bf16(inpyr, inpvr);
 			*/
-                        }
+		      }
                     }
                     store(reg_idx(inpr_i), aux_reg_input, input_offset,
                             is_tail_processing(bci));
@@ -1013,13 +1021,13 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                 if (jpp.is_bf16) {
                     const auto acczr = zreg(accr_i);
                     const auto accyr = yreg(accr_i);
-                    if (!isa_has_bf16(jpp.isa)) {
+                    if (!isa_has_bf16(jpp.isa)){
                         bf16_emu_->vcvtneps2bf16(accyr, acczr);
-                    } else {
-                        /*
+                    }else{
+		      /*
                         vcvtneps2bf16(accyr, accvr);
 		      */
-                    }
+		    }
                 }
                 store(reg_idx(accr_i), xreg_output, output_offset,
                         is_tail_processing(bci));
@@ -1146,8 +1154,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
     L(kh_label);
     {
         for (int ki = 0; ki < kw; ki++) {
-            int jj_start
-                    = nstl::max(0, utils::div_up(pad_l - ki, stride_w)); //test
+	  int jj_start = nstl::max(0, utils::div_up(pad_l - ki, stride_w)); //test
             int jj_end = ur_w
                     - utils::div_up(
                             nstl::max(0, ki + pad_r - (kw - 1)), stride_w);
@@ -2181,13 +2188,13 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
         if (jpp.is_bf16) {
             auto acczr = zreg(accr_i);
             auto accyr = yreg(accr_i);
-            if (!isa_has_bf16(jpp.isa)) {
+            if (!isa_has_bf16(jpp.isa)){
                 bf16_emu_->vcvtneps2bf16(accyr, acczr);
-            } else {
-                /*
+            }else{
+	      /*
                 vcvtneps2bf16(accyr, accvr);
 	      */
-            }
+	    }
         }
         store(reg_idx(accr_i), xreg_output, output_offset,
                 is_tail_processing(bci));
@@ -2559,13 +2566,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     uzp1(p_tmp0.b, PRegB(IDX(k_c_tail_mask)), p_tmp1.b);
                     // 16-bit context -> 8-bit conext
                     uzp1(p_tmp0.b, p_tmp0.b, p_tmp1.b);
-                    add_imm(X_DEFAULT_ADDR, XReg(IDX(reg_index)), step_index,
-                            X_TMP_0);
-                    ld1b(z_indvr.b, p_tmp0 / T_z, ptr(X_DEFAULT_ADDR));
+                    add_imm(X_DEFAULT_ADDR, XReg(IDX(reg_index)),
+                            step_index, X_TMP_0);
+                    ld1b(z_indvr.b, p_tmp0 / T_z,
+                            ptr(X_DEFAULT_ADDR));
                     zip1(z_indvr.b, z_indvr.b, z_tmp0.b);
                     zip1(z_indvr.h, z_indvr.h, z_tmp0.h);
-                    uxtb(ZRegS(IDX(indvr)), PReg(IDX(k_c_tail_mask)) / T_m,
-                            z_indvr.s);
+                    uxtb(ZRegS(IDX(indvr)),
+                            PReg(IDX(k_c_tail_mask)) / T_m, z_indvr.s);
 
                 } else {
                     /* get mem address */
@@ -2744,7 +2752,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                 } else {
                     auto indzr = zreg(inpr_i);
                     auto indyr = yreg(inpr_i);
-
+		    
                     cmpeq(PRegS(IDX(k_store_mask)), p_lsb / T_z,
                             ZRegS(IDX(indvr)), ZRegS(IDX(vmm_k_offset)));
 
@@ -2771,13 +2779,13 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     }
 
                     if (jpp.is_bf16) {
-                        if (!isa_has_bf16(jpp.isa)) {
+		      if (!isa_has_bf16(jpp.isa)){
                             bf16_emu_->vcvtneps2bf16(indyr, indzr);
-                        } else {
-                            /*
+		      }else{
+			/*
                             vcvtneps2bf16(indyr, inpvr);
 			*/
-                        }
+		      }
                     }
                     store(inpvr.getIdx(), aux_xreg_input, inp_offset,
                             is_tail_processing(bci));
@@ -2927,14 +2935,14 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
     ldr(XReg(IDX(reg_zero_ptr)), ptr(x_tmp_addr));
 
     int vlen = cpu_isa_traits<isa>::vlen;
-    if (vlen == 64) {
-        using Vmm = typename Xbyak_aarch64::ZReg;
-    } else if (vlen == 32) {
-        using Vmm = typename Xbyak_aarch64::ZReg;
-    } else if (vlen == 16) {
-        using Vmm = typename Xbyak_aarch64::VReg;
-    } else {
-        assert(!"unreachable");
+    if(vlen == 64){
+      using Vmm = typename Xbyak_aarch64::ZReg;
+    }else if(vlen == 32){
+      using Vmm = typename Xbyak_aarch64::ZReg;
+    }else if(vlen == 16){
+      using Vmm = typename Xbyak_aarch64::VReg;
+    }else{
+      assert(!"unreachable");
     }
     Vmm vzero = vmm_tmp;
     //VReg vzero = vmm_tmp
@@ -3012,7 +3020,24 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
 
     L(l_skip);
 }
+  /*
+void db_clear() { CodeArray::size_ = 0; }
+  
+void binCommit() {
+  size_t num32bits = CodeArray::size_;
 
+  num32bits = (num32bits + 3) - ((num32bits + 3) % 4);
+  num32bits /= 4;
+
+  uint32_t *tmp = reinterpret_cast<uint32_t *>(CodeArray::top_);
+
+  for (size_t i = 0; i < num32bits; i++) {
+    CG::dw(tmp[i]);
+  }
+
+  db_clear();
+}
+  */
 template <cpu_isa_t isa>
 void jit_uni_pool_kernel<isa>::generate() {
 
@@ -3307,7 +3332,7 @@ void jit_uni_pool_kernel<isa>::generate() {
                 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15};
         for (size_t i = 0; i < sizeof(_idx) / sizeof(_idx[0]); ++i)
             CodeArray::dw(_idx[i]);
-        binCommit();
+        //binCommit();
     }
 }
 

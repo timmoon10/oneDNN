@@ -37,7 +37,7 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
 
     for (const auto &post_op : post_ops.entry_) {
         if (post_op.is_eltwise()) {
-            /*
+	  /*
             alg_to_eltwise_injector_.emplace(post_op.eltwise.alg,
                     jit_uni_eltwise_injector_f32<isa>(host_, post_op.eltwise,
                             esp.save_state, esp.p_table, esp.k_mask, esp.is_fwd,
@@ -68,7 +68,7 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const lambda_jit_injectors_t &lambda_jit_injectors)
     : jit_uni_postops_injector_t(host, post_ops, binary_static_params,
             eltwise_injector::static_params_t(), lambda_jit_injectors) {}
-/*
+  /*
 template <cpu_isa_t isa>
 jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const post_ops_t &post_ops,
@@ -96,7 +96,7 @@ void jit_uni_postops_injector_t<isa>::compute_vector_range(
     std::size_t rhs_arg_idx = 0;
     for (const auto &post_op : post_ops_.entry_) {
         if (post_op.is_eltwise()) {
-            /*
+	  /*
             alg_to_eltwise_injector_.at(post_op.eltwise.alg)
                     .compute_vector_range(vmm_idxs);
 	  */
@@ -105,14 +105,14 @@ void jit_uni_postops_injector_t<isa>::compute_vector_range(
                     vmm_idxs, rhs_arg_idx, post_op, rhs_arg_params);
             ++rhs_arg_idx;
         } else {
-            /*
+	  /*
             const auto lam = lambda_jit_injectors_.find(post_op.kind);
             if (lam != lambda_jit_injectors_.end()) lam->second();
 	  */
         }
     }
 }
-/*
+  /*
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::prepare_table(bool gen_table) {
     for (auto &alg_elt_inject : alg_to_eltwise_injector_)
@@ -124,7 +124,7 @@ void jit_uni_postops_injector_t<isa>::compute_vector(size_t idx,
         const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params) {
     compute_vector_range({idx}, rhs_arg_params);
 }
-/*
+  /*
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::set_lambda_injector(
         dnnl_primitive_kind_t kind, const std::function<void()> &jit_injector) {
@@ -174,7 +174,7 @@ bool post_ops_ok(std::initializer_list<post_op_type> accepted_post_op_types,
             : true;
 }
   */
-/*
+  /*
 template bool post_ops_ok<avx512_core_bf16>(std::initializer_list<post_op_type>,
         const post_ops_t &, const memory_desc_wrapper &, bool);
 template bool post_ops_ok<avx512_core>(std::initializer_list<post_op_type>,
@@ -188,7 +188,7 @@ template bool post_ops_ok<avx>(std::initializer_list<post_op_type>,
 template bool post_ops_ok<sse41>(std::initializer_list<post_op_type>,
         const post_ops_t &, const memory_desc_wrapper &, bool);
   */
-/*
+  /*
 template class jit_uni_postops_injector_t<avx512_core_bf16>;
 template class jit_uni_postops_injector_t<avx512_core>;
 template class jit_uni_postops_injector_t<avx512_common>;
@@ -201,7 +201,7 @@ template class jit_uni_postops_injector_t<sve_256>;
 template class jit_uni_postops_injector_t<sve_128>;
 template class jit_uni_postops_injector_t<asimd>;
 } // namespace injector
-} // namespace aarch64
+} // namespace x64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
