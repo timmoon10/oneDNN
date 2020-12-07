@@ -101,7 +101,8 @@ struct bf16_emulation_t {
     }
 
     void vcvtneps2bf16(Ymm_t &out, Zmm_t in) {
-        vcvtneps2bf16(out, in, tr0_, one_, even_, selector_);
+      //vcvtneps2bf16(out, in, tr0_, one_, even_, selector_);
+      vcvtneps2bf16(out, xa::VReg(IDX(in)), xa::VReg(IDX(tr0_)), one_, xa::VReg(IDX(even_)), selector_);
     }
 
     void vcvtneps2bf16(Xmm_t &out, Ymm_t in) {
@@ -117,8 +118,8 @@ struct bf16_emulation_t {
 
 private:
     void vcvtneps2bf16(const Xmm_t &out, const Xmm_t &in,
-            const Xmm_t &tr0, const Xmm_t &one, const Xmm_t &even,
-            const Xmm_t &selector) {
+            const Xmm_t &tr0, const Ymm_t &one, const Xmm_t &even,
+            const Ymm_t &selector) {
       //host_->vpsrld(tr0, in, 16);
       CG::lsr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(in)), 16);
       CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384/xa::T_m, 0);
@@ -215,15 +216,15 @@ private:
       CG::uzp1(xa::ZRegH(IDX(out)), z_tmp.h, xa::ZRegH(IDX(out)));
     }
 
-    void vcvtneps2bf16(const Xbyak_aarch64::AdrNoOfs &out, const Xmm_t &in,
-            const Xmm_t &tr0, const Xbyak_aarch64::AdrNoOfs &one, const Xmm_t &even,
-            const Xbyak_aarch64::AdrNoOfs &selector) {
+    void vcvtneps2bf16(const Ymm_t &out, const Xmm_t &in,
+            const Xmm_t &tr0, const Zmm_t &one, const Xmm_t &even,
+            const Zmm_t &selector) {
       //host_->vpsrld(tr0, in, 16);
       CG::lsr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(in)), 16);
       CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384/xa::T_m, 0);
 
       //host_->vpandd(tr0, tr0, one);
-      CG::ldr(z_tmp, one);
+      CG::mov(z_tmp.d, one.d);
       CG::and_(xa::ZReg(IDX(tr0)).d,xa::ZReg(IDX(tr0)).d, z_tmp.d);
       CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384/xa::T_m, 0);
 
@@ -282,8 +283,7 @@ private:
       CG::mov(z_tmp3.s, P_TMP_0/xa::T_m, 4);
       CG::bic(p_tmp.b, p_tmp/xa::T_z, p_tmp.b, P_TMP_0.b);
       CG::fcmeq(P_TMP_0.s, p_tmp/xa::T_z, z_tmp.s, z_tmp2.s);
-      //CG::mov(z_tmp2.d, xa::ZRegD(IDX(selector)));
-      CG::ldr(z_tmp2, selector);
+      CG::mov(z_tmp2.d, xa::ZRegD(IDX(selector)));
       CG::mov(z_tmp3.s, P_TMP_0/xa::T_m, 5);
       CG::bic(p_tmp.b, p_tmp/xa::T_z, p_tmp.b, P_TMP_0.b);
       CG::cmplt(P_TMP_0.s, p_tmp/xa::T_z, z_tmp.s, 0);
@@ -312,8 +312,9 @@ private:
       CG::asr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(tr0)), 16);
       CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384/xa::T_m, 0);
       //host_->vpmovdw(out, tr0);
-      CG::ptrue(p_tmp.b, xa::VL16);
-      CG::st1h(xa::ZReg(IDX(tr0)).s, p_tmp, out);
+      CG::mov(z_tmp.d, xa::ZRegD(IDX(tr0)));
+      CG::dup(xa::ZRegS(IDX(out)), 0);
+      CG::uzp1(xa::ZRegH(IDX(out)), z_tmp.h, xa::ZRegH(IDX(out)));
     }
 
 public:
@@ -450,9 +451,11 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
 
         bf16_emu_ = new bf16_emulation_t(
                 this, one, even, selector, scratch, fp32_tmp);
-
+	/*
         generate();
         jit_ker_ = (void (*)(bf16_support::jit_call_t *))getCode();
+	*/
+	create_kernel();
     }
 
     ~jit_avx512_core_cvt_ps_to_bf16_t() { delete bf16_emu_; }
@@ -695,8 +698,11 @@ struct jit_avx512_core_cvt_bf16_to_ps_t : public jit_generator {
     jit_avx512_core_cvt_bf16_to_ps_t(
             bool with_add = false, size_t row_stride = 0)
         : with_add_(with_add), row_stride_(row_stride) {
+      /*
         generate();
         jit_ker_ = (decltype(jit_ker_))getCode();
+      */
+      create_kernel();
     }
 
     void generate();

@@ -3020,7 +3020,24 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
 
     L(l_skip);
 }
+  /*
+void db_clear() { CodeArray::size_ = 0; }
+  
+void binCommit() {
+  size_t num32bits = CodeArray::size_;
 
+  num32bits = (num32bits + 3) - ((num32bits + 3) % 4);
+  num32bits /= 4;
+
+  uint32_t *tmp = reinterpret_cast<uint32_t *>(CodeArray::top_);
+
+  for (size_t i = 0; i < num32bits; i++) {
+    CG::dw(tmp[i]);
+  }
+
+  db_clear();
+}
+  */
 template <cpu_isa_t isa>
 void jit_uni_pool_kernel<isa>::generate() {
 
@@ -3315,7 +3332,7 @@ void jit_uni_pool_kernel<isa>::generate() {
                 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15};
         for (size_t i = 0; i < sizeof(_idx) / sizeof(_idx[0]); ++i)
             CodeArray::dw(_idx[i]);
-        binCommit();
+        //binCommit();
     }
 }
 
