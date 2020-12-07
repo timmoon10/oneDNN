@@ -380,6 +380,7 @@ inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
     sub_imm(XReg(idx), XReg(idx), val_to_store.getBit(), x_tmp_0);
 
     int vlen = cpu_isa_traits<isa>::vlen;
+
     if (vlen == 64) {
         //str(ZReg(IDX(val_to_store)), ptr(XReg(IDX(rsp))));
         str(ZReg(IDX(val_to_store)), ptr(rsp));
@@ -878,6 +879,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                             is_tail_processing(bci));
 
                     int vlen = cpu_isa_traits<isa>::vlen;
+
                     if (vlen == 64) {
                         fadd(ZReg(IDX(inpvr)).s, ZReg(IDX(inpvr)).s,
                                 ZReg(IDX(accvr)).s);
@@ -912,6 +914,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                                 is_tail_processing(bci));
 
                         int vlen = cpu_isa_traits<isa>::vlen;
+
                         if (vlen == 64) {
                             fadd(ZReg(IDX(accvr)).s, ZReg(IDX(accvr)).s,
                                     ZReg(IDX(vmm_tmp_1)).s);
@@ -932,6 +935,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                         //get mem address
                         add_imm(x_tmp_addr, XReg(IDX(aux_reg_input)),
                                 input_offset, x_tmp_0);
+
                         if (vlen == 64) {
                             ldr(z_tmp0, ptr(x_tmp_addr));
                             fadd(ZReg(IDX(accvr)).s, ZReg(IDX(accvr)).s,
@@ -2131,7 +2135,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
             if (isa == sve_128 && !mayiuse(sve_256)) {
                 /*
 	      //Xmm t(vmm_mask.getIdx());
-                XReg t(vmm_mask.getIdx());	      
+                XReg t(vmm_mask.getIdx());
                 avx_vpadd1(vmm_k_offset, xmm_tmp, t);
 	      */
             } else {
@@ -2727,7 +2731,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     } else {
                         assert(!"unreachable");
                     }
-		    
+
                     if (is_tail_processing(bci)) {
 			if (vlen == 32) {
 			  and_(ZRegD(IDX(cvtvr)), ZRegD(IDX(cvtvr)), ZRegD(IDX(vmm_c_tail_mask)));
@@ -2736,7 +2740,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
 			  and_(VReg16B(IDX(cvtvr)), VReg16B(IDX(cvtvr)), VReg16B(IDX(vmm_c_tail_mask)));
 			} else {
 			  assert(!"unreachable");
-			}			
+			}
                     }
                     vmaskmovps(
                             vmmword[aux_reg_input + inp_offset], cvtvr, inpvr);
@@ -2750,6 +2754,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
 
                     not_(p_tmp0.b, P_ALL_ONE.b, PRegB(IDX(k_store_mask)));
                     int vlen = cpu_isa_traits<isa>::vlen;
+
                     if (vlen == 64) {
                         mov(ZRegD(IDX(vmm_tmp)), ZRegD(IDX(outvr)));
                         mov(ZReg(IDX(vmm_tmp)).s, p_tmp0 / T_m, 0);

@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -14,14 +15,9 @@
 * limitations under the License.
 *******************************************************************************/
 #include <numeric>
-//#include "cpu/x64/injectors/injector_utils.hpp"
 #include "cpu/aarch64/injectors/injector_utils.hpp"
 
 #ifdef DNNL_AARCH64
-#ifdef CG
-#undef CG
-#endif
-#define CG host_->Xbyak_aarch64::CodeGenerator
 #define IDX(a) static_cast<uint32_t>(a.getIdx())
 #endif //#ifdef DNNL_AARCH64
 
@@ -33,18 +29,17 @@ namespace injector_utils {
 
 namespace xa = Xbyak_aarch64;
 
-//static std::size_t get_vmm_size_bytes(const Xbyak::Xmm &vmm) {
 static std::size_t get_vmm_size_bytes(const Xbyak_aarch64::VReg &vmm) {
     static constexpr int byte_size_bits = 8;
-    return vmm.getBit() / byte_size_bits;
+    if (mayiuse(sve_512))
+        return Xbyak_aarch64::ZReg(vmm.getIdx()).getBit() / byte_size_bits;
+    else
+        return vmm.getBit() / byte_size_bits;
 }
 
 static std::size_t calc_vmm_to_preserve_size_bytes(
-        //        const std::initializer_list<Xbyak::Xmm> &vmm_to_preserve) {
         const std::initializer_list<Xbyak_aarch64::VReg> &vmm_to_preserve) {
-
     return std::accumulate(vmm_to_preserve.begin(), vmm_to_preserve.end(),
-            //            std::size_t(0u), [](std::size_t accum, const Xbyak::Xmm &vmm) {
             std::size_t(0u),
             [](std::size_t accum, const Xbyak_aarch64::VReg &vmm) {
                 return accum + get_vmm_size_bytes(vmm);
@@ -52,48 +47,30 @@ static std::size_t calc_vmm_to_preserve_size_bytes(
 }
 
 register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
-        //        std::initializer_list<Xbyak::Reg64> reg64_to_preserve,
         std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,
-        //        std::initializer_list<Xbyak::Xmm> vmm_to_preserve)
         std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve)
-    //std::initializer_list<Xbyak_aarch64::ZReg> vmm_to_preserve)
     : host_(host)
     , reg64_stack_(reg64_to_preserve)
     , vmm_stack_(vmm_to_preserve)
     , vmm_to_preserve_size_bytes_(
               calc_vmm_to_preserve_size_bytes(vmm_to_preserve)) {
 
-    for (const auto &reg : reg64_to_preserve) {
-        //host_->push(reg);
-        CG::str(xa::XReg(IDX(reg)), xa::pre_ptr(xa::XReg(22), -8));
-    }
+    for (const auto &reg : reg64_to_preserve)
+        host_->str(xa::XReg(reg), xa::pre_ptr(host_->X_TRANSLATOR_STACK, -8));
 
     if (!vmm_stack_.empty()) {
-        //host_->sub(host_->rsp, vmm_to_preserve_size_bytes_);
-        CG::sub(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_);
+        int i = 0;
+        host_->sub_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
+                host_->X_TMP_0);
 
         auto stack_offset = vmm_to_preserve_size_bytes_;
         for (const auto &vmm : vmm_to_preserve) {
-            stack_offset -= get_vmm_size_bytes(vmm);
             const auto idx = vmm.getIdx();
-            if (/*vmm.isXMM()*/ false) {
-                /*
-	    host_->uni_vmovups(
-	    host_->ptr[host_->rsp + stack_offset], Xbyak::Xmm(idx));
-	    
-            }else if (vmm.isYMM()){
-	    host_->uni_vmovups(
-	    host_->ptr[host_->rsp + stack_offset], Xbyak::Ymm(idx));
-	  */
-            } else {
-                /*
-	    host_->uni_vmovups(
-	    host_->ptr[host_->rsp + stack_offset], Xbyak::Zmm(idx));
-	  */
-                CG::add_imm(
-                        xa::XReg(28), xa::XReg(4), stack_offset, xa::XReg(23));
-                CG::str(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
-            }
+
+            if (mayiuse(sve_512))
+                host_->str(xa::ZReg(idx), xa::ptr(host_->X_SP, i++));
+            else
+                host_->str(xa::QReg(idx), xa::ptr(host_->X_SP, i++));
         }
     }
 }
@@ -101,45 +78,31 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
 register_preserve_guard_t::~register_preserve_guard_t() {
 
     auto tmp_stack_offset = 0;
+    int i = 0;
 
     while (!vmm_stack_.empty()) {
-        //const Xbyak::Xmm &vmm = vmm_stack_.top();
         const xa::VReg &vmm = vmm_stack_.top();
         const auto idx = vmm.getIdx();
-        if (/*vmm.isXMM()*/ false) {
-            /*
-            host_->uni_vmovups(
-                    Xbyak::Xmm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
-        }else if (vmm.isYMM()){
-            host_->uni_vmovups(
-                    Xbyak::Ymm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
-	  */
-        } else {
-            /*
-            host_->uni_vmovups(
-                    Xbyak::Zmm(idx), host_->ptr[host_->rsp + tmp_stack_offset]);
-	  */
-            CG::add_imm(
-                    xa::XReg(28), xa::XReg(4), tmp_stack_offset, xa::XReg(23));
-            CG::ldr(xa::ZReg(idx), xa::ptr(xa::XReg(28)));
-        }
+        if (mayiuse(sve_512))
+            host_->ldr(xa::ZReg(idx), xa::ptr(host_->X_SP, i++));
+        else
+            host_->ldr(xa::QReg(idx), xa::ptr(host_->X_SP, i++));
+
+        host_->add_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
+                host_->X_TMP_0);
 
         tmp_stack_offset += get_vmm_size_bytes(vmm);
         vmm_stack_.pop();
     }
 
     if (vmm_to_preserve_size_bytes_) {
-        /*
-        host_->add(host_->rsp, vmm_to_preserve_size_bytes_);
-      */
-        CG::add_imm(xa::XReg(4), xa::XReg(4), vmm_to_preserve_size_bytes_,
-                xa::XReg(23));
+        host_->add_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
+                host_->X_TMP_0);
     }
 
     while (!reg64_stack_.empty()) {
-        //host_->pop(reg64_stack_.top());
-        CG::ldr(xa::XReg(IDX(reg64_stack_.top())),
-                xa::post_ptr(xa::XReg(22), 8));
+        host_->ldr(xa::XReg(IDX(reg64_stack_.top())),
+                xa::post_ptr(host_->X_SP, 8));
         reg64_stack_.pop();
     }
 }
