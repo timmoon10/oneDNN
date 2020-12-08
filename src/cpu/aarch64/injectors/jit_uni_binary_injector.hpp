@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -28,11 +29,6 @@
 #include "common/c_types_map.hpp"
 #include "common/primitive_attr.hpp"
 #include "common/primitive_exec_types.hpp"
-/*
-#include "cpu/x64/cpu_isa_traits.hpp"
-#include "cpu/x64/injectors/injector_utils.hpp"
-#include "cpu/x64/jit_generator.hpp"
-*/
 #include "cpu/aarch64/cpu_isa_traits.hpp"
 #include "cpu/aarch64/injectors/injector_utils.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
@@ -265,7 +261,7 @@ public:
     jit_uni_binary_injector_t(
             jit_generator *host, const static_params_t &static_params);
 
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    using TReg = typename cpu_isa_traits<isa>::TReg;
 
     /*
      * Generates code of binary post_op injected to host primitive. Applied to
@@ -322,7 +318,7 @@ private:
     /*
      * Loads data and applies particular binary operation.
      */
-    void inject_binary(const dnnl_post_ops::entry_t &post_op, Vmm dst,
+    void inject_binary(const dnnl_post_ops::entry_t &post_op, TReg dst,
             //const Xbyak::Address &rhs_addr, bool with_tail) const;
             //const Address_t &rhs_addr, bool with_tail) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const;
@@ -357,42 +353,42 @@ private:
             int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
             std::size_t elem_size_bytes) const;
 
-    void execute_binary(alg_kind_t binary_alg, const Vmm &dst, const Vmm &lhs,
-            const Vmm &rhs) const;
+    void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
+            const TReg &rhs) const;
 
-    void execute_binary(alg_kind_t binary_alg, const Vmm &dst, const Vmm &lhs,
+    void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
             //const Address_t &rhs) const;
             const Xbyak_aarch64::AdrNoOfs &rhs) const;
     /*
      * Used in scalar broadcast strategy, broadcasting single value of given
-     * data type over entire vector Vmm register.
+     * data type over entire vector TReg register.
      */
     /*
     void execute_broadcast(const dnnl_data_type_t &data_type,
-            const Vmm &tmp_reg, const Xbyak::Address &rhs_addr,
+            const TReg &tmp_reg, const Xbyak::Address &rhs_addr,
             bool with_tail = false) const;
   */
-    void load_rhs(const dnnl_data_type_t &data_type, const Vmm &tmp_reg,
+    void load_rhs(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
             //const Xbyak::Address &rhs_addr, bool with_tail = false) const;
             //const Address_t &rhs_addr, bool with_tail = false) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr,
             bool with_tail = false) const;
     /*
     void execute_broadcast_tail(const dnnl_data_type_t &data_type,
-            const Vmm &tmp_reg, const Xbyak::Address &rhs_addr) const;
+            const TReg &tmp_reg, const Xbyak::Address &rhs_addr) const;
   */
-    void load_rhs_tail(const dnnl_data_type_t &data_type, const Vmm &tmp_reg,
+    void load_rhs_tail(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
             //const Xbyak::Address &rhs_addr) const;
             //const Address_t &rhs_addr) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
     /*
     void execute_broadcast_no_tail(const dnnl_data_type_t &data_type,
-            const Vmm &tmp_reg, const Xbyak::Address &rhs_addr) const;
+            const TReg &tmp_reg, const Xbyak::Address &rhs_addr) const;
     void execute_broadcast_s8u8_no_tail(const data_type_t &data_type,
-            const Vmm &tmp_reg, const Xbyak::Address &rhs_addr) const;
-    void load_rhs_no_tail(const dnnl_data_type_t &data_type, const Vmm &tmp_reg,
+            const TReg &tmp_reg, const Xbyak::Address &rhs_addr) const;
+    void load_rhs_no_tail(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
             const Xbyak::Address &rhs_addr) const;
-    void cvt_to_f32(const Vmm &tmp_reg) const;
+    void cvt_to_f32(const TReg &tmp_reg) const;
   */
     /*
      * Returns pair consisting of flag indication preservation is needed for vmm
@@ -414,9 +410,8 @@ private:
     //const Xbyak::Reg64 param1_;
     const Xbyak_aarch64::XReg param1_;
     const bool use_per_oc_spatial_strategy_;
-    //static constexpr bool is_avx512_ = std::is_same<Vmm, Xbyak::Zmm>::value;
     static constexpr bool is_sve_512_
-            = std::is_same<Vmm, Xbyak_aarch64::ZReg>::value;
+            = std::is_same<TReg, Xbyak_aarch64::ZReg>::value;
     /*
      * Instructions from SSE/AVX used to compute binary result like vaddps where
      * second operand is memory, require mem operand to be 16/32 byte explicitly

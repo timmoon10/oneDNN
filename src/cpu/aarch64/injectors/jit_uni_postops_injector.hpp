@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -24,12 +25,6 @@
 #include "common/primitive_attr.hpp"
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
-/*
-#include "cpu/x64/injectors/injector_utils.hpp"
-#include "cpu/x64/injectors/jit_uni_binary_injector.hpp"
-#include "cpu/x64/injectors/jit_uni_eltwise_injector.hpp"
-#include "cpu/x64/jit_generator.hpp"
-*/
 #include "cpu/aarch64/injectors/injector_utils.hpp"
 #include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 #include "cpu/aarch64/injectors/jit_uni_eltwise_injector.hpp"
@@ -76,11 +71,9 @@ public:
     jit_uni_postops_injector_t(jit_generator *host, const post_ops_t &post_ops,
             const binary_injector::static_params_t &binary_static_params,
             const lambda_jit_injectors_t &lambda_jit_injectors);
-    /*
     jit_uni_postops_injector_t(jit_generator *host, const post_ops_t &post_ops,
             const binary_injector::static_params_t &binary_static_params,
             const eltwise_injector::static_params_t &eltwise_static_params);
-  */
     jit_uni_postops_injector_t(jit_generator *host, const post_ops_t &post_ops,
             const binary_injector::static_params_t &binary_static_params,
             const eltwise_injector::static_params_t &eltwise_static_params,
@@ -94,6 +87,9 @@ public:
      */
     void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs,
             const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params);
+
+    void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
+
     /*
      * Generates code of post_ops chain injected to host primitive. Applied to
      * range <start_idx, end_idx) of vector registers' indexes.
@@ -102,6 +98,9 @@ public:
      */
     void compute_vector_range(size_t start_idx, size_t end_idx,
             const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params);
+
+    void compute_vector_range(size_t start_idx, size_t end_idx);
+
     /*
      * Generates code of post_ops chain injected to host primitive. Applied to
      * a single vector register index.
@@ -120,10 +119,8 @@ public:
 private:
     post_ops_t post_ops_;
     jit_generator *host_;
-    /*
     std::map<dnnl::impl::alg_kind_t, jit_uni_eltwise_injector_f32<isa>>
             alg_to_eltwise_injector_;
-  */
     std::unique_ptr<binary_injector::jit_uni_binary_injector_t<isa>>
             binary_injector_;
     lambda_jit_injectors_t lambda_jit_injectors_;
@@ -131,10 +128,29 @@ private:
 
 enum post_op_type { sum = 0, eltwise, binary };
 
-template <cpu_isa_t isa>
-bool post_ops_ok(std::initializer_list<post_op_type> accepted_post_op_types,
-        const post_ops_t &post_ops, const memory_desc_wrapper &dst_d,
-        bool sum_first_only = true);
+struct post_ops_ok_args_t {
+    post_ops_ok_args_t(const cpu_isa_t isa,
+            const std::vector<post_op_type> &accepted_post_op_types,
+            const post_ops_t &post_ops);
+
+    post_ops_ok_args_t(const cpu_isa_t isa,
+            const std::vector<post_op_type> &accepted_post_op_types,
+            const post_ops_t &post_ops, const memory_desc_wrapper *dst_d,
+            bool sum_at_pos_0_only, const bool sum_requires_scale_one);
+
+    post_ops_ok_args_t(const cpu_isa_t isa,
+            const std::vector<post_op_type> &accepted_post_op_types,
+            const post_ops_t &post_ops, const memory_desc_wrapper *dst_d);
+
+    const cpu_isa_t isa;
+    const std::vector<post_op_type> &accepted_post_op_types;
+    const post_ops_t &post_ops;
+    const memory_desc_wrapper *dst_d = nullptr;
+    const bool sum_at_pos_0_only = false;
+    const bool sum_requires_scale_one = false;
+};
+
+bool post_ops_ok(const post_ops_ok_args_t &args);
 
 } // namespace injector
 } // namespace aarch64

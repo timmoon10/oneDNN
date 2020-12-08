@@ -73,21 +73,21 @@ private:
     using Reg32 = Xbyak::Reg32;
     using Reg64 = Xbyak::Reg64;
 
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    using TReg = typename cpu_isa_traits<isa>::TReg;
 
     int vmm_idx_upper_bound() const noexcept {
         return utils::one_of(isa, avx512_common, avx512_core) ? 31 : 15;
     }
   */
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    using TReg = typename cpu_isa_traits<isa>::TReg;
     //int vlen = cpu_isa_traits<isa>::vlen;
     /*
     if(cpu_isa_traits<isa>::vlen == 64){
-      using Vmm = typename Xbyak_aarch64::ZReg;
+      using TReg = typename Xbyak_aarch64::ZReg;
     }else if(cpu_isa_traits<isa>::vlen == 32){
-      using Vmm = typename Xbyak_aarch64::ZReg;
+      using TReg = typename Xbyak_aarch64::ZReg;
     }else if(cpu_isa_traits<isa>::vlen == 16){
-      using Vmm = typename Xbyak_aarch64::VReg;
+      using TReg = typename Xbyak_aarch64::VReg;
     }else{
       assert(!"unreachable");
     }
@@ -100,12 +100,12 @@ private:
     Xmm xreg(int idx) const noexcept { return Xmm(reg_idx(idx)); }
     Ymm yreg(int idx) const noexcept { return Ymm(reg_idx(idx)); }
     Zmm zreg(int idx) const noexcept { return Zmm(reg_idx(idx)); }
-    Vmm vreg(int idx) const noexcept { return Vmm(reg_idx(idx)); }
+    TReg vreg(int idx) const noexcept { return TReg(reg_idx(idx)); }
   */
     VReg xreg(int idx) const noexcept { return VReg(reg_idx(idx)); }
     ZReg yreg(int idx) const noexcept { return ZReg(reg_idx(idx)); }
     ZReg zreg(int idx) const noexcept { return ZReg(reg_idx(idx)); }
-    Vmm vreg(int idx) const noexcept { return Vmm(reg_idx(idx)); }
+    TReg vreg(int idx) const noexcept { return TReg(reg_idx(idx)); }
     /*
     const Xbyak::AddressFrame &vmmword = (isa == sse41)
             ? xword
@@ -118,47 +118,47 @@ private:
     /*
     Xmm vmm_mask = Xmm(0);
     Ymm ymm_tmp_1 = Ymm(0);
-    Vmm vmm_tmp_1 = Vmm(0);
+    TReg vmm_tmp_1 = TReg(0);
   */
     VReg vmm_mask = VReg(0);
     ZReg ymm_tmp_1 = ZReg(0);
-    Vmm vmm_tmp_1 = Vmm(0);
+    TReg vmm_tmp_1 = TReg(0);
 
     // Used only for avx and if c tail is present
     /*
-    Vmm vmm_c_tail_mask = Vmm(2);
+    TReg vmm_c_tail_mask = TReg(2);
 
     Xmm xmm_ker_area_h = Xmm(2);
     Xmm xmm_one = Xmm(2);
     Xmm xmm_tmp = Xmm(3);
 
-    Vmm vmm_ker_area_h = Vmm(2);
-    Vmm vmm_one = Vmm(2);
-    Vmm vmm_tmp = Vmm(3);
+    TReg vmm_ker_area_h = TReg(2);
+    TReg vmm_one = TReg(2);
+    TReg vmm_tmp = TReg(3);
     Ymm ymm_tmp = Ymm(3);
 
-    Vmm vmm_k_offset = Vmm(1);
+    TReg vmm_k_offset = TReg(1);
   */
-    Vmm vmm_c_tail_mask = Vmm(2);
+    TReg vmm_c_tail_mask = TReg(2);
 
     VReg xmm_ker_area_h = VReg(2);
     VReg xmm_one = VReg(2);
     VReg xmm_tmp = VReg(3);
 
-    Vmm vmm_ker_area_h = Vmm(2);
-    Vmm vmm_one = Vmm(2);
-    Vmm vmm_tmp = Vmm(3);
+    TReg vmm_ker_area_h = TReg(2);
+    TReg vmm_one = TReg(2);
+    TReg vmm_tmp = TReg(3);
     ZReg ymm_tmp = ZReg(3);
 
-    Vmm vmm_k_offset = Vmm(1);
+    TReg vmm_k_offset = TReg(1);
 
     // Used only for avx512 when bf16 is present
     /*
-    inline Vmm vmm_idx() {
+    inline TReg vmm_idx() {
         if (!jpp.is_backward) {
-            return (jpp.is_training) ? Vmm(4) : Vmm(1);
+            return (jpp.is_training) ? TReg(4) : TReg(1);
         } else
-            return Vmm(4);
+            return TReg(4);
     }
   */
     /*

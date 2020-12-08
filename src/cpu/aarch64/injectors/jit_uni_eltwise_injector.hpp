@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2019-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -23,10 +24,7 @@
 #include "common/primitive_attr.hpp"
 #include "common/type_helpers.hpp"
 #include "common/utils.hpp"
-/*
-#include "cpu/x64/injectors/injector_utils.hpp"
-#include "cpu/x64/jit_generator.hpp"
-*/
+
 #include "cpu/aarch64/injectors/injector_utils.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
@@ -39,32 +37,27 @@ namespace eltwise_injector {
 struct static_params_t {
 
     static_params_t(bool save_state = true,
-            //Xbyak::Reg64 p_table = Xbyak::util::rax,
-            Xbyak_aarch64::XReg p_table = Xbyak_aarch64::XReg(0),
-            //Xbyak::Opmask k_mask = Xbyak::Opmask(1), bool is_fwd = true,
-            Xbyak_aarch64::PReg k_mask = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
             bool is_fwd = true, bool use_dst = false)
         : save_state(save_state)
-        , p_table(p_table)
-        , k_mask(k_mask)
+        , x_table(x_table)
+        , p_mask(p_mask)
         , is_fwd(is_fwd)
         , use_dst(use_dst) {}
 
     bool save_state;
-    /*
-    Xbyak::Reg64 p_table;
-    Xbyak::Opmask k_mask;
-  */
-    Xbyak_aarch64::XReg p_table;
-    Xbyak_aarch64::PReg k_mask;
+    Xbyak_aarch64::XReg x_table;
+    Xbyak_aarch64::PReg p_mask;
     bool is_fwd;
     bool use_dst;
 };
 } // namespace eltwise_injector
-/*
+
 template <cpu_isa_t isa>
 struct jit_uni_eltwise_injector_f32 {
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    using TReg = typename cpu_isa_traits<isa>::TReg;
+    using TRegS = typename cpu_isa_traits<isa>::TRegS;
 
     // Arguments description:
     // host - jit generator which is filled with instructions
@@ -80,47 +73,53 @@ struct jit_uni_eltwise_injector_f32 {
     //   code. Depends on algorithm. See `_use_dst_for_bwd` algs definition.
     jit_uni_eltwise_injector_f32(jit_generator *host, alg_kind_t alg,
             float alpha, float beta, float scale, bool save_state = true,
-            Xbyak::Reg64 p_table = Xbyak::util::rax,
-            Xbyak::Opmask k_mask = Xbyak::Opmask(1), bool is_fwd = true,
-            bool use_dst = false)
+            Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
+            bool is_fwd = true, bool use_dst = false)
         : alg_(alg)
         , alpha_(alpha)
         , beta_(beta)
         , scale_(scale)
         , h(host)
         , save_state_(save_state)
-        , p_table(p_table)
-        , k_mask(k_mask)
+        , x_table(x_table)
+        , p_mask(p_mask)
         , is_fwd_(is_fwd)
-        , use_dst_(use_dst) {
+        , use_dst_(use_dst)
+
+    {
         using namespace alg_kind;
-        assert(utils::one_of(
-                isa, sse41, avx, avx2, avx512_common, avx512_core));
+        assert(utils::one_of(isa, sve_512));
         assert(utils::one_of(alg_, eltwise_relu, eltwise_tanh, eltwise_elu,
                 eltwise_square, eltwise_abs, eltwise_sqrt, eltwise_linear,
                 eltwise_bounded_relu, eltwise_soft_relu, eltwise_logistic,
-                eltwise_exp, eltwise_gelu_tanh, eltwise_swish, eltwise_log,
-                eltwise_clip, eltwise_pow, eltwise_gelu_erf, eltwise_round,
+                eltwise_logsigmoid, eltwise_exp, eltwise_gelu_tanh,
+                eltwise_swish, eltwise_log, eltwise_clip, eltwise_clip_v2,
+                eltwise_pow, eltwise_gelu_erf, eltwise_round,
                 eltwise_relu_use_dst_for_bwd, eltwise_tanh_use_dst_for_bwd,
                 eltwise_elu_use_dst_for_bwd, eltwise_sqrt_use_dst_for_bwd,
-                eltwise_logistic_use_dst_for_bwd, eltwise_exp_use_dst_for_bwd));
+                eltwise_logistic_use_dst_for_bwd, eltwise_exp_use_dst_for_bwd,
+                eltwise_clip_v2_use_dst_for_bwd));
         register_table_entries();
     }
 
     jit_uni_eltwise_injector_f32(jit_generator *host,
             const post_ops_t::entry_t::eltwise_t &eltwise,
-            bool save_state = true, Xbyak::Reg64 p_table = Xbyak::util::rax,
-            Xbyak::Opmask k_mask = Xbyak::Opmask(1), bool is_fwd = true,
-            bool use_dst = false)
+            bool save_state = true,
+            Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
+            bool is_fwd = true, bool use_dst = false)
         : jit_uni_eltwise_injector_f32(host, eltwise.alg, eltwise.alpha,
-                eltwise.beta, eltwise.scale, save_state, p_table, k_mask,
+                eltwise.beta, eltwise.scale, save_state, x_table, p_mask,
                 is_fwd, use_dst) {}
 
     void compute_vector_range(size_t start_idx, size_t end_idx);
     void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
-    void compute_vector(size_t idx) { compute_vector_range({idx}); }
+    void compute_vector(size_t idx) { compute_vector_range(idx, idx + 1); }
     void prepare_table(bool gen_table = true);
-    void load_table_addr() { h->mov(p_table, l_table); }
+    void load_table_addr() {
+        h->adr(Xbyak_aarch64::XReg(x_table.getIdx()), l_table);
+    }
 
 private:
     const alg_kind_t alg_;
@@ -131,12 +130,12 @@ private:
     jit_generator *const h;
 
     const bool save_state_;
-    const Xbyak::Reg64 p_table;
-    const Xbyak::Opmask k_mask;
+    const Xbyak_aarch64::XReg x_table;
+    const Xbyak_aarch64::PReg p_mask;
     const bool is_fwd_;
     const bool use_dst_;
 
-    Xbyak::Label l_table;
+    Xbyak_aarch64::Label l_table;
 
     // if only the injector was inherited from jit_generator...
     enum {
@@ -149,18 +148,12 @@ private:
         _op_mxcsr = jit_generator::_op_mxcsr
     };
 
-    static constexpr bool has_avx512() {
-        return utils::one_of(isa, avx512_common, avx512_core);
-    }
-
     static constexpr size_t vlen = cpu_isa_traits<isa>::vlen;
-    static constexpr size_t preserved_vecs_max = 6;
-    static constexpr size_t preserved_gprs_max = 5;
-    static constexpr size_t vecs_count = has_avx512() ? 32 : 16;
+    static constexpr size_t preserved_vecs_max = 9;
+    static constexpr size_t preserved_gprs_max = 4;
+    static constexpr size_t vecs_count = 32;
     static constexpr int n_mantissa_bits = 23;
     static constexpr int k_mask_size = 8;
-
-    bool preserve_vec_for_avx = false;
 
     size_t vecs_to_preserve = 0;
     size_t preserved_vecs_count = 0;
@@ -168,9 +161,39 @@ private:
     size_t preserved_gpr_idxs[preserved_gprs_max] = {0};
     injector_utils::vmm_index_set_iterator_t start_idx_tail;
 
-    Vmm vmm_mask, vmm_aux0, vmm_aux1, vmm_aux2, vmm_aux3, vmm_aux4, vmm_tmp;
-    Xbyak::Ymm ymm_tmp;
-    Xbyak::Xmm xmm_tmp;
+    /* These vector register must be assigned proper index. */
+    TRegS vmm_mask {0}, vmm_aux0 {0}, vmm_aux1 {0}, vmm_aux2 {0}, vmm_aux3 {0},
+            vmm_aux4 {0}, vmm_aux5 {0}, vmm_aux6 {0}, vmm_aux7 {0}, vmm_tmp {0};
+
+    /* Caution: Chose predicate registers not used by x64's implementation,
+       and register indices must be same as jit_uni_eltwise.cpp
+       and convolutions which uses eltwise_injector. */
+    Xbyak_aarch64::PReg p_lsb {7};
+    Xbyak_aarch64::PReg p_512 {7};
+    //    Xbyak_aarch64::PReg p_256 {6};
+    //    Xbyak_aarch64::PReg p_128 {5};
+    Xbyak_aarch64::PReg p_tmp0 {4};
+    //    Xbyak_aarch64::PReg p_tmp1 {3};
+
+    Xbyak_aarch64::XReg x_tmp_0 {23};
+    Xbyak_aarch64::XReg x_tmp_1 {24};
+    Xbyak_aarch64::XReg x_tmp_2 {25};
+    Xbyak_aarch64::XReg x_tmp_3 {26};
+    Xbyak_aarch64::XReg x_tmp_4 {27};
+
+    const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
+            = {x_tmp_0, x_tmp_1, x_tmp_2, x_tmp_3, x_tmp_4};
+    constexpr static int x_tmp_vec_size = 5;
+
+    /* Default tempooral index. Chose a SVE register
+     not to be same as jit_uni_eltwise.(cpp|hpp).
+     This index is changed by assign_regs() in case of eltwise injection.
+  */
+    TRegS z_tmp {31};
+
+    //  const std::vector<ZReg> z_tmp_vec = {
+    //    z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
+    //  constexpr static int z_tmp_vec_size = 8;
 
     size_t aux_vecs_count();
     size_t aux_gprs_count();
@@ -183,50 +206,48 @@ private:
             const injector_utils::vmm_index_set_iterator_t start_idx_it);
     void injector_postamble();
     void assign_regs();
-    void vec_shift(const Vmm &vmm_dst, const Vmm &vmm_src, bool shift_left,
-            const int imm);
-    void compute_cmp_mask(const Vmm &vmm_src,
-            const Xbyak::Operand &compare_operand, int cmp_predicate);
-    void blend_with_mask(const Vmm &vmm_dst, const Xbyak::Operand &src);
+    void compute_cmp_mask(
+            const TRegS &vmm_src, const TRegS &vmm_cmpare, int cmp_predicate);
+    void blend_with_mask(const TRegS &vmm_dst, const TRegS &src);
     void test_mask();
 
-    void exp_compute_vector_fwd(const Vmm &vmm_src);
-    void relu_compute_vector_fwd(const Vmm &vmm_src);
-    void relu_zero_ns_compute_vector_fwd(const Vmm &vmm_src);
-    void elu_compute_vector_fwd(const Vmm &vmm_src);
-    void tanh_compute_vector_fwd(const Vmm &vmm_src);
-    void square_compute_vector_fwd(const Vmm &vmm_src);
-    void abs_compute_vector_fwd(const Vmm &vmm_src);
-    void sqrt_compute_vector_fwd(const Vmm &vmm_src);
-    void linear_compute_vector_fwd(const Vmm &vmm_src);
-    void bounded_relu_compute_vector_fwd(const Vmm &vmm_src);
-    void soft_relu_compute_vector_fwd(const Vmm &vmm_src);
-    void logistic_compute_vector_fwd(const Vmm &vmm_src);
-    void gelu_tanh_compute_vector_fwd(const Vmm &vmm_src);
-    void swish_compute_vector_fwd(const Vmm &vmm_src);
-    void log_compute_vector_fwd(const Vmm &vmm_src);
-    void clip_compute_vector_fwd(const Vmm &vmm_src);
-    void pow_compute_vector_fwd(const Vmm &vmm_src);
-    void gelu_erf_compute_vector_fwd(const Vmm &vmm_src);
-    void round_compute_vector_fwd(const Vmm &vmm_src);
+    void exp_compute_vector_fwd(const TRegS &vmm_src);
+    void relu_compute_vector_fwd(const TRegS &vmm_src);
+    void relu_zero_ns_compute_vector_fwd(const TRegS &vmm_src);
+    void elu_compute_vector_fwd(const TRegS &vmm_src);
+    void tanh_compute_vector_fwd(const TRegS &vmm_src);
+    void square_compute_vector_fwd(const TRegS &vmm_src);
+    void abs_compute_vector_fwd(const TRegS &vmm_src);
+    void sqrt_compute_vector_fwd(const TRegS &vmm_src);
+    void linear_compute_vector_fwd(const TRegS &vmm_src);
+    void bounded_relu_compute_vector_fwd(const TRegS &vmm_src);
+    void soft_relu_compute_vector_fwd(const TRegS &vmm_src);
+    void logistic_compute_vector_fwd(const TRegS &vmm_src);
+    void gelu_tanh_compute_vector_fwd(const TRegS &vmm_src);
+    void swish_compute_vector_fwd(const TRegS &vmm_src);
+    void log_compute_vector_fwd(const TRegS &vmm_src);
+    void clip_compute_vector_fwd(const TRegS &vmm_src);
+    void pow_compute_vector_fwd(const TRegS &vmm_src);
+    void gelu_erf_compute_vector_fwd(const TRegS &vmm_src);
+    void round_compute_vector_fwd(const TRegS &vmm_src);
 
-    void exp_compute_vector_bwd(const Vmm &vmm_src);
-    void relu_compute_vector_bwd(const Vmm &vmm_src);
-    void elu_compute_vector_bwd(const Vmm &vmm_src);
-    void tanh_compute_vector_bwd(const Vmm &vmm_src);
-    void square_compute_vector_bwd(const Vmm &vmm_src);
-    void abs_compute_vector_bwd(const Vmm &vmm_src);
-    void sqrt_compute_vector_bwd(const Vmm &vmm_src);
-    void linear_compute_vector_bwd(const Vmm &vmm_src);
-    void bounded_relu_compute_vector_bwd(const Vmm &vmm_src);
-    void soft_relu_compute_vector_bwd(const Vmm &vmm_src);
-    void logistic_compute_vector_bwd(const Vmm &vmm_src);
-    void gelu_tanh_compute_vector_bwd(const Vmm &vmm_src);
-    void swish_compute_vector_bwd(const Vmm &vmm_src);
-    void log_compute_vector_bwd(const Vmm &vmm_src);
-    void clip_compute_vector_bwd(const Vmm &vmm_src);
-    void pow_compute_vector_bwd(const Vmm &vmm_src);
-    void gelu_erf_compute_vector_bwd(const Vmm &vmm_src);
+    void exp_compute_vector_bwd(const TRegS &vmm_src);
+    void relu_compute_vector_bwd(const TRegS &vmm_src);
+    void elu_compute_vector_bwd(const TRegS &vmm_src);
+    void tanh_compute_vector_bwd(const TRegS &vmm_src);
+    void square_compute_vector_bwd(const TRegS &vmm_src);
+    void abs_compute_vector_bwd(const TRegS &vmm_src);
+    void sqrt_compute_vector_bwd(const TRegS &vmm_src);
+    void linear_compute_vector_bwd(const TRegS &vmm_src);
+    void bounded_relu_compute_vector_bwd(const TRegS &vmm_src);
+    void soft_relu_compute_vector_bwd(const TRegS &vmm_src);
+    void logistic_compute_vector_bwd(const TRegS &vmm_src);
+    void gelu_tanh_compute_vector_bwd(const TRegS &vmm_src);
+    void swish_compute_vector_bwd(const TRegS &vmm_src);
+    void log_compute_vector_bwd(const TRegS &vmm_src);
+    void clip_compute_vector_bwd(const TRegS &vmm_src);
+    void pow_compute_vector_bwd(const TRegS &vmm_src);
+    void gelu_erf_compute_vector_bwd(const TRegS &vmm_src);
 
     enum key_t {
         scale = 0, // scale argument
@@ -282,9 +303,20 @@ private:
         const auto scale = te.bcast ? vlen : sizeof(table_entry_val_t);
         return te.off + key_off_val_shift * scale;
     }
-    Xbyak::Address table_val(key_t key, size_t key_off_val_shift = 0) {
+
+    TRegS table_val(key_t key, size_t key_off_val_shift = 0) {
+        Xbyak_aarch64::XReg x_addr(h->X_DEFAULT_ADDR);
+        uint32_t tableIdx = static_cast<uint32_t>(x_table.getIdx());
         auto off = table_off(key, key_off_val_shift);
-        return h->ptr[p_table + off];
+
+        if (off) {
+            h->add_imm(x_addr, Xbyak_aarch64::XReg(tableIdx), off, h->X_TMP_0);
+        } else {
+            x_addr = Xbyak_aarch64::XReg(tableIdx);
+        }
+
+        h->ldr(TReg(z_tmp.getIdx()), ptr(x_addr));
+        return z_tmp;
     }
 
     // we accept only 32bit hexadecimal table values to avoid any rounding
@@ -308,10 +340,9 @@ private:
     void register_table_entries();
     mapped_table_t entry_map_;
 };
-  */
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl
 } // namespace dnnl
-
 #endif

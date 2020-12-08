@@ -131,8 +131,11 @@ struct cpu_isa_traits<isa_all> {
 
 template <>
 struct cpu_isa_traits<asimd> {
-    typedef Xbyak_aarch64::VReg4S VmmS;
-    typedef Xbyak_aarch64::VReg Vmm;
+    typedef Xbyak_aarch64::VReg TReg;
+    typedef Xbyak_aarch64::VReg16B TRegB;
+    typedef Xbyak_aarch64::VReg8H TRegH;
+    typedef Xbyak_aarch64::VReg4S TRegS;
+    typedef Xbyak_aarch64::VReg2D TRegD;
     static constexpr int vlen_shift = 4;
     static constexpr int vlen = 16;
     static constexpr int n_vregs = 32;
@@ -143,8 +146,11 @@ struct cpu_isa_traits<asimd> {
 
 template <>
 struct cpu_isa_traits<sve_128> {
-    typedef Xbyak_aarch64::VReg4S VmmS;
-    typedef Xbyak_aarch64::VReg Vmm;
+    typedef Xbyak_aarch64::VReg TReg;
+    typedef Xbyak_aarch64::VReg16B TRegB;
+    typedef Xbyak_aarch64::VReg8H TRegH;
+    typedef Xbyak_aarch64::VReg4S TRegS;
+    typedef Xbyak_aarch64::VReg2D TRegD;
     static constexpr int vlen_shift = 4;
     static constexpr int vlen = 16;
     static constexpr int n_vregs = 16;
@@ -155,8 +161,11 @@ struct cpu_isa_traits<sve_128> {
 
 template <>
 struct cpu_isa_traits<sve_256> {
-    typedef Xbyak_aarch64::ZRegS VmmS;
-    typedef Xbyak_aarch64::ZReg Vmm;
+    typedef Xbyak_aarch64::VReg TReg;
+    typedef Xbyak_aarch64::VReg16B TRegB;
+    typedef Xbyak_aarch64::VReg8H TRegH;
+    typedef Xbyak_aarch64::VReg4S TRegS;
+    typedef Xbyak_aarch64::VReg2D TRegD;
     static constexpr int vlen_shift = 5;
     static constexpr int vlen = 32;
     static constexpr int n_vregs = 16;
@@ -167,8 +176,11 @@ struct cpu_isa_traits<sve_256> {
 
 template <>
 struct cpu_isa_traits<sve_512> {
-    typedef Xbyak_aarch64::ZRegS VmmS;
-    typedef Xbyak_aarch64::ZReg Vmm;
+    typedef Xbyak_aarch64::ZReg TReg;
+    typedef Xbyak_aarch64::ZRegB TRegB;
+    typedef Xbyak_aarch64::ZRegH TRegH;
+    typedef Xbyak_aarch64::ZRegS TRegS;
+    typedef Xbyak_aarch64::ZRegD TRegD;
     static constexpr int vlen_shift = 6;
     static constexpr int vlen = 64;
     static constexpr int n_vregs = 32;

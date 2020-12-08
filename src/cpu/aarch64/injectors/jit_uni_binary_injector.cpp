@@ -320,21 +320,21 @@ int jit_uni_binary_injector_t<isa>::adjust_temp_vmm_hint(
     return user_hint;
 }
 /*
-template <typename Vmm>
-static void push_vmm(jit_generator *host, const Vmm &vmm) {
-    host->sub(host->rsp, injector_utils::vmm_size_t<Vmm>::bytes);
+template <typename TReg>
+static void push_vmm(jit_generator *host, const TReg &vmm) {
+    host->sub(host->rsp, injector_utils::vmm_size_t<TReg>::bytes);
     host->uni_vmovups(host->ptr[host->rsp], vmm);
 }
 
-template <typename Vmm>
-static void pop_vmm(jit_generator *host, const Vmm &vmm) {
+template <typename TReg>
+static void pop_vmm(jit_generator *host, const TReg &vmm) {
     host->uni_vmovups(vmm, host->ptr[host->rsp]);
-    host->add(host->rsp, injector_utils::vmm_size_t<Vmm>::bytes);
+    host->add(host->rsp, injector_utils::vmm_size_t<TReg>::bytes);
 }
 
-template <typename Vmm>
-static void restore_stack(jit_generator *host, const Vmm &vmm) {
-    host->add(host->rsp, injector_utils::vmm_size_t<Vmm>::bytes);
+template <typename TReg>
+static void restore_stack(jit_generator *host, const TReg &vmm) {
+    host->add(host->rsp, injector_utils::vmm_size_t<TReg>::bytes);
 }
   */
 template <cpu_isa_t isa>
@@ -413,15 +413,15 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
                             //: std::initializer_list<Xbyak::Reg64>()),
                             : std::initializer_list<Xbyak_aarch64::XReg>()),
             (rhs_arg_static_params_.preserve_vmm_helper && dt_helper_vmm_needed
-                            //                            ? std::initializer_list<Xbyak::Xmm>({Vmm(vmm_hint)})
-                            //? std::initializer_list<Xbyak_aarch64::ZReg>({Vmm(vmm_hint)})
+                            //                            ? std::initializer_list<Xbyak::Xmm>({TReg(vmm_hint)})
+                            //? std::initializer_list<Xbyak_aarch64::ZReg>({TReg(vmm_hint)})
                             ? std::initializer_list<Xbyak_aarch64::VReg>(
                                     {xa::VReg(vmm_hint)})
                             //: std::initializer_list<Xbyak::Xmm>())};
                             : std::initializer_list<Xbyak_aarch64::VReg>())};
 
     bool vmm0_was_preserved = false;
-    static const Vmm zero_vmm(0);
+    static const TReg zero_vmm(0);
 
     //Xbyak::Address rhs_arg_addr(0);
     //Address_t rhs_arg_addr;
@@ -439,7 +439,7 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
         const auto local_vmm_preservation = should_preserve_vmm(
                 vmm_idx, vmm_hint, max_vmm_idx, dt_helper_vmm_needed);
         const bool &vmm_preservation_needed = local_vmm_preservation.first;
-        const Vmm dst_vmm(vmm_idx);
+        const TReg dst_vmm(vmm_idx);
         const bool with_tail = rhs_arg_static_params_.tail_size
                 && vmm_tail_idx.find(vmm_idx) != vmm_tail_idx.cend()
                 && IMPLICATION(rhs_broadcasting_strategy
@@ -448,11 +448,11 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
 
         if (vmm_preservation_needed) {
             /*
-            const Vmm vmm_to_preserve(local_vmm_preservation.second);
+            const TReg vmm_to_preserve(local_vmm_preservation.second);
             push_vmm(host_, vmm_to_preserve);
             inject_binary(post_op, dst_vmm, rhs_arg_addr, with_tail);
             pop_vmm(host_, vmm_to_preserve);
-            // in case all Vmm are occupied, Vmm(0) is chosen for tmp by default,
+            // in case all TReg are occupied, TReg(0) is chosen for tmp by default,
             // so it's content needs to be preserved...
 
             push_vmm(host_, zero_vmm);
@@ -607,7 +607,7 @@ void jit_uni_binary_injector_t<isa>::append_value_offset(
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::inject_binary(
-        const dnnl_post_ops::entry_t &post_op, Vmm dst,
+        const dnnl_post_ops::entry_t &post_op, TReg dst,
         //const Xbyak::Address &rhs_addr, bool with_tail) const {
         //const Address_t &rhs_addr, bool with_tail) const {
         const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const {
@@ -631,7 +631,7 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
 
     if (/*process_rhs_arg_using_tmp_vmm*/ false) {
 
-        const Vmm tmp_vmm = Vmm(rhs_arg_static_params_.rhs_dt_helper_vmm_idx);
+        const TReg tmp_vmm = TReg(rhs_arg_static_params_.rhs_dt_helper_vmm_idx);
 
         //if (rhs_addr->isBroadcast()){
         //if (rhs_addr.isBroadcast()){
@@ -667,7 +667,7 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
 /*
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_reg,
+        const dnnl_data_type_t &data_type, const TReg &tmp_reg,
         const Xbyak::Address &rhs_addr, bool with_tail) const {
     if (with_tail)
         execute_broadcast_tail(data_type, tmp_reg, rhs_addr);
@@ -677,9 +677,9 @@ void jit_uni_binary_injector_t<isa>::execute_broadcast(
   */
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs(const dnnl_data_type_t &data_type,
-        //const Vmm &tmp_reg, const Xbyak::Address &rhs_addr,
-        //const Vmm &tmp_reg, const Address_t &rhs_addr,
-        const Vmm &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
+        //const TReg &tmp_reg, const Xbyak::Address &rhs_addr,
+        //const TReg &tmp_reg, const Address_t &rhs_addr,
+        const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
         bool with_tail) const {
     if (with_tail)
         load_rhs_tail(data_type, tmp_reg, rhs_addr);
@@ -695,20 +695,20 @@ Xbyak::Address jit_uni_binary_injector_t<isa>::remove_bcast_bit(
 }
 
 template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::cvt_to_f32(const Vmm &tmp_vmm) const {
+void jit_uni_binary_injector_t<isa>::cvt_to_f32(const TReg &tmp_vmm) const {
     host_->vcvtdq2ps(tmp_vmm, tmp_vmm);
 }
 
 template <>
-void jit_uni_binary_injector_t<sse41>::cvt_to_f32(const Vmm &tmp_vmm) const {
+void jit_uni_binary_injector_t<sse41>::cvt_to_f32(const TReg &tmp_vmm) const {
     static_assert(
-            std::is_same<Vmm, Xbyak::Xmm>::value, "Vmm type should match Xmm");
+            std::is_same<TReg, Xbyak::Xmm>::value, "TReg type should match Xmm");
     host_->cvtdq2ps(tmp_vmm, tmp_vmm);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast_no_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     switch (data_type) {
         case data_type::f32: host_->uni_vbroadcastss(tmp_vmm, rhs_addr); break;
@@ -730,7 +730,7 @@ void jit_uni_binary_injector_t<isa>::execute_broadcast_no_tail(
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast_s8u8_no_tail(
-        const data_type_t &data_type, const Vmm &tmp_vmm,
+        const data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     const Xbyak::Xmm xmm(tmp_vmm.getIdx());
     switch (data_type) {
@@ -748,7 +748,7 @@ void jit_uni_binary_injector_t<isa>::execute_broadcast_s8u8_no_tail(
 
 template <>
 void jit_uni_binary_injector_t<avx>::execute_broadcast_s8u8_no_tail(
-        const data_type_t &data_type, const Vmm &tmp_vmm,
+        const data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
 
     if (data_type == data_type::s8 || data_type == data_type::u8) {
@@ -773,7 +773,7 @@ void jit_uni_binary_injector_t<avx>::execute_broadcast_s8u8_no_tail(
 
 template <>
 void jit_uni_binary_injector_t<sse41>::execute_broadcast_s8u8_no_tail(
-        const data_type_t &data_type, const Vmm &tmp_vmm,
+        const data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
 
     if (data_type == data_type::s8 || data_type == data_type::u8) {
@@ -795,7 +795,7 @@ void jit_uni_binary_injector_t<sse41>::execute_broadcast_s8u8_no_tail(
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
 
     assert(rhs_arg_static_params_.is_opmask_set()
@@ -900,7 +900,7 @@ static void execute_broadcast_f32_tail_avx(jit_generator *host,
 
 template <>
 void jit_uni_binary_injector_t<avx2>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     const auto &tail_size = rhs_arg_static_params_.tail_size;
     host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
@@ -923,7 +923,7 @@ void jit_uni_binary_injector_t<avx2>::execute_broadcast_tail(
 
 template <>
 void jit_uni_binary_injector_t<avx>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
 
     const auto &tail_size = rhs_arg_static_params_.tail_size;
@@ -974,7 +974,7 @@ void jit_uni_binary_injector_t<avx>::execute_broadcast_tail(
 
 template <>
 void jit_uni_binary_injector_t<sse41>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
 
     host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
@@ -1000,7 +1000,7 @@ void jit_uni_binary_injector_t<sse41>::execute_broadcast_tail(
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs_no_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     switch (data_type) {
         case data_type::f32:
@@ -1020,7 +1020,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs_no_tail(
   */
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         //const Xbyak::Address &rhs_addr) const {
         //const Address_t &rhs_addr) const {
         const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
@@ -1106,7 +1106,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
 /*
 template <>
 void jit_uni_binary_injector_t<avx2>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     if (!utils::one_of(data_type, data_type::f32, data_type::s32, data_type::s8,
                 data_type::u8))
@@ -1120,7 +1120,7 @@ void jit_uni_binary_injector_t<avx2>::load_rhs_tail(
 
 template <>
 void jit_uni_binary_injector_t<avx>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
     static constexpr int xmm_size_elem = 4;
@@ -1178,7 +1178,7 @@ void jit_uni_binary_injector_t<avx>::load_rhs_tail(
 
 template <>
 void jit_uni_binary_injector_t<sse41>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const Vmm &tmp_vmm,
+        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
         const Xbyak::Address &rhs_addr) const {
     if (!utils::one_of(data_type, data_type::f32, data_type::s32, data_type::s8,
                 data_type::u8))
@@ -1192,7 +1192,7 @@ void jit_uni_binary_injector_t<sse41>::load_rhs_tail(
   */
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
-        const Vmm &dst, const Vmm &lhs, const Vmm &rhs) const {
+        const TReg &dst, const TReg &lhs, const TReg &rhs) const {
     //const std::type_info& infoA = typeid(lhs);
     //const std::type_info& infoB = typeid(rhs);
     switch (binary_alg) {
@@ -1213,8 +1213,8 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
 }
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
-        //const Vmm &dst, const Vmm &lhs, const Address_t &rhs) const {
-        const Vmm &dst, const Vmm &lhs,
+        //const TReg &dst, const TReg &lhs, const Address_t &rhs) const {
+        const TReg &dst, const TReg &lhs,
         const Xbyak_aarch64::AdrNoOfs &rhs) const {
     //const std::type_info& infoA = typeid(lhs);
     //const std::type_info& infoB = typeid(rhs);
@@ -1239,7 +1239,7 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
 template <>
 template <typename T>
 void jit_uni_binary_injector_t<avx>::execute_binary(alg_kind_t binary_alg,
-        const Vmm &dst, const Vmm &lhs, const T &rhs) const {
+        const TReg &dst, const TReg &lhs, const T &rhs) const {
     switch (binary_alg) {
         case alg_kind::binary_add: host_->vaddps(dst, lhs, rhs); break;
         case alg_kind::binary_mul: host_->vmulps(dst, lhs, rhs); break;
@@ -1268,9 +1268,9 @@ template class jit_uni_binary_injector_t<sse41>;
   */
 
 template class jit_uni_binary_injector_t<sve_512>;
-template class jit_uni_binary_injector_t<sve_256>;
-template class jit_uni_binary_injector_t<sve_128>;
-template class jit_uni_binary_injector_t<asimd>;
+//template class jit_uni_binary_injector_t<sve_256>;
+//template class jit_uni_binary_injector_t<sve_128>;
+//template class jit_uni_binary_injector_t<asimd>;
 
 } // namespace binary_injector
 } // namespace aarch64

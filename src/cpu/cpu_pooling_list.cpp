@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2019-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -55,7 +56,7 @@ const pd_create_f impl_list[] = {
         CPU_INSTANCE_X64(jit_uni_pooling_fwd_t<sse41, f32>)
         CPU_INSTANCE_X64(jit_uni_pooling_bwd_t<sse41, f32>)
 	CPU_INSTANCE_AARCH64(jit_uni_pooling_fwd_t<sve_512, f32>)
-        CPU_INSTANCE_AARCH64(jit_uni_pooling_bwd_t<sve_512, f32>)	
+        CPU_INSTANCE_AARCH64(jit_uni_pooling_bwd_t<sve_512, f32>)
         CPU_INSTANCE(nchw_pooling_fwd_t<bf16>)
         CPU_INSTANCE(nchw_pooling_bwd_t<bf16>)
         CPU_INSTANCE(nchw_pooling_fwd_t<f32>)

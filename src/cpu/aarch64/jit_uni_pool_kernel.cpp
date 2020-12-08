@@ -373,8 +373,8 @@ inline void jit_uni_pool_kernel<isa>::uni_broadcast_reg_val(
 
 template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
-    Vmm val_to_store(idx);
+    using TReg = typename cpu_isa_traits<isa>::TReg;
+    TReg val_to_store(idx);
     //VReg val_to_store(idx);
     XReg rsp = sp;
     sub_imm(XReg(idx), XReg(idx), val_to_store.getBit(), x_tmp_0);
@@ -398,8 +398,8 @@ inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
 
 template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::pop_vmm_val(const int idx) {
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
-    Vmm val_to_load(idx);
+    using TReg = typename cpu_isa_traits<isa>::TReg;
+    TReg val_to_load(idx);
     //VReg val_to_load(idx);
     XReg rsp = sp;
     int vlen = cpu_isa_traits<isa>::vlen;
@@ -2933,15 +2933,15 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
 
     int vlen = cpu_isa_traits<isa>::vlen;
     if (vlen == 64) {
-        using Vmm = typename Xbyak_aarch64::ZReg;
+        using TReg = typename Xbyak_aarch64::ZReg;
     } else if (vlen == 32) {
-        using Vmm = typename Xbyak_aarch64::ZReg;
+        using TReg = typename Xbyak_aarch64::ZReg;
     } else if (vlen == 16) {
-        using Vmm = typename Xbyak_aarch64::VReg;
+        using TReg = typename Xbyak_aarch64::VReg;
     } else {
         assert(!"unreachable");
     }
-    Vmm vzero = vmm_tmp;
+    TReg vzero = vmm_tmp;
     //VReg vzero = vmm_tmp
 
     if (vlen == 64) {
@@ -3333,17 +3333,10 @@ void jit_uni_pool_kernel<isa>::generate() {
     }
 }
 
-//template struct jit_uni_pool_kernel<sse41>;
-template struct jit_uni_pool_kernel<asimd>;
-template struct jit_uni_pool_kernel<sve_128>;
-template struct jit_uni_pool_kernel<sve_256>;
+//template struct jit_uni_pool_kernel<asimd>;
+//template struct jit_uni_pool_kernel<sve_128>;
+//template struct jit_uni_pool_kernel<sve_256>;
 template struct jit_uni_pool_kernel<sve_512>;
-/*
-template struct jit_uni_pool_kernel<avx>;
-template struct jit_uni_pool_kernel<avx2>;
-template struct jit_uni_pool_kernel<avx512_common>;
-template struct jit_uni_pool_kernel<avx512_core>;
-  */
 
 } // namespace aarch64
 } // namespace cpu

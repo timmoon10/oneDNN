@@ -1,5 +1,6 @@
 /*******************************************************************************
 * Copyright 2017-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -65,7 +66,7 @@ template <cpu_isa_t isa>
 struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_i8i8_pooling_fwd_ker_t)
 
-    using Vmm = typename cpu_isa_traits<isa>::Vmm;
+    using TReg = typename cpu_isa_traits<isa>::TReg;
 
     /*
     Xmm xreg(int idx) const { return Xmm(idx); }
@@ -74,7 +75,7 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
   */
     VReg xreg(int idx) const { return VReg(idx); }
     ZReg yreg(int idx) const { return ZReg(xreg(idx).getIdx()); }
-    Vmm vreg(int idx) const { return Vmm(xreg(idx).getIdx()); }
+    TReg vreg(int idx) const { return TReg(xreg(idx).getIdx()); }
     // In case of avx2 with data type i8 we need to use
     // maskmovdqu and maskmovq instructions which has its destination hardcoded in rdi.
     // Windows ABI: abi_param1 is rcx - nothing to do else
@@ -156,12 +157,12 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
     // ref to any of XYZ-regs via xreg/yreg/vreg functions
     VReg xmm_tmp = xreg(0); // temp to init vreg_tmp
-    Vmm vreg_tmp = vreg(0); // max pooling : holds minimum values for data_type
-    Vmm vreg_zeros = vreg(1);
-    Vmm vreg_tail = vreg(4);
+    TReg vreg_tmp = vreg(0); // max pooling : holds minimum values for data_type
+    TReg vreg_zeros = vreg(1);
+    TReg vreg_tail = vreg(4);
 
     // only in case of <isa> == avx2
-    Vmm vreg_mask = vreg(2); // full byte-mask
+    TReg vreg_mask = vreg(2); // full byte-mask
     VReg xreg_mask_lo = xreg(
             2); // low 128-bits part of byte-mask (alias for xmm part of vreg_mask)
     VReg xreg_mask_hi = xreg(
@@ -171,11 +172,11 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     // Example:       idx [31..0]
     //          vreg_mask = [0,0,0,0,0,.....,0,x,x,x,x,x] ; x => byte mask (msb set)
     //          vreg_mask_2 = [x,x,x,x,x,0,0,0,0,0,.....,0]
-    Vmm vreg_mask_2 = vreg(5);
+    TReg vreg_mask_2 = vreg(5);
     VReg xreg_mask_2_lo = xreg(5); // similar to xreg_mask_lo
     VReg xreg_mask_2_hi = xreg(6); // similar to xreg_mask_hi
 
-    Vmm vreg_mask_q = vreg(3); // "avg" - 1/4 part for non-zero tails
+    TReg vreg_mask_q = vreg(3); // "avg" - 1/4 part for non-zero tails
 
     ZReg z_tmp0 = ZReg(24);
     ZReg z_tmp1 = ZReg(25);
@@ -199,15 +200,17 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     //enum : int { avg_vidx_base = utils::one_of(isa, sse41, avx2) ? 4 : 2 };
     enum : int { avg_vidx_base = utils::one_of(isa, asimd, sve_256) ? 4 : 2 };
 
-    Vmm max_base_vr(int idx) const { return vreg(max_vidx_base + idx); }
-    Vmm avg_base_vr(int idx) const { return vreg(avg_vidx_base + idx); }
+    TReg max_base_vr(int idx) const { return vreg(max_vidx_base + idx); }
+    TReg avg_base_vr(int idx) const { return vreg(avg_vidx_base + idx); }
 
     size_t sizeof_src_dt() const { return data_type_size(jpp.src_dt); }
     size_t sizeof_dst_dt() const { return data_type_size(jpp.dst_dt); }
 
     /* max pooling */
-    Vmm vreg_src(int idx) const { return max_base_vr(idx); } // [0    .. ur_c-1]
-    Vmm vreg_dst(int idx) const {
+    TReg vreg_src(int idx) const {
+        return max_base_vr(idx);
+    } // [0    .. ur_c-1]
+    TReg vreg_dst(int idx) const {
         return max_base_vr(jpp.ur_c + idx);
     } // [ur_c .. 2*ur_c-1]
 
@@ -222,15 +225,15 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
         mmx_msk_base_reg = 3
     };
 
-    Vmm vreg_src_s32(int jj, int ll) {
+    TReg vreg_src_s32(int jj, int ll) {
         return avg_base_vr(3 * max_num_ll * jj + ll + 0 * max_num_ll);
     } // ll: 0..4 [0..3]
 
-    Vmm vreg_dst_s32(int jj, int ll) {
+    TReg vreg_dst_s32(int jj, int ll) {
         return avg_base_vr(3 * max_num_ll * jj + ll + 1 * max_num_ll);
     } // ll: 0..4 [4..7]
 
-    Vmm vreg_dst_f32(int jj, int ll) {
+    TReg vreg_dst_f32(int jj, int ll) {
         return avg_base_vr(3 * max_num_ll * jj + ll + 2 * max_num_ll);
     } // ll: 0..4 [8..11]
     /*
@@ -442,7 +445,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::load_src_avg_op(
     /*
     using namespace data_type;
 
-    const Vmm &vr_src = vreg_src_s32(jj, ll);
+    const TReg &vr_src = vreg_src_s32(jj, ll);
 
     if (jpp.src_dt == s32) {
         if (masked)
@@ -480,7 +483,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::load_src_avg_op(
         /*
     using namespace data_type;
 
-    auto load_i8 = [&](bool is_signed, const Vmm &vr_src) {
+    auto load_i8 = [&](bool is_signed, const TReg &vr_src) {
         // Need to use mask of tail?
         if (masked) {
 
@@ -575,10 +578,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
     using namespace data_type;
     /*
-    const Vmm &vr_src
+    const TReg &vr_src
             = masked ? vreg_src_s32(jj, ll) | mask(ll) : vreg_src_s32(jj, ll);
     */
-    const Vmm &vr_src = vreg_src_s32(jj, ll);
+    const TReg &vr_src = vreg_src_s32(jj, ll);
 
     switch (jpp.src_dt) {
         case s32:
@@ -597,10 +600,11 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             if (masked) {
                 std::cout << __LINE__ << std::endl;
-                zip1(mask(ll).b, mask(ll).b, mask(ll).b);
-                zip1(mask(ll).h, mask(ll).h, mask(ll).h);
-                ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
                 pfalse(p9.b);
+                zip1(mask(ll).b, mask(ll).b, p9.b);
+                zip1(mask(ll).h, mask(ll).h, p9.h);
+                // use p_tmp, uzp1 can be eliminate.
+                ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
                 uzp1(mask(ll).b, mask(ll).b, p9.b);
                 uzp1(mask(ll).b, mask(ll).b, p9.b);
                 sxtb(ZReg(IDX(vr_src)).s, mask(ll) / T_m, z_tmp0.s);
@@ -615,10 +619,11 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             if (masked) {
                 std::cout << __LINE__ << std::endl;
-                zip1(mask(ll).b, mask(ll).b, mask(ll).b);
-                zip1(mask(ll).h, mask(ll).h, mask(ll).h);
-                ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
                 pfalse(p9.b);
+                zip1(mask(ll).b, mask(ll).b, p9.b);
+                zip1(mask(ll).h, mask(ll).h, p9.h);
+                // use p_tmp, uzp1 can be eliminate.
+                ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
                 uzp1(mask(ll).b, mask(ll).b, p9.b);
                 uzp1(mask(ll).b, mask(ll).b, p9.b);
                 uxtb(ZReg(IDX(vr_src)).s, mask(ll) / T_m, z_tmp0.s);
@@ -794,7 +799,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::store_dst_avg_op(
     // Don't generate useless code
     if (masked && !msk) return;
 
-    const Vmm &vr_dst = vreg_dst_s32(jj, ll);
+    const TReg &vr_dst = vreg_dst_s32(jj, ll);
 
     if (jpp.src_dt == s32) {
         if (masked)
@@ -830,7 +835,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::store_dst_avg_op(
     // Don't generate useless code
     if (masked && !msk) return;
 
-    auto s32_to_i8 = [&](bool is_signed, const Vmm &vr_dst) {
+    auto s32_to_i8 = [&](bool is_signed, const TReg &vr_dst) {
         // conversion: s32 -> s16/u16 : {8 x s32}{8 x 0} -> {16 x s16/u16}
         // Result QWORDs (qw0, qw1) permuted: {qw0, 0, qw1, 0}
         if (is_signed)
@@ -850,7 +855,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::store_dst_avg_op(
             vpackuswb(vr_dst, vr_dst, vreg_zeros);
     };
 
-    auto store_i8 = [&](bool is_signed, bool is_masked, const Vmm &vr_dst) {
+    auto store_i8 = [&](bool is_signed, bool is_masked, const TReg &vr_dst) {
         // Conversion s32 -> s8/u8
         s32_to_i8(is_signed, vr_dst);
 
@@ -934,17 +939,19 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
     // Don't generate useless code
     if (masked && !msk) return;
     /*
-    const Vmm &vr_dst
+    const TReg &vr_dst
             = masked ? vreg_dst_s32(jj, ll) | mask(ll) : vreg_dst_s32(jj, ll);
     */
-    const Vmm &vr_dst = vreg_dst_s32(jj, ll);
+    const TReg &vr_dst = vreg_dst_s32(jj, ll);
     switch (jpp.dst_dt) {
         case s32:
             //vmovups(ptr[reg_ptr_dst_i8 + offset], vr_dst);
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
             if (masked) {
+                std::cout << __LINE__ << std::endl;
                 st1w(ZRegS(IDX(vr_dst)), mask(ll), ptr(x_tmp_addr));
             } else {
+                std::cout << __LINE__ << std::endl;
                 str(ZReg(IDX(vr_dst)), ptr(x_tmp_addr));
             }
             break;
@@ -952,11 +959,13 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
             //vpmovsdb(ptr[reg_ptr_dst_i8 + offset], vr_dst);
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
             if (masked) {
+                std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
                 st1b(z_tmp0.s, mask(ll), ptr(x_tmp_addr));
             } else {
+                std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
@@ -967,10 +976,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
             //vpmovusdb(ptr[reg_ptr_dst_i8 + offset], vr_dst);
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
             if (masked) {
+                std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 umin(z_tmp0.s, 255);
                 st1b(z_tmp0.s, mask(ll), ptr(x_tmp_addr));
             } else {
+                std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 umin(z_tmp0.s, 255);
                 st1b(z_tmp0.s, p_512, ptr(x_tmp_addr));
@@ -1447,6 +1458,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                             rhs_arg_params.vmm_tail_idx_.emplace(
                                     reg_dst_f32.getIdx());
                     }
+                    std::cout << __LINE__ << std::endl;
                     postops_injector_->compute_vector(
                             reg_dst_f32.getIdx(), rhs_arg_params);
                 }
@@ -2112,8 +2124,8 @@ template struct jit_uni_i8i8_pooling_fwd_t<sse41>;
 template struct jit_uni_i8i8_pooling_fwd_ker_t<sve_512>;
 template struct jit_uni_i8i8_pooling_fwd_t<sve_512>;
 
-template struct jit_uni_i8i8_pooling_fwd_ker_t<asimd>;
-template struct jit_uni_i8i8_pooling_fwd_t<asimd>;
+//template struct jit_uni_i8i8_pooling_fwd_ker_t<asimd>;
+//template struct jit_uni_i8i8_pooling_fwd_t<asimd>;
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

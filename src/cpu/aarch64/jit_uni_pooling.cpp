@@ -1223,26 +1223,12 @@ void jit_uni_pooling_bwd_t<isa, d_type>::execute_backward_3d(
         }
     }
 }
-/*
-template struct jit_uni_pooling_fwd_t<sse41, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<sse41, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<avx, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<avx, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<avx2, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<avx2, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<avx512_common, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<avx512_common, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<avx512_core, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<avx512_core, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<avx512_core, data_type::bf16>;
-template struct jit_uni_pooling_bwd_t<avx512_core, data_type::bf16>;
-*/
-template struct jit_uni_pooling_fwd_t<asimd, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<asimd, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<sve_128, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<sve_128, data_type::f32>;
-template struct jit_uni_pooling_fwd_t<sve_256, data_type::f32>;
-template struct jit_uni_pooling_bwd_t<sve_256, data_type::f32>;
+//template struct jit_uni_pooling_fwd_t<asimd, data_type::f32>;
+//template struct jit_uni_pooling_bwd_t<asimd, data_type::f32>;
+//template struct jit_uni_pooling_fwd_t<sve_128, data_type::f32>;
+//template struct jit_uni_pooling_bwd_t<sve_128, data_type::f32>;
+//template struct jit_uni_pooling_fwd_t<sve_256, data_type::f32>;
+//template struct jit_uni_pooling_bwd_t<sve_256, data_type::f32>;
 template struct jit_uni_pooling_fwd_t<sve_512, data_type::f32>;
 template struct jit_uni_pooling_bwd_t<sve_512, data_type::f32>;
 
