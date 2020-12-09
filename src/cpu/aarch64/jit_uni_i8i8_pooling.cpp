@@ -601,13 +601,11 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             if (masked) {
                 std::cout << __LINE__ << std::endl;
                 pfalse(p9.b);
-                zip1(mask(ll).b, mask(ll).b, p9.b);
-                zip1(mask(ll).h, mask(ll).h, p9.h);
+                zip1(p1.b, mask(ll).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
                 // use p_tmp, uzp1 can be eliminate.
-                ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
-                uzp1(mask(ll).b, mask(ll).b, p9.b);
-                uzp1(mask(ll).b, mask(ll).b, p9.b);
-                sxtb(ZReg(IDX(vr_src)).s, mask(ll) / T_m, z_tmp0.s);
+                ld1b(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
+                sxtb(ZReg(IDX(vr_src)).s, p1 / T_m, z_tmp0.s);
             } else {
                 std::cout << __LINE__ << std::endl;
                 ld1b(z_tmp0.s, p_512 / T_z, ptr(x_tmp_addr));
@@ -620,13 +618,11 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             if (masked) {
                 std::cout << __LINE__ << std::endl;
                 pfalse(p9.b);
-                zip1(mask(ll).b, mask(ll).b, p9.b);
-                zip1(mask(ll).h, mask(ll).h, p9.h);
+                zip1(p1.b, mask(ll).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
                 // use p_tmp, uzp1 can be eliminate.
-                ld1b(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
-                uzp1(mask(ll).b, mask(ll).b, p9.b);
-                uzp1(mask(ll).b, mask(ll).b, p9.b);
-                uxtb(ZReg(IDX(vr_src)).s, mask(ll) / T_m, z_tmp0.s);
+                ld1b(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
+                uxtb(ZReg(IDX(vr_src)).s, p1 / T_m, z_tmp0.s);
             } else {
                 ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
                 zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
@@ -778,7 +774,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
             case u8:
                 //vmovdqu8(ptr[reg_ptr_dst_i8 + offset], vreg_dst(jj) | mask(0));
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
-                st1b(ZRegB(IDX(vreg_dst(jj))), mask(0), ptr(x_tmp_addr));
+		pfalse(p9.b);
+                zip1(p1.b, mask(0).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1b(ZRegB(IDX(vreg_dst(jj))), p1, ptr(x_tmp_addr));
                 break;
             default: assert(!"unsupported src data type");
         }
@@ -963,7 +962,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
-                st1b(z_tmp0.s, mask(ll), ptr(x_tmp_addr));
+		pfalse(p9.b);
+                zip1(p1.b, mask(0).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
             } else {
                 std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
