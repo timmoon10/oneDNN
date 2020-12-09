@@ -421,8 +421,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_max_op(
             //vmovups(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             std::cout << __LINE__ << std::endl;
-            ld1w(z_tmp0.s, mask(0) / T_z, ptr(x_tmp_addr));
-            mov(ZRegS(IDX(vreg_src(jj))), PReg(0) / T_m, z_tmp0.s);
+	    pfalse(p9.b);
+	    zip1(p1.b, mask(0).b, p9.b);
+	    zip1(p1.h, p1.h, p9.h);
+            ld1w(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
+            //mov(ZRegS(IDX(vreg_src(jj))), PReg(0) / T_m, z_tmp0.s);
+	    mov(ZRegS(IDX(vreg_src(jj))), p1 / T_m, z_tmp0.s);
         } else {
             //vmovdqu8(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
@@ -589,8 +593,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)),
                     offset * data_type_size(s32), x_tmp_0);
             if (masked) {
-                ld1w(z_tmp0.s, mask(ll) / T_z, ptr(x_tmp_addr));
-                mov(ZRegS(IDX(vr_src)), mask(ll) / T_m, z_tmp0.s);
+  	        pfalse(p9.b);
+                zip1(p1.b, mask(ll).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                ld1w(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
+                //mov(ZRegS(IDX(vr_src)), mask(ll) / T_m, z_tmp0.s);
+		mov(ZRegS(IDX(vr_src)), p1 / T_m, z_tmp0.s);
             } else {
                 ldr(ZReg(IDX(vr_src)), ptr(x_tmp_addr));
             }
@@ -768,16 +776,21 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
             case s32:
                 //vmovups(ptr[reg_ptr_dst_i8 + offset], vreg_dst(jj) | mask(0));
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
-                st1w(ZRegS(IDX(vreg_dst(jj))), mask(0), ptr(x_tmp_addr));
+		pfalse(p9.b);
+                zip1(p1.b, mask(0).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1w(ZRegS(IDX(vreg_dst(jj))), p1, ptr(x_tmp_addr));
                 break;
             case s8:
             case u8:
                 //vmovdqu8(ptr[reg_ptr_dst_i8 + offset], vreg_dst(jj) | mask(0));
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
+		/*
 		pfalse(p9.b);
                 zip1(p1.b, mask(0).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
-                st1b(ZRegB(IDX(vreg_dst(jj))), p1, ptr(x_tmp_addr));
+		*/
+                st1b(ZRegB(IDX(vreg_dst(jj))), mask(0), ptr(x_tmp_addr));
                 break;
             default: assert(!"unsupported src data type");
         }
@@ -948,7 +961,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
             if (masked) {
                 std::cout << __LINE__ << std::endl;
-                st1w(ZRegS(IDX(vr_dst)), mask(ll), ptr(x_tmp_addr));
+		pfalse(p9.b);
+                zip1(p1.b, mask(ll).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1w(ZRegS(IDX(vr_dst)), p1, ptr(x_tmp_addr));
             } else {
                 std::cout << __LINE__ << std::endl;
                 str(ZReg(IDX(vr_dst)), ptr(x_tmp_addr));
@@ -963,7 +979,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
 		pfalse(p9.b);
-                zip1(p1.b, mask(0).b, p9.b);
+                zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
             } else {
@@ -981,7 +997,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 umin(z_tmp0.s, 255);
-                st1b(z_tmp0.s, mask(ll), ptr(x_tmp_addr));
+		pfalse(p9.b);
+                zip1(p1.b, mask(ll).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
             } else {
                 std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
