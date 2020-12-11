@@ -117,9 +117,7 @@ struct jit_uni_eltwise_injector_f32 {
     void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
     void compute_vector(size_t idx) { compute_vector_range(idx, idx + 1); }
     void prepare_table(bool gen_table = true);
-    void load_table_addr() {
-        h->adr(Xbyak_aarch64::XReg(x_table.getIdx()), l_table);
-    }
+    void load_table_addr() { h->adr(x_table, l_table); }
 
 private:
     const alg_kind_t alg_;
@@ -164,36 +162,18 @@ private:
     /* These vector register must be assigned proper index. */
     TRegS vmm_mask {0}, vmm_aux0 {0}, vmm_aux1 {0}, vmm_aux2 {0}, vmm_aux3 {0},
             vmm_aux4 {0}, vmm_aux5 {0}, vmm_aux6 {0}, vmm_aux7 {0}, vmm_tmp {0};
-
-    /* Caution: Chose predicate registers not used by x64's implementation,
-       and register indices must be same as jit_uni_eltwise.cpp
-       and convolutions which uses eltwise_injector. */
-    Xbyak_aarch64::PReg p_lsb {7};
-    Xbyak_aarch64::PReg p_512 {7};
-    //    Xbyak_aarch64::PReg p_256 {6};
-    //    Xbyak_aarch64::PReg p_128 {5};
-    Xbyak_aarch64::PReg p_tmp0 {4};
-    //    Xbyak_aarch64::PReg p_tmp1 {3};
-
-    Xbyak_aarch64::XReg x_tmp_0 {23};
-    Xbyak_aarch64::XReg x_tmp_1 {24};
-    Xbyak_aarch64::XReg x_tmp_2 {25};
-    Xbyak_aarch64::XReg x_tmp_3 {26};
-    Xbyak_aarch64::XReg x_tmp_4 {27};
-
-    const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
-            = {x_tmp_0, x_tmp_1, x_tmp_2, x_tmp_3, x_tmp_4};
-    constexpr static int x_tmp_vec_size = 5;
-
     /* Default tempooral index. Chose a SVE register
      not to be same as jit_uni_eltwise.(cpp|hpp).
      This index is changed by assign_regs() in case of eltwise injection.
   */
     TRegS z_tmp {31};
 
-    //  const std::vector<ZReg> z_tmp_vec = {
-    //    z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
-    //  constexpr static int z_tmp_vec_size = 8;
+    /* Caution: Chose predicate registers not used by x64's implementation,
+       and register indices must be same as jit_uni_eltwise.cpp
+       and convolutions which uses eltwise_injector. */
+    Xbyak_aarch64::PReg p_lsb {7};
+    Xbyak_aarch64::PReg p_512 {7};
+    Xbyak_aarch64::PReg p_tmp0 {4};
 
     size_t aux_vecs_count();
     size_t aux_gprs_count();
@@ -306,13 +286,12 @@ private:
 
     TRegS table_val(key_t key, size_t key_off_val_shift = 0) {
         Xbyak_aarch64::XReg x_addr(h->X_DEFAULT_ADDR);
-        uint32_t tableIdx = static_cast<uint32_t>(x_table.getIdx());
         auto off = table_off(key, key_off_val_shift);
 
         if (off) {
-            h->add_imm(x_addr, Xbyak_aarch64::XReg(tableIdx), off, h->X_TMP_0);
+            h->add_imm(x_addr, x_table, off, h->X_TMP_0);
         } else {
-            x_addr = Xbyak_aarch64::XReg(tableIdx);
+            x_addr = x_table;
         }
 
         h->ldr(TReg(z_tmp.getIdx()), ptr(x_addr));

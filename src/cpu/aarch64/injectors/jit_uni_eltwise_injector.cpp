@@ -77,7 +77,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     h->ptrue(p_512.b);
 
     if (save_state_) {
-        h->str(XReg(IDX(x_table)), pre_ptr(XReg(IDX(h->X_SP)), -8));
+        h->str(x_table, pre_ptr(h->X_SP, -8));
 
         for (size_t i = 0; i < preserved_gprs_count; ++i) {
             /* This route has not been tested */
@@ -85,24 +85,23 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
         }
 
         if (preserved_vecs_count)
-            h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                    preserved_vecs_count * vlen, x_tmp_0);
+            h->sub_imm(
+                    h->X_SP, h->X_SP, preserved_vecs_count * vlen, h->X_TMP_0);
 
-        XReg x_sp(4);
-        XReg x_addr(28);
         size_t i = 0;
 
         while (i < preserved_vecs_count) {
             int count = 0;
             int ii = i;
             do {
-                h->add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+                h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                        h->X_DEFAULT_ADDR);
                 i++;
-            } while (i < preserved_vecs_count && count < x_tmp_vec_size);
+            } while (i < preserved_vecs_count && count < h->x_tmp_vec_size);
 
             for (int j = 0; j < count; j++)
                 h->st1w(ZRegS(preserved_vec_idxs[ii++]), p_512,
-                        ptr(x_tmp_vec[j]));
+                        ptr(h->x_tmp_vec[j]));
         }
         load_table_addr();
     }
@@ -120,25 +119,22 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
 
     if (save_state_) {
         /* This route has not been tested */
-        if (idx_off)
-            h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), idx_off * vlen,
-                    x_tmp_0);
+        if (idx_off) h->add_imm(h->X_SP, h->X_SP, idx_off * vlen, h->X_TMP_0);
 
-        XReg x_sp(4);
-        XReg x_addr(28);
         size_t i = 0;
 
         while (i < tail_vecs_to_preserve) {
             int count = 0;
             int ii = i;
             do {
-                h->add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+                h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                        h->X_DEFAULT_ADDR);
                 i++;
-            } while (i < tail_vecs_to_preserve && count < x_tmp_vec_size);
+            } while (i < tail_vecs_to_preserve && count < h->x_tmp_vec_size);
 
             for (int j = 0; j < count; j++)
                 h->ld1w(ZRegS(preserved_vec_idxs[idx_off + ii++]), p_512 / T_z,
-                        ptr(x_tmp_vec[j]));
+                        ptr(h->x_tmp_vec[j]));
         }
     }
 
@@ -146,24 +142,25 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
         preserved_vec_idxs[idx_off + i] += tail_vecs_to_preserve;
 
     if (save_state_) {
-        XReg x_sp(4);
-        XReg x_addr(28);
         size_t i = 0;
 
         while (i < tail_vecs_to_preserve) {
             int count = 0;
             int ii = i;
             do {
-                h->add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+                h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                        h->X_DEFAULT_ADDR);
                 i++;
-            } while (i < tail_vecs_to_preserve && count < x_tmp_vec_size);
+            } while (i < tail_vecs_to_preserve && count < h->x_tmp_vec_size);
 
             for (int j = 0; j < count; j++)
                 h->st1w(ZRegS(preserved_vec_idxs[idx_off + ii++]), p_512 / T_z,
-                        ptr(x_tmp_vec[j]));
+                        ptr(h->x_tmp_vec[j]));
         }
 
-        if (idx_off) { h->sub_imm(XReg(4), XReg(4), idx_off * vlen, x_tmp_0); }
+        if (idx_off) {
+            h->sub_imm(h->X_SP, h->X_SP, idx_off * vlen, h->X_TMP_0);
+        }
     }
 
     assign_regs();
@@ -174,29 +171,28 @@ void jit_uni_eltwise_injector_f32<isa>::injector_postamble() {
     using namespace Xbyak_aarch64::util;
     if (!save_state_) return;
 
-    XReg x_sp(4);
-    XReg x_addr(28);
     size_t i = 0;
 
     while (i < preserved_vecs_count) {
         int count = 0;
         int ii = i;
         do {
-            h->add_imm(x_tmp_vec[count++], x_sp, i * vlen, x_addr);
+            h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                    h->X_DEFAULT_ADDR);
             i++;
-        } while (i < preserved_vecs_count && count < x_tmp_vec_size);
+        } while (i < preserved_vecs_count && count < h->x_tmp_vec_size);
 
         for (int j = 0; j < count; j++)
             h->ld1w(ZRegS(preserved_vec_idxs[ii++]), p_512 / T_z,
-                    ptr(x_tmp_vec[j]));
+                    ptr(h->x_tmp_vec[j]));
     }
 
     if (preserved_vecs_count)
-        h->add_imm(XReg(4), XReg(4), preserved_vecs_count * vlen, x_tmp_0);
+        h->add_imm(h->X_SP, h->X_SP, preserved_vecs_count * vlen, h->X_TMP_0);
 
     for (int i = aux_gprs_count() - 1; i >= 0; --i)
-        h->ldr(XReg(preserved_gpr_idxs[i]), pre_ptr(XReg(4), 8));
-    h->ldr(x_table, pre_ptr(XReg(4), 8));
+        h->ldr(XReg(preserved_gpr_idxs[i]), pre_ptr(h->X_SP, 8));
+    h->ldr(x_table, pre_ptr(h->X_SP, 8));
 }
 
 template <cpu_isa_t isa>
@@ -372,20 +368,7 @@ void jit_uni_eltwise_injector_f32<isa>::compute_cmp_mask(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::blend_with_mask(
         const TRegS &vmm_dst, const TRegS &src) {
-    if (vlen == 64) {
-        h->sel(ZRegS(IDX(vmm_dst)), PReg(IDX(p_mask)) / T_m, ZRegS(IDX(src)),
-                ZRegS(IDX(vmm_dst)));
-    } else if (vlen == 32) {
-        h->sel(ZRegS(IDX(vmm_dst)), PReg(IDX(p_mask)) / T_m, ZRegS(IDX(src)),
-                ZRegS(IDX(vmm_dst)));
-        h->mov(ZReg(IDX(vmm_dst)).s, h->P_MSB_256 / T_m, 0);
-    } else if (vlen == 16) {
-        h->sel(ZRegS(IDX(vmm_dst)), PReg(IDX(p_mask)) / T_m, ZRegS(IDX(src)),
-                ZRegS(IDX(vmm_dst)));
-        h->mov(ZReg(IDX(vmm_dst)).s, h->P_MSB_384 / T_m, 0);
-    } else {
-        assert(!"unreachable");
-    }
+    h->sel(vmm_dst, p_mask / T_m, src, vmm_dst);
 }
 
 template <cpu_isa_t isa>
@@ -401,34 +384,31 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
 
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(exp_ln_flt_max_f))));
-    h->fminnm(z_tmp, p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmin(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fminnm(z_tmp, p_tmp0, vmm_src);
+    h->fmin(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(exp_ln_flt_min_f))));
-    h->fmaxnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmax(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
+    h->fmax(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
     h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
 
     // calculate exp(x)
     // fx = x * log2ef + 0.5
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(exp_log2ef))).s);
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(half))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(exp_log2ef))));
+    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
 
     // tmp = floorf(fx)
 
-    h->frintm(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)));
+    h->frintm(vmm_aux2, p_tmp0 / T_m, vmm_src);
 
     // keep vmm_src = fx for further computations
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
 
     // x = x - fx * ln2
-    h->fmls(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux2)),
-            ZRegS(IDX(table_val(ln2f))));
+    h->fmls(vmm_aux1, p_tmp0 / T_m, vmm_aux2, ZRegS(IDX(table_val(ln2f))));
 
     // We do not count 2^n here, because n can reach 128 and 2^128 is not
     // representable by fp32, so to get around this problem, instead of computing
@@ -436,14 +416,12 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     // and 2 are numbers representable in fp32.
 
     // compute 2^(n-1)
-    h->fsub(ZRegS(IDX(vmm_src)), ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(table_val(one))));
-    h->frinti(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)));
-    h->fcvtzs(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux2)));
+    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
+    h->frinti(vmm_aux2, p_tmp0 / T_m, vmm_src);
+    h->fcvtzs(vmm_aux2, p_tmp0 / T_m, vmm_aux2);
+    h->add(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(exponent_bias))));
+    h->lsl(vmm_aux2, vmm_aux2,
 
-    h->add(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s,
-            ZReg(IDX(table_val(exponent_bias))).s);
-    h->lsl(ZRegS(IDX(vmm_aux2)), ZRegS(IDX(vmm_aux2)),
             n_mantissa_bits); //TRegS(6) = 2^-fx
 
     // use vmm_src as tmp vmm_zero when applying mask
@@ -453,40 +431,25 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
 
     // compute polynomial
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(exp_pol, 4))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(exp_pol, 3))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(exp_pol, 2))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(exp_pol, 1))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(exp_pol, 0))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 3))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 2))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 1))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 0))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
 
     // y = y * 2^n
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux2)).s);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZRegS(IDX(table_val(two))));
+    h->fmul(vmm_src, vmm_src, vmm_aux2);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(two))));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_fwd(
         const TRegS &vmm_src) {
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
     compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(alpha))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     blend_with_mask(vmm_src, vmm_aux1);
 }
 
@@ -495,8 +458,8 @@ void jit_uni_eltwise_injector_f32<isa>::relu_zero_ns_compute_vector_fwd(
         const TRegS &vmm_src) {
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmax(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
+    h->fmax(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 }
 
@@ -504,26 +467,16 @@ template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::elu_compute_vector_fwd(
         const TRegS &vmm_src) {
     // IMPORTANT: we use vmm_aux3 for the mask as exp_compute does not use it.
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux3)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
 
     // compute exponent
     exp_compute_vector_fwd(vmm_src);
 
     // alpha * (exp(x) - 1)
-    h->fsub(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(one))).s);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(alpha))).s);
+    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
 
     // combine with mask
     compute_cmp_mask(vmm_aux3, table_val(zero), _cmp_gt_os);
@@ -601,26 +554,15 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
                 {
                     ZReg zmm_coeff(vmm_coeff.getIdx());
                     ZReg zmm_pol_idx(vmm_pol_idx.getIdx());
-                    if (vlen != 32) {
-                        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z,
-                                PRegB(IDX(p_512)));
-                        h->mov(ZRegD(IDX(zmm_coeff)),
-                                ZRegD(IDX(coeffs_address(coeff_idx, 0))));
-                        h->mov(ZRegS(IDX(zmm_coeff)), p_tmp0 / T_m, 0);
-                    } else {
-                        /* This route has not been tested */
-                        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b,
-                                PRegB(IDX(p_512)));
-                        h->mov(ZRegS(IDX(zmm_coeff)), PReg(IDX(p_512)) / T_m,
-                                ZRegS(IDX(coeffs_address(coeff_idx, 0))));
-                        h->mov(ZRegS(IDX(zmm_coeff)), p_tmp0 / T_m, 0);
-                    }
+                    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+                    h->mov(ZRegD(IDX(zmm_coeff)),
+                            ZRegD(IDX(coeffs_address(coeff_idx, 0))));
+                    h->mov(ZRegS(IDX(zmm_coeff)), p_tmp0 / T_m, 0);
 
                     vpermt2ps_aarch64(ZRegS(IDX(zmm_coeff)),
                             ZRegS(IDX(zmm_pol_idx)),
-                            ZRegS(IDX(coeffs_address(coeff_idx, 16))),
-                            ZRegS(IDX(vmm_aux5)), ZRegS(IDX(vmm_aux6)),
-                            ZRegS(IDX(vmm_aux7)), p_tmp0);
+                            ZRegS(IDX(coeffs_address(coeff_idx, 16))), vmm_aux5,
+                            vmm_aux6, vmm_aux7, p_tmp0);
                     break;
                 }
             default: assert(!"unimplemented");
@@ -629,54 +571,29 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
 
     // because tanh(x) = -tanh(-x), we extract sign to make x postive
     // and reapply sign at the end
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src_original)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_src_original)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src_original)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_src_original)), p_tmp0 / T_m, 0);
-    }
-    h->and_(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(positive_mask))).d);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src_original)), ZRegD(IDX(vmm_src)));
+    h->mov(ZRegS(IDX(vmm_src_original)), p_tmp0 / T_m, 0);
+    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(positive_mask))));
 
     // We compute the indices for the table lookup
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_indices)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_indices)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_indices)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_src)));
+    h->mov(ZRegS(IDX(vmm_indices)), p_tmp0 / T_m, 0);
     h->sub(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)),
             ZRegS(IDX(table_val(tanh_idx_bias))));
-    h->and_(ZReg(IDX(vmm_indices)).d, ZReg(IDX(vmm_indices)).d,
-            ZReg(IDX(table_val(tanh_idx_mask))).d);
+    h->and_(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_indices)),
+            ZRegD(IDX(table_val(tanh_idx_mask))));
     h->lsr(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)), 22);
 
     // we do the argument reduction
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_src_shift)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src_shift)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_src_shift)), p_tmp0 / T_m, 0);
-    }
-    h->and_(ZReg(IDX(vmm_src_shift)).d, ZReg(IDX(vmm_src_shift)).d,
-            ZReg(IDX(table_val(tanh_idx_mask))).d);
-    h->fsub(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(vmm_src_shift)).s);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src)));
+    h->mov(ZRegS(IDX(vmm_src_shift)), p_tmp0 / T_m, 0);
+    h->and_(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src_shift)),
+            ZRegD(IDX(table_val(tanh_idx_mask))));
+    h->fsub(vmm_src, vmm_src, ZRegS(IDX(vmm_src_shift)));
 
     // we gather and evaluate the polynonials
     gather_coefficient_init(vmm_indices, vlen / sizeof(float));
@@ -684,195 +601,116 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
 
     for (int deg = 5; deg >= 0; --deg) {
         gather_coefficient(vmm_coeff, deg, vmm_indices);
-        h->fmad(ZRegS(IDX(vmm_pol)), p_512 / T_m, ZRegS(IDX(vmm_src)),
+        h->fmad(ZRegS(IDX(vmm_pol)), p_512 / T_m, vmm_src,
                 ZRegS(IDX(vmm_coeff)));
     }
 
     // we restore src with cleared sign, and keep sign
     assert(vmm_sign.getIdx() == vmm_src_original.getIdx());
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src_original)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src_original)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
-    h->and_(ZReg(IDX(vmm_sign)).d, ZReg(IDX(vmm_sign)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
-    h->and_(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(positive_mask))).d);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src_original)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->and_(ZRegD(IDX(vmm_sign)), ZRegD(IDX(vmm_sign)),
+            ZRegD(IDX(table_val(sign_mask))));
+    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(positive_mask))));
 
     // Now we blend the results
     // [saturation_ubound; +inf[ : we return +/- 1
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_dst)), ZRegD(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_dst)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_dst)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_dst)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_dst)), ZRegD(IDX(table_val(one))));
+    h->mov(vmm_dst, p_tmp0 / T_m, 0);
 
     // [linear_ubound; saturation_lbound] : we return +/- P(x)
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_mask)),
-                ZRegD(IDX(table_val(tanh_saturation_lbound))));
-        h->mov(ZRegS(IDX(vmm_mask)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_mask)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(tanh_saturation_lbound))));
-        h->mov(ZRegS(IDX(vmm_mask)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_mask)), ZRegD(IDX(table_val(tanh_saturation_lbound))));
+    h->mov(vmm_mask, p_tmp0 / T_m, 0);
 
     compute_cmp_mask(vmm_mask, vmm_src, _cmp_gt_os);
     blend_with_mask(vmm_dst, vmm_pol);
 
     // [0; linear_ubound]  : we return x
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_mask)), ZRegD(IDX(table_val(tanh_linear_ubound))));
-        h->mov(ZRegS(IDX(vmm_mask)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_mask)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(tanh_linear_ubound))));
-        h->mov(ZRegS(IDX(vmm_mask)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_mask)), ZRegD(IDX(table_val(tanh_linear_ubound))));
+    h->mov(vmm_mask, p_tmp0 / T_m, 0);
 
     compute_cmp_mask(vmm_mask, vmm_src, _cmp_gt_os);
     blend_with_mask(vmm_dst, vmm_src);
 
     // We reapply the sign and return
-    h->eor(ZReg(IDX(vmm_dst)).d, ZReg(IDX(vmm_dst)).d, ZReg(IDX(vmm_sign)).d);
+    h->eor(ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
 
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_dst)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::gelu_tanh_compute_vector_fwd(
         const TRegS &vmm_src) {
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux0)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
 
     // compute G(x) = sqrt_root_two_over_pi * x * (1 + fitting_const * x * x)
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s);
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)),
-                ZRegD(IDX(table_val(gelu_tanh_fitting_const))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(gelu_tanh_fitting_const))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux0)).s);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(gelu_tanh_sqrt_two_over_pi))).s);
+    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(gelu_tanh_fitting_const))));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->fmul(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(gelu_tanh_sqrt_two_over_pi))));
 
     // save x on stack as tanh uses vmm_aux0
-    h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->str(ZReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->str(QReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->str(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
 
     // compute tanh(G(x))
     tanh_compute_vector_fwd(vmm_src);
 
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
+    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     // compute 0.5 * x * (1 + tanh(G(x)))
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(one))).s);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(half))).s);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux0)).s);
+    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
+    h->fmul(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::square_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s);
+    h->fmul(vmm_src, vmm_src, vmm_src);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::abs_compute_vector_fwd(
         const TRegS &vmm_src) {
     // compute abs(x) = _mm_and_ps(x, 01111..111));
-    h->and_(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(positive_mask))).d);
+    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(positive_mask))));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::sqrt_compute_vector_fwd(
         const TRegS &vmm_src) {
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b, h->P_ALL_ONE.b);
-    h->fsqrt(ZReg(IDX(vmm_src)).s, p_tmp0 / T_m, ZReg(IDX(vmm_src)).s);
+    h->fsqrt(vmm_src, p_tmp0 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::linear_compute_vector_fwd(
         const TRegS &vmm_src) {
     // compute x = alpha * x + beta;
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(alpha))));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux0)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(alpha))));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux0)),
-            ZRegS(IDX(table_val(beta))));
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(alpha))));
+    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux0, ZRegS(IDX(table_val(beta))));
 }
 
 template <cpu_isa_t isa>
@@ -880,14 +718,14 @@ void jit_uni_eltwise_injector_f32<isa>::bounded_relu_compute_vector_fwd(
         const TRegS &vmm_src) {
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmax(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
+    h->fmax(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(alpha))));
-    h->fminnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmin(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fminnm(z_tmp, p_tmp0, vmm_src);
+    h->fmin(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 }
 
@@ -896,14 +734,14 @@ void jit_uni_eltwise_injector_f32<isa>::clip_compute_vector_fwd(
         const TRegS &vmm_src) {
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(alpha))));
-    h->fmaxnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmax(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
+    h->fmax(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(beta))));
-    h->fminnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmin(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fminnm(z_tmp, p_tmp0, vmm_src);
+    h->fmin(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 }
 
@@ -923,46 +761,39 @@ void jit_uni_eltwise_injector_f32<isa>::soft_relu_compute_vector_fwd(
     // keep src for further computations
     h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(vmm_src)));
 
-    h->fminnm(ZRegS(IDX(table_val(exp_ln_flt_max_f))), p_tmp0,
-            ZRegS(IDX(vmm_src)));
-    h->fmin(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fminnm(ZRegS(IDX(table_val(exp_ln_flt_max_f))), p_tmp0, vmm_src);
+    h->fmin(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
-    h->fmaxnm(ZRegS(IDX(table_val(exp_ln_flt_min_f))), p_tmp0,
-            ZRegS(IDX(vmm_src)));
-    h->fmax(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fmaxnm(ZRegS(IDX(table_val(exp_ln_flt_min_f))), p_tmp0, vmm_src);
+    h->fmax(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
     h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
 
     // calculate exp(x)
     // fx = x * log2ef + 0.5
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(exp_log2ef))).s);
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(half))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(exp_log2ef))));
+    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
 
     // tmp = floorf(fx)
-    h->frintm(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)));
+    h->frintm(vmm_aux0, p_tmp0 / T_m, vmm_src);
 
     // keep vmm_src = fx for further computations
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 
     // x = x - fx * ln2
-    h->fmul(ZReg(IDX(vmm_aux0)).s, ZReg(IDX(vmm_aux0)).s,
-            ZReg(IDX(table_val(ln2f))).s);
-    h->fsub(ZReg(IDX(vmm_aux1)).s, ZReg(IDX(vmm_aux1)).s,
-            ZReg(IDX(vmm_aux0)).s);
+    h->fmul(vmm_aux0, vmm_aux0, ZRegS(IDX(table_val(ln2f))));
+    h->fsub(vmm_aux1, vmm_aux1, vmm_aux0);
     // compute exponent polynomial
     h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(exp_pol, 4))));
-    h->fmad(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)),
+    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
             ZRegS(IDX(table_val(exp_pol, 3))));
-    h->fmad(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)),
+    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
             ZRegS(IDX(table_val(exp_pol, 2))));
-    h->fmad(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)),
+    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
             ZRegS(IDX(table_val(exp_pol, 1))));
-    h->fmad(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)),
+    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
             ZRegS(IDX(table_val(exp_pol, 0))));
-    h->fmad(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
+    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
 
     // We do not count 2^-n here, because n can reach 128 and 2^(-128) is not
     // representable by fp32, so to get around this problem, instead of computing
@@ -971,68 +802,61 @@ void jit_uni_eltwise_injector_f32<isa>::soft_relu_compute_vector_fwd(
 
     // compute 2^-(n-1)
     // vmm_src now represents n-1
-    h->fsub(ZRegS(IDX(vmm_src)), ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(table_val(one))));
-    h->fmul(ZReg(IDX(vmm_aux1)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(minus_one))).s);
+    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
+    h->fmul(vmm_aux1, vmm_src, ZRegS(IDX(table_val(minus_one))));
 
-    h->frinti(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)));
-    h->fcvtzs(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux1)));
+    h->frinti(vmm_aux1, p_tmp0 / T_m, vmm_aux1);
+    h->fcvtzs(vmm_aux1, p_tmp0 / T_m, vmm_aux1);
     // restore vmm_src to n
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(one))).s);
+    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
 
-    h->add(ZReg(IDX(vmm_aux1)).s, ZReg(IDX(vmm_aux1)).s,
-            ZReg(IDX(table_val(exponent_bias))).s);
-    h->lsl(ZRegS(IDX(vmm_aux1)), ZRegS(IDX(vmm_aux1)), n_mantissa_bits);
+    h->add(vmm_aux1, vmm_aux1, ZRegS(IDX(table_val(exponent_bias))));
+    h->lsl(vmm_aux1, vmm_aux1, n_mantissa_bits);
     // calculate ln(1 + y)
-    h->fmul(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s,
-            ZReg(IDX(table_val(two))).s); // 2*exp(r)
-    h->fadd(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s,
-            ZReg(IDX(vmm_aux1)).s); // 2^-(n-1) + 2*exp(r)
-    h->fdiv(ZReg(IDX(vmm_aux3)).s, p_tmp0 / T_m,
-            ZReg(IDX(table_val(two))).s); // (2^-(n-1) + 2*exp(r))/2
+    h->fmul(vmm_aux3, vmm_aux3,
+            ZRegS(IDX(table_val(two)))); // 2*exp(r)
+    h->fadd(vmm_aux3, vmm_aux3,
+            vmm_aux1); // 2^-(n-1) + 2*exp(r)
+    h->fdiv(vmm_aux3, p_tmp0 / T_m,
+            ZRegS(IDX(table_val(two)))); // (2^-(n-1) + 2*exp(r))/2
 
     // frexp()
-    h->lsr(ZRegS(IDX(vmm_src)), ZRegS(IDX(vmm_aux3)), n_mantissa_bits);
-    h->scvtf(ZReg(IDX(vmm_src)).s, p_tmp0 / T_m, ZReg(IDX(vmm_src)).s);
+    h->lsr(vmm_src, vmm_aux3, n_mantissa_bits);
+    h->scvtf(vmm_src, p_tmp0 / T_m, vmm_src);
     // got n. where n is x = 2^n * y. y = 0.5 .. 1
-    h->fsub(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(soft_relu_one_twenty_six))).s);
+    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(soft_relu_one_twenty_six))));
 
     // and with mask (to get 0.5 * mantissa)
-    h->and_(ZReg(IDX(vmm_aux3)).d, ZReg(IDX(vmm_aux3)).d,
-            ZReg(IDX(table_val(soft_relu_mantissa_sign_mask))).d);
+    h->and_(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
+            ZRegD(IDX(table_val(soft_relu_mantissa_sign_mask))));
     // got y. (mantisa)  0.5 < y < 1 (or with (to get 0.5 * mantissa))
-    h->orr(ZReg(IDX(vmm_aux3)).d, ZReg(IDX(vmm_aux3)).d,
-            ZReg(IDX(table_val(half))).d);
+    h->orr(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
+            ZRegD(IDX(table_val(half))));
     // y  = y - 1
-    h->fsub(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s,
-            ZReg(IDX(table_val(one))).s);
+    h->fsub(vmm_aux3, vmm_aux3, ZRegS(IDX(table_val(one))));
 
     // compute log1p polynomial
     h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(soft_relu_pol, 8))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 7))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 6))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 5))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 4))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 3))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 2))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 1))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
             ZRegS(IDX(table_val(soft_relu_pol, 0))));
     //calculate ln(2) * n
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(ln2f))).s);
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux1)).s);
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux0)).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(ln2f))));
+    h->fadd(vmm_src, vmm_src, vmm_aux1);
+    h->fadd(vmm_src, vmm_src, vmm_aux0);
 
     // get vmm_mask = src > max logf
     // y = (x < max log f) ? soft_relu(x) : x
@@ -1047,105 +871,61 @@ void jit_uni_eltwise_injector_f32<isa>::logistic_compute_vector_fwd(
     // compute exp(x), where x <= 0 to get 0 <= exp(x) <= 1 and restore value
     // sign at the end. This is possible due to logistic is symmetric function.
     // IMPORTANT: we use vmm_aux3 for the mask as exp_compute does not use it.
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux3)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
     // we store the original sign and make x negative
-    h->and_(ZReg(IDX(vmm_aux3)).d, ZReg(IDX(vmm_aux3)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
-    h->orr(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->and_(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
+            ZRegD(IDX(table_val(sign_mask))));
+    h->orr(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(sign_mask))));
 
     exp_compute_vector_fwd(vmm_src);
 
     // dup exp(x)
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
     // (exp(x) + 1)
-    h->fadd(ZReg(IDX(vmm_aux1)).s, ZReg(IDX(vmm_aux1)).s,
-            ZReg(IDX(table_val(one))).s);
+    h->fadd(vmm_aux1, vmm_aux1, ZRegS(IDX(table_val(one))));
     // y = exp(x) / (exp(x) + 1)
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(ZRegS(IDX(vmm_src)), p_tmp0, ZRegS(IDX(vmm_aux1)));
+    h->fdiv(vmm_src, p_tmp0, vmm_aux1);
 
     // Now we have to apply the "symmetry" based on original sign
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux2)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, 0);
-    }
-    h->fsub(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_src)).s);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(one))));
+    h->mov(vmm_aux2, p_tmp0 / T_m, 0);
+    h->fsub(vmm_aux2, vmm_aux2, vmm_src);
 
     h->movs(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->and_(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)));
-    h->cmpne(PRegS(IDX(p_mask)), p_tmp0 / T_z, ZRegS(IDX(z_tmp)), 0);
+    h->cmpne(PRegS(IDX(p_mask)), p_tmp0 / T_z, z_tmp, 0);
 
     blend_with_mask(vmm_aux2, vmm_src);
 
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_aux2)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_fwd(
         const TRegS &vmm_src) {
     // Save src data on stack for later usage
-    h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
     // x*alpha
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(alpha))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     // sigmoid(x*alpha)
     logistic_compute_vector_fwd(vmm_src);
     // x*sigmoid(alpha*x)
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
+    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux0)).s);
+    h->fmul(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
@@ -1165,43 +945,37 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     // If (x < 0) result = qnan;
 
     // save source on stack to check neg and zero values at the end
-    h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
     // compute i
     const int approx_order = 5;
-    h->lsr(ZRegS(IDX(vmm_aux1)), ZRegS(IDX(vmm_src)),
-            n_mantissa_bits - approx_order);
-    h->and_(ZReg(IDX(vmm_aux1)).d, ZReg(IDX(vmm_aux1)).d,
-            ZReg(IDX(table_val(log_five_bit_offset))).d);
-    h->lsl(ZRegS(IDX(vmm_aux1)), ZRegS(IDX(vmm_aux1)),
+    h->lsr(vmm_aux1, vmm_src, n_mantissa_bits - approx_order);
+    h->and_(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(log_five_bit_offset))));
+    h->lsl(vmm_aux1, vmm_aux1,
             1); // multiply i by 2
 
     // compute anticancellation i
-    h->lsr(ZRegS(IDX(vmm_aux2)), ZRegS(IDX(vmm_aux1)), approx_order);
+    h->lsr(vmm_aux2, vmm_aux1, approx_order);
 
     // get E, don't care about sign as only positive numbers are considered
-    h->lsr(ZRegS(IDX(vmm_aux3)), ZRegS(IDX(vmm_src)), n_mantissa_bits);
-    h->add(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux2)).s);
+    h->lsr(vmm_aux3, vmm_src, n_mantissa_bits);
+    h->add(vmm_aux3, vmm_aux3, vmm_aux2);
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->scvtf(ZReg(IDX(vmm_aux3)).s, p_tmp0 / T_m, ZReg(IDX(vmm_aux3)).s);
+    h->scvtf(vmm_aux3, p_tmp0 / T_m, vmm_aux3);
 
     // get m (mantissa)
-    h->eor(ZReg(IDX(vmm_aux2)).d, ZReg(IDX(vmm_aux2)).d,
-            ZReg(IDX(table_val(exponent_bias))).d);
-    h->lsl(ZRegS(IDX(vmm_aux2)), ZRegS(IDX(vmm_aux2)), n_mantissa_bits);
-    h->and_(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(log_mantissa_mask))).d);
-    h->orr(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_aux2)).d);
+    h->eor(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(vmm_aux2)),
+            ZRegD(IDX(table_val(exponent_bias))));
+    h->lsl(vmm_aux2, vmm_aux2, n_mantissa_bits);
+    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(log_mantissa_mask))));
+    h->orr(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
 
     // At first, adjust indices for table structure which broadcasts elements
-    h->lsl(ZRegS(IDX(vmm_aux1)), ZRegS(IDX(vmm_aux1)),
+    h->lsl(vmm_aux1, vmm_aux1,
             4); // multiply by simd_w = 16
 
     const auto it = entry_map_.find(log_predefined_vals);
@@ -1210,16 +984,15 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     auto gather_table_values = [&](const TRegS &vmm_dst, const TRegS &vmm_idxs,
                                        size_t offt = 0) {
-        XReg x_addr(h->X_DEFAULT_ADDR);
         h->ptrue(PRegS(IDX(p_mask)), VL16);
-        h->add_imm(x_addr, XReg(IDX(x_table)), table_start_idx + offt, x_tmp_1);
+        h->add_imm(
+                h->X_DEFAULT_ADDR, x_table, table_start_idx + offt, h->X_TMP_1);
 
         h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_idxs)));
-        h->mul(ZRegS(IDX(z_tmp)), 4);
+        h->mul(z_tmp, 4);
 
-        h->ld1w(ZRegS(IDX(z_tmp)), PReg(IDX(p_mask)) / T_z,
-                ptr(x_addr, ZRegS(IDX(z_tmp)), SXTW));
-        h->mov(ZRegS(IDX(vmm_dst)), PReg(IDX(p_mask)) / T_m, ZRegS(IDX(z_tmp)));
+        h->ld1w(z_tmp, p_mask / T_z, ptr(h->X_DEFAULT_ADDR, z_tmp, SXTW));
+        h->mov(vmm_dst, p_mask / T_m, z_tmp);
         h->pfalse(PRegB(IDX(p_mask)));
     };
 
@@ -1228,39 +1001,25 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     // compute relative error (rel_err = m * r_i - 1)
     /* [info]Expand from the content of the process, not from the instruction. */
-    h->fmul(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_src)).s);
-    h->fsub(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s,
-            ZReg(IDX(table_val(one))).s);
+    h->fmul(vmm_aux2, vmm_aux2, vmm_src);
+    h->fsub(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(one))));
 
     // compute polynomial(rel_err)
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(log_pol, 3))));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(log_pol, 3))));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux2)),
-            ZRegS(IDX(table_val(log_pol, 2))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux2)),
-            ZRegS(IDX(table_val(log_pol, 1))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux2)),
-            ZRegS(IDX(table_val(log_pol, 0))));
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux2)),
-            ZRegS(IDX(table_val(one))));
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux2)).s);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(log_pol, 3))));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2, ZRegS(IDX(table_val(log_pol, 2))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2, ZRegS(IDX(table_val(log_pol, 1))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2, ZRegS(IDX(table_val(log_pol, 0))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2, ZRegS(IDX(table_val(one))));
+    h->fmul(vmm_src, vmm_src, vmm_aux2);
 
     // get log(r_i) = table(i+1)
     gather_table_values(vmm_aux2, vmm_aux1, vlen);
 
     // compute partial result (pres = E * ln(2) - log(r_i))
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux3)),
-            ZRegS(IDX(table_val(ln2f))));
+    h->fmla(vmm_aux2, p_tmp0 / T_m, vmm_aux3, ZRegS(IDX(table_val(ln2f))));
 
     // compute (result = polynomial + pres) w/ TwoSum algorithm
     // TODO: restore this instead of version below when asserts are gone
@@ -1269,57 +1028,27 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     // h->uni_vsubps(vmm_aux3, vmm_aux3, vmm_src); // res_lo = res_lo - pol
     // h->uni_vaddps(vmm_src, vmm_aux1, vmm_aux3); // res_hi = pol + pres
 
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
-    h->fadd(ZReg(IDX(vmm_aux1)).s, ZReg(IDX(vmm_aux1)).s,
-            ZReg(IDX(vmm_aux2)).s);
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux1)));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux3)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_aux1)));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    }
-    h->fsub(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s,
-            ZReg(IDX(vmm_aux2)).s); // res_lo = res_hi - pres
-    h->fsub(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s,
-            ZReg(IDX(vmm_src)).s); // res_lo = res_lo - pol
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_aux1)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux3)).s);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->fadd(vmm_aux1, vmm_aux1, vmm_aux2);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux1)));
+    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
+    h->fsub(vmm_aux3, vmm_aux3,
+            vmm_aux2); // res_lo = res_hi - pres
+    h->fsub(vmm_aux3, vmm_aux3,
+            vmm_src); // res_lo = res_lo - pol
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->fadd(vmm_src, vmm_src, vmm_aux3);
 
     // Check original source for zero and neg values. skip blend w/ extreme
     // values if all src values were positive.
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux1)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux1)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux1)), ptr(h->X_TMP_0));
+    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     Label end_log_label;
     compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_le_os);
@@ -1347,46 +1076,25 @@ void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_fwd(
         const TRegS &vmm_src) {
     // dispatch between special cases.
     if (beta_ == -1) { // alpha / x
-        if (vlen != 32) {
-            h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-            h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(alpha))));
-            h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-        } else {
-            /* This route has not been tested */
-            h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b,
-                    PRegB(IDX(p_512)));
-            h->mov(ZRegS(IDX(vmm_aux0)), PReg(IDX(p_512)) / T_m,
-                    ZRegS(IDX(table_val(alpha))));
-            h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-        }
+        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+        h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(alpha))));
+        h->mov(vmm_aux0, p_tmp0 / T_m, 0);
 
         h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_src)));
         h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
         h->fdiv(vmm_src, p_512 / T_m, z_tmp);
     } else if (beta_ == 0) { // alpha
-        if (vlen != 32) {
-            h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-            h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        } else {
-            /* This route has not been tested */
-            h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b,
-                    PRegB(IDX(p_512)));
-            h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                    ZRegS(IDX(table_val(alpha))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        }
+        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
+        h->mov(vmm_src, p_tmp0 / T_m, 0);
     } else if (beta_ == 0.5) { // alpha * sqrt(x)
         sqrt_compute_vector_fwd(vmm_src);
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     } else if (beta_ == 1) { // alpha * x
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     } else if (beta_ == 2) { // alpha * x^2
         square_compute_vector_fwd(vmm_src);
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     } else { // general path
         // caller obligation to save gprs as callee may use them
         size_t gpr_size = 5;
@@ -1395,22 +1103,19 @@ void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_fwd(
 
         size_t n_gprs_to_save = sizeof(gprs_to_save) / sizeof(gprs_to_save[0]);
 
-        h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                n_gprs_to_save * gpr_size, x_tmp_0);
+        h->sub_imm(h->X_SP, h->X_SP, n_gprs_to_save * gpr_size, h->X_TMP_0);
         for (size_t i = 0; i < n_gprs_to_save; ++i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), i * gpr_size,
-                    XReg(IDX(x_tmp_1)));
-            h->str(XReg(IDX(gprs_to_save[i])), ptr(XReg(IDX(x_tmp_0))));
+            h->add_imm(h->X_TMP_0, h->X_SP, i * gpr_size, h->X_TMP_1);
+            h->str(XReg(IDX(gprs_to_save[i])), ptr(h->X_TMP_0));
         }
 
         // caller obligation to save k-regs as callee may use them
         size_t n_k_regs_to_save = 8;
-        h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                n_k_regs_to_save * k_mask_size, x_tmp_0);
+        h->sub_imm(
+                h->X_SP, h->X_SP, n_k_regs_to_save * k_mask_size, h->X_TMP_0);
         for (size_t i = 0; i < n_k_regs_to_save; ++i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), i * k_mask_size,
-                    XReg(IDX(x_tmp_1)));
-            h->str(PReg(static_cast<uint32_t>(i)), ptr(XReg(IDX(x_tmp_0))));
+            h->add_imm(h->X_TMP_0, h->X_SP, i * k_mask_size, h->X_TMP_1);
+            h->str(PReg(static_cast<uint32_t>(i)), ptr(h->X_TMP_0));
         }
 
         // 1. Caller obligation to save vector registers as callee may use them.
@@ -1420,138 +1125,90 @@ void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_fwd(
         // `isa` as the injector. Once the assumption is wrong, `vecs_count` and
         // `vlen` should be replaced with `host_isa::vlen` and
         // `host_isa::vecs_count`.
-        h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                (vecs_count + 2) * vlen, x_tmp_0);
+        h->sub_imm(h->X_SP, h->X_SP, (vecs_count + 2) * vlen, h->X_TMP_0);
 
         for (size_t i = 2; i < vecs_count + 2; ++i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), i * vlen,
-                    XReg(IDX(x_tmp_1)));
-            if (vlen != 32) {
-                h->str(ZReg(IDX(TRegS(i - 2))), ptr(XReg(IDX(x_tmp_0))));
-            } else {
-                /* This route has not been tested */
-                h->str(QReg(IDX(TRegS(i - 2))), ptr(XReg(IDX(x_tmp_0))));
-            }
+            h->add_imm(h->X_TMP_0, h->X_SP, i * vlen, h->X_TMP_1);
+            h->str(ZReg(IDX(TRegS(i - 2))), ptr(h->X_TMP_0));
         }
 
-        h->add_imm(
-                XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-        if (vlen != 32) {
-            h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        } else {
-            /* This route has not been tested */
-            h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        }
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
-        if (vlen != 32) {
-            h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-            h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(beta))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        } else {
-            /* This route has not been tested */
-            h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b,
-                    PRegB(IDX(p_512)));
-            h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                    ZRegS(IDX(table_val(beta))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        }
+        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(beta))));
+        h->mov(vmm_src, p_tmp0 / T_m, 0);
 
-        h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), vlen,
-                XReg(IDX(x_tmp_1)));
-        if (vlen != 32) {
-            h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        } else {
-            /* This route has not been tested */
-            h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        }
+        h->add_imm(h->X_TMP_0, h->X_SP, vlen, h->X_TMP_1);
+        h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
         // save function address in gpr to pass in in call instruction
         h->mov_imm(h->x0, reinterpret_cast<uintptr_t>(powf));
 
         // align stack on 16-byte as ABI requires
-        h->mov(h->x0, XReg(IDX(h->X_SP)));
+        h->mov(h->x0, h->X_SP);
 
         uint64_t mask = ~uint64_t(0xffffffff);
         unsigned bits = (mask & 0xf) ? 64 : 32;
-        h->mov_imm(x_tmp_0, int64_t(bits));
-        h->and_(XReg(IDX(h->x0)), XReg(IDX(h->x0)), XReg(IDX(x_tmp_0)));
+        h->mov_imm(h->X_TMP_0, int64_t(bits));
+        h->and_(h->x0, h->x0, h->X_TMP_0);
 
-        h->sub(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), XReg(IDX(h->x0)));
+        h->sub(h->X_SP, h->X_SP, h->x0);
 
         // Take src, apply powf on it and replace value on a stack with dst.
         VReg xmm0 = VReg(0), xmm1 = VReg(1);
         for (size_t i = 0; i < vlen / sizeof(float); ++i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)),
-                    i * sizeof(float), XReg(IDX(x_tmp_1)));
-            h->add(XReg(IDX(x_tmp_0)), XReg(IDX(x_tmp_0)), XReg(IDX(h->x0)));
-            h->ld1(VReg(IDX(xmm0)).s[0], ptr(XReg(IDX(x_tmp_0))));
-            h->mov(ZRegS(IDX(z_tmp)), 0);
+            h->add_imm(h->X_TMP_0, h->X_SP, i * sizeof(float), h->X_TMP_1);
+            h->add(h->X_TMP_0, h->X_TMP_0, h->x0);
+            h->ld1(VReg(IDX(xmm0)).s[0], ptr(h->X_TMP_0));
+            h->mov(z_tmp, 0);
             for (int ii = 1; ii < 4; ii++) {
                 h->mov(VReg(IDX(xmm0)).s[ii], VReg(IDX(z_tmp)).s[0]);
             }
             // beta
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), vlen,
-                    XReg(IDX(x_tmp_1)));
-            h->add(XReg(IDX(x_tmp_0)), XReg(IDX(x_tmp_0)), XReg(IDX(h->x0)));
-            h->ld1(VReg(IDX(xmm1)).s[0], ptr(XReg(IDX(x_tmp_0))));
-            h->mov(ZRegS(IDX(z_tmp)), 0);
+            h->add_imm(h->X_TMP_0, h->X_SP, vlen, h->X_TMP_1);
+            h->add(h->X_TMP_0, h->X_TMP_0, h->x0);
+            h->ld1(VReg(IDX(xmm1)).s[0], ptr(h->X_TMP_0));
+            h->mov(z_tmp, 0);
             for (int ii = 1; ii < 4; ii++) {
                 h->mov(VReg(IDX(xmm1)).s[ii], VReg(IDX(z_tmp)).s[0]);
             }
 
             h->br(h->x0);
 
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)),
-                    i * sizeof(float), XReg(IDX(x_tmp_1)));
-            h->add(XReg(IDX(x_tmp_0)), XReg(IDX(x_tmp_0)), XReg(IDX(h->x0)));
-            h->st1(VReg(IDX(xmm0)).s[0], ptr(XReg(IDX(x_tmp_0))));
+            h->add_imm(h->X_TMP_0, h->X_SP, i * sizeof(float), h->X_TMP_1);
+            h->add(h->X_TMP_0, h->X_TMP_0, h->x0);
+            h->st1(VReg(IDX(xmm0)).s[0], ptr(h->X_TMP_0));
         }
 
-        h->add(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), XReg(IDX(h->x0)));
+        h->add(h->X_SP, h->X_SP, h->x0);
 
         // restore vector registers
         for (size_t i = vecs_count + 1; i >= 2; --i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), i * vlen,
-                    XReg(IDX(x_tmp_1)));
-            if (vlen != 32) {
-                h->ldr(ZReg(IDX(TRegS(i - 2))), ptr(XReg(IDX(x_tmp_0))));
-            } else {
-                /* This route has not been tested */
-                h->ldr(QReg(IDX(TRegS(i - 2))), ptr(XReg(IDX(x_tmp_0))));
-            }
+            h->add_imm(h->X_TMP_0, h->X_SP, i * vlen, h->X_TMP_1);
+            h->ldr(ZReg(IDX(TRegS(i - 2))), ptr(h->X_TMP_0));
         }
 
-        h->add_imm(
-                XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-        if (vlen != 32) {
-            h->ldr(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        } else {
-            /* This route has not been tested */
-            h->ldr(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        }
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->ldr(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
-        h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                (vecs_count + 2) * vlen, x_tmp_0);
+        h->add_imm(h->X_SP, h->X_SP, (vecs_count + 2) * vlen, h->X_TMP_0);
         // restore k registers
 
         for (int i = n_k_regs_to_save - 1; i >= 0; --i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), i * k_mask_size,
-                    XReg(IDX(x_tmp_1)));
-            h->ldr(PReg(static_cast<uint32_t>(i)), ptr(XReg(IDX(x_tmp_0))));
+            h->add_imm(h->X_TMP_0, h->X_SP, i * k_mask_size, h->X_TMP_1);
+            h->ldr(PReg(static_cast<uint32_t>(i)), ptr(h->X_TMP_0));
         }
-        h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                n_k_regs_to_save * k_mask_size, XReg(IDX(x_tmp_0)));
+        h->add_imm(
+                h->X_SP, h->X_SP, n_k_regs_to_save * k_mask_size, h->X_TMP_0);
 
         // restore gpr registers
         for (int i = n_gprs_to_save - 1; i >= 0; --i) {
-            h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), i * gpr_size,
-                    XReg(IDX(x_tmp_1)));
-            h->ldr(gprs_to_save[i], ptr(XReg(IDX(x_tmp_0))));
+            h->add_imm(h->X_TMP_0, h->X_SP, i * gpr_size, h->X_TMP_1);
+            h->ldr(gprs_to_save[i], ptr(h->X_TMP_0));
         }
-        h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)),
-                n_gprs_to_save * gpr_size, XReg(IDX(x_tmp_0)));
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->add_imm(h->X_SP, h->X_SP, n_gprs_to_save * gpr_size, h->X_TMP_0);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     }
 }
 
@@ -1568,77 +1225,74 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_fwd(
     // ~1.0e-5 -- 1.0e-3 absolute error at s = -5.
 
     // x = s / sqrt(2)
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(gelu_erf_one_over_sqrt_two))).s);
+    h->fmul(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two))));
 
     // IMPORTANT: we use vmm_aux3 to save `x` as exp_compute does not use it.
     h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
-    h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
+    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
 
     // -exp(-x*x)
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s);
-    h->eor(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(sign_mask))));
 
     exp_compute_vector_fwd(vmm_src);
-    h->eor(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(sign_mask))));
 
     // get sign
     h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux3)));
-    h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    h->and_(ZReg(IDX(vmm_aux0)).d, ZReg(IDX(vmm_aux0)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
+    h->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
+            ZRegD(IDX(table_val(sign_mask))));
 
     // abs(x)
     h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux3)));
-    h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
     abs_compute_vector_fwd(vmm_aux1);
 
     // t = 1 / (p*x + 1)
     h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->mov(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, 0);
-    h->fmad(ZRegS(IDX(vmm_aux2)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
+    h->mov(vmm_aux2, p_tmp0 / T_m, 0);
+    h->fmad(vmm_aux2, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
 
     h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->mov(ZRegS(IDX(vmm_aux4)), p_tmp0 / T_m, 0);
+    h->mov(vmm_aux4, p_tmp0 / T_m, 0);
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(ZRegS(IDX(vmm_aux4)), p_tmp0, ZRegS(IDX(vmm_aux2)));
+    h->fdiv(vmm_aux4, p_tmp0, vmm_aux2);
 
     // -exp(-x*x)*t
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux4)).s);
+    h->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomialial r
     h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
 
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 3))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 2))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 1))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 0))));
 
     // erf = sign * (1 - r * t * exp(-x*x))
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
-    h->eor(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_aux0)).d);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 
     // S = 0.5 * s = x / sqrt^2(2)
-    h->fmul(ZReg(IDX(vmm_aux3)).s, ZReg(IDX(vmm_aux3)).s,
-            ZReg(IDX(table_val(gelu_erf_one_over_sqrt_two))).s);
+    h->fmul(vmm_aux3, vmm_aux3,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two))));
     // GELU = 0.5 * s * (1 + erf) = S + S * erf
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux3)),
-            ZRegS(IDX(vmm_aux3)));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux3, vmm_aux3);
 }
 
 template <cpu_isa_t isa>
@@ -1648,17 +1302,9 @@ void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_bwd(
     // get mask of `s` > 0
     compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
     // fill with alpha, then blend with 1.f
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(alpha))));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
     blend_with_mask(vmm_src, table_val(one));
 }
 
@@ -1671,14 +1317,12 @@ void jit_uni_eltwise_injector_f32<isa>::elu_compute_vector_bwd(
         // after exponentiation, get mask by comparing with exp(0)=1.f, not 0.f
         compute_cmp_mask(vmm_src, table_val(one), _cmp_gt_os);
         // R * alpha, then blend with 1.f
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     } else {
         // get mask of `d` > 0
         compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
         // R = `d` + alpha, then blend with 1.f
-        h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     }
     blend_with_mask(vmm_src, table_val(one));
 }
@@ -1691,8 +1335,7 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_bwd(
     h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
 
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmls(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(vmm_src)));
+    h->fmls(vmm_aux0, p_tmp0 / T_m, vmm_src, vmm_src);
 
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 }
@@ -1700,103 +1343,61 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_bwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::gelu_tanh_compute_vector_bwd(
         const TRegS &vmm_src) {
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux0)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_src)));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
+    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
 
     // compute G1(x) = sqrt_root_two_over_pi * x * (1 + fitting_const * x^2)
     // compute G2(x) = sqrt_root_two_over_pi * x * (1 + 3 * fitting_const * x^2)
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s);
+    h->fmul(vmm_src, vmm_src, vmm_src);
 
     // keep G2 in a separate register
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux2)),
-                ZRegD(IDX(table_val(gelu_tanh_fitting_const_times_three))));
-        h->mov(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux2)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(gelu_tanh_fitting_const_times_three))));
-        h->mov(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_aux2)), p_512 / T_m, ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(table_val(one))));
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux2)),
+            ZRegD(IDX(table_val(gelu_tanh_fitting_const_times_three))));
+    h->mov(vmm_aux2, p_tmp0 / T_m, 0);
+    h->fmad(vmm_aux2, p_512 / T_m, vmm_src, ZRegS(IDX(table_val(one))));
 
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)),
-                ZRegD(IDX(table_val(gelu_tanh_fitting_const))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(gelu_tanh_fitting_const))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
-    h->fmul(ZReg(IDX(vmm_aux0)).s, ZReg(IDX(vmm_aux0)).s,
-            ZReg(IDX(table_val(gelu_tanh_sqrt_two_over_pi))).s);
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux0)).s);
-    h->fmul(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s,
-            ZReg(IDX(vmm_aux0)).s);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(gelu_tanh_fitting_const))));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->fmul(vmm_aux0, vmm_aux0,
+            ZRegS(IDX(table_val(gelu_tanh_sqrt_two_over_pi))));
+    h->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->fmul(vmm_aux2, vmm_aux2, vmm_aux0);
 
     // save G2 on stack as tanh uses all available registers
-    h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->str(ZReg(IDX(vmm_aux2)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->str(QReg(IDX(vmm_aux2)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->str(ZReg(IDX(vmm_aux2)), ptr(h->X_TMP_0));
 
     // T = tanh(G1(x))
     tanh_compute_vector_fwd(vmm_src);
 
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux2)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux2)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux2)), ptr(h->X_TMP_0));
+    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     // compute 0.5 * (1 + T) * (1 + G2 * (1 - T))
     // 1) R = G2 * (1 - T) = G2 - G2 * T
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmls(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux2)),
-            ZRegS(IDX(vmm_src)));
+    h->fmls(vmm_aux2, p_tmp0 / T_m, vmm_aux2, vmm_src);
     // 2) Q = 1 + T
-    h->fadd(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(one))).s);
+    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
     // 3) res = Q * (1 + R) = Q + Q * R
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(vmm_aux2)));
+    h->fmla(vmm_src, p_tmp0 / T_m, vmm_src, vmm_aux2);
 
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(half))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::square_compute_vector_bwd(
         const TRegS &vmm_src) {
     // res = 2 * s
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(two))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(two))));
 }
 
 template <cpu_isa_t isa>
@@ -1818,7 +1419,7 @@ void jit_uni_eltwise_injector_f32<isa>::sqrt_compute_vector_bwd(
     h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(half))));
 
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(ZRegS(IDX(vmm_aux0)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fdiv(vmm_aux0, p_tmp0, vmm_src);
 
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 }
@@ -1838,8 +1439,8 @@ void jit_uni_eltwise_injector_f32<isa>::bounded_relu_compute_vector_bwd(
     // make all negative values zeros
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
-    h->fmax(ZRegS(IDX(z_tmp)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
+    h->fmax(z_tmp, p_tmp0, vmm_src);
     h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
     // everything bigger than 0.f should be 1.f
@@ -1859,21 +1460,13 @@ void jit_uni_eltwise_injector_f32<isa>::logistic_compute_vector_bwd(
     // res = d * (1 - d) = d - d * d; d = logistic(s)
     if (!use_dst_) logistic_compute_vector_fwd(vmm_src);
     // h->uni_vfnmadd231ps(vmm_src, vmm_src, vmm_src); // bless sse41
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux0)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
+    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
 
-    h->fsub(ZReg(IDX(vmm_aux0)).s, ZReg(IDX(vmm_aux0)).s, ZReg(IDX(vmm_src)).s);
+    h->fsub(vmm_aux0, vmm_aux0, vmm_src);
 
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux0)).s);
+    h->fmul(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
@@ -1886,92 +1479,55 @@ template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_bwd(
         const TRegS &vmm_src) {
     // R = alpha * s
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(alpha))).s);
+    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
 
     // Save R on stack for later usage
-    h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
     // Q = sigmoid(alpha * s)
     logistic_compute_vector_fwd(vmm_src);
 
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
 
-    h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     // compute Q * (1 + R * (1 - Q))
     // T = R * (1 - Q) = R - R * Q
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmls(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, ZRegS(IDX(vmm_aux0)),
-            ZRegS(IDX(vmm_src)));
+    h->fmls(vmm_aux0, p_tmp0 / T_m, vmm_aux0, vmm_src);
 
     // Q * (1 + T) = Q + Q * T
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(vmm_aux0)));
+    h->fmla(vmm_src, p_tmp0 / T_m, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_bwd(
         const TRegS &vmm_src) {
     // res = 1 / s
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux0)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux0)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
+    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
 
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(ZRegS(IDX(vmm_aux0)), p_tmp0, ZRegS(IDX(vmm_src)));
+    h->fdiv(vmm_aux0, p_tmp0, vmm_src);
 
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_aux0)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::clip_compute_vector_bwd(
         const TRegS &vmm_src) {
     // set result with 1.f
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(one))));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
 
     // get mask of values > beta and blend with 0.f
     compute_cmp_mask(vmm_src, table_val(beta), _cmp_gt_os);
@@ -1980,17 +1536,9 @@ void jit_uni_eltwise_injector_f32<isa>::clip_compute_vector_bwd(
     compute_cmp_mask(vmm_src, table_val(alpha), _cmp_le_os);
     blend_with_mask(vmm_aux1, table_val(zero));
 
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_aux1)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
@@ -1999,65 +1547,33 @@ void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_bwd(
     // dispatch some special cases.
     if (beta_ == 0) { // zero
         /* This route has not been tested */
-        if (vlen != 32) {
-            h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-            h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(zero))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        } else {
-            /* This route has not been tested */
-            h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b,
-                    PRegB(IDX(p_512)));
-            h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                    ZRegS(IDX(table_val(zero))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        }
+        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(zero))));
+        h->mov(vmm_src, p_tmp0 / T_m, 0);
     } else if (beta_ == 0.5) { // 0.5 * alpha / sqrt(s)
         sqrt_compute_vector_bwd(vmm_src);
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(alpha))).s);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
     } else if (beta_ == 1) { // alpha
-        if (vlen != 32) {
-            h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-            h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        } else {
-            /* This route has not been tested */
-            h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b,
-                    PRegB(IDX(p_512)));
-            h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                    ZRegS(IDX(table_val(alpha))));
-            h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-        }
+        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
+        h->mov(vmm_src, p_tmp0 / T_m, 0);
     } else {
         // Save `s` on stack for later usage
-        h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
-        h->add_imm(
-                XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-        if (vlen != 32) {
-            h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        } else {
-            /* This route has not been tested */
-            h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-        }
+        h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
         // R = alpha * pow(s, beta)
         pow_compute_vector_fwd(vmm_src);
         // Restore `s` from stack
-        h->add_imm(
-                XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-        if (vlen != 32) {
-            h->ldr(ZReg(IDX(vmm_aux1)), ptr(XReg(IDX(x_tmp_0))));
-        } else {
-            /* This route has not been tested */
-            h->ldr(QReg(IDX(vmm_aux1)), ptr(XReg(IDX(x_tmp_0))));
-        }
-        h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->ldr(ZReg(IDX(vmm_aux1)), ptr(h->X_TMP_0));
+        h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
         // Save mask of zero elements to convert them into zeros at the end
         if (beta_ >= 1) compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_eq_oq);
         // res = alpha * beta * pow(s, beta - 1) = beta * R / s;
         h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-        h->fdiv(ZRegS(IDX(vmm_src)), p_tmp0, ZRegS(IDX(vmm_aux1)));
-        h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-                ZReg(IDX(table_val(beta))).s);
+        h->fdiv(vmm_src, p_tmp0, vmm_aux1);
+        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(beta))));
 
         // beta < 1 leads to NaN as `s` appears in denominator, but beta >= 1
         // should lead to zero, when `s` is zero.
@@ -2069,140 +1585,83 @@ template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
         const TRegS &vmm_src) {
     // R = s / sqrt(2)
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s,
-            ZReg(IDX(table_val(gelu_erf_one_over_sqrt_two))).s);
+    h->fmul(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two))));
 
     // Save R on stack for later usage
-    h->sub_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->str(ZReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->str(QReg(IDX(vmm_src)), ptr(XReg(IDX(x_tmp_0))));
-    }
+    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
     // Q = exp(-R*R)
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s);
-    h->eor(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(sign_mask))));
     exp_compute_vector_fwd(vmm_src);
 
     // T = R / sqrt(pi) * Q
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux2)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux2)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->fmul(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s,
-            ZReg(IDX(table_val(gelu_erf_one_over_sqrt_pi))).s);
-    h->fmul(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_src)).s);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux2)), ptr(h->X_TMP_0));
+    h->fmul(vmm_aux2, vmm_aux2,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_pi))));
+    h->fmul(vmm_aux2, vmm_aux2, vmm_src);
 
     // -Q
-    h->eor(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(sign_mask))));
 
     // get sign
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux0)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->and_(ZReg(IDX(vmm_aux0)).d, ZReg(IDX(vmm_aux0)).d,
-            ZReg(IDX(table_val(sign_mask))).d);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
+    h->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
+            ZRegD(IDX(table_val(sign_mask))));
 
     // abs(x)
-    h->add_imm(XReg(IDX(x_tmp_0)), XReg(IDX(h->X_SP)), 0, XReg(IDX(x_tmp_1)));
-    if (vlen != 32) {
-        h->ldr(ZReg(IDX(vmm_aux1)), ptr(XReg(IDX(x_tmp_0))));
-    } else {
-        /* This route has not been tested */
-        h->ldr(QReg(IDX(vmm_aux1)), ptr(XReg(IDX(x_tmp_0))));
-    }
-    h->add_imm(XReg(IDX(h->X_SP)), XReg(IDX(h->X_SP)), vlen, x_tmp_0);
+    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+    h->ldr(ZReg(IDX(vmm_aux1)), ptr(h->X_TMP_0));
+    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     abs_compute_vector_fwd(vmm_aux1);
 
     // W = 1 / (p * s + 1)
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux3)),
-                ZRegD(IDX(table_val(gelu_erf_approx_const))));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux3)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(gelu_erf_approx_const))));
-        h->mov(ZRegS(IDX(vmm_aux3)), p_tmp0 / T_m, 0);
-    }
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux4)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux4)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(one))));
-        h->mov(ZRegS(IDX(vmm_aux4)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_aux3)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(vmm_aux4)));
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
+    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
+    h->mov(vmm_aux4, p_tmp0 / T_m, 0);
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1, vmm_aux4);
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(ZRegS(IDX(vmm_aux4)), p_tmp0, ZRegS(IDX(vmm_aux3)));
+    h->fdiv(vmm_aux4, p_tmp0, vmm_aux3);
 
     // Q * W
-    h->fmul(ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_src)).s, ZReg(IDX(vmm_aux4)).s);
+    h->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomial r
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_aux1)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(table_val(gelu_erf_pol, 4))));
-        h->mov(ZRegS(IDX(vmm_aux1)), p_tmp0 / T_m, 0);
-    }
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
+    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 3))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 2))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 1))));
-    h->fmad(ZRegS(IDX(vmm_aux1)), p_512 / T_m, ZRegS(IDX(vmm_aux4)),
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 0))));
 
     // erf = sign * (1 - r * t * exp(-x*x))
-    h->fmad(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_aux1)),
-            ZRegS(IDX(table_val(one))));
-    h->eor(ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_src)).d, ZReg(IDX(vmm_aux0)).d);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 
     // P = T + 0.5
-    h->fadd(ZReg(IDX(vmm_aux2)).s, ZReg(IDX(vmm_aux2)).s,
-            ZReg(IDX(table_val(half))).s);
+    h->fadd(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(half))));
     // res = P + 0.5 * erf
     h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(ZRegS(IDX(vmm_aux2)), p_tmp0 / T_m, ZRegS(IDX(vmm_src)),
-            ZRegS(IDX(table_val(half))));
-    if (vlen != 32) {
-        h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-        h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    } else {
-        /* This route has not been tested */
-        h->orn(p_tmp0.b, h->P_ALL_ONE / T_z, h->P_MSB_384.b, PRegB(IDX(p_512)));
-        h->mov(ZRegS(IDX(vmm_src)), PReg(IDX(p_512)) / T_m,
-                ZRegS(IDX(vmm_aux2)));
-        h->mov(ZRegS(IDX(vmm_src)), p_tmp0 / T_m, 0);
-    }
+    h->fmla(vmm_aux2, p_tmp0 / T_m, vmm_src, ZRegS(IDX(table_val(half))));
+    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
+    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
+    h->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
@@ -2211,7 +1670,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_gprs_count() {
     switch (alg_) {
         case eltwise_tanh_use_dst_for_bwd:
         case eltwise_tanh:
-        case eltwise_gelu_tanh: return isa == asimd ? 4 : 0;
+        case eltwise_gelu_tanh: return 0;
         default: return 0;
     }
     return 0;
@@ -2220,7 +1679,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_gprs_count() {
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::round_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->frintn(ZRegS(IDX(vmm_src)), p_512 / T_m, ZRegS(IDX(vmm_src)));
+    h->frintn(vmm_src, p_512 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
@@ -2383,8 +1842,8 @@ void jit_uni_eltwise_injector_f32<isa>::compute_body(
             }
         }
         if (scale_ != 1.f) {
-            h->fmul(ZReg(IDX(TRegS(idx))).s, ZReg(IDX(TRegS(idx))).s,
-                    ZReg(IDX(table_val(scale))).s);
+            h->fmul(ZRegS(IDX(TRegS(idx))), ZRegS(IDX(TRegS(idx))),
+                    ZRegS(IDX(table_val(scale))));
         }
     });
 }

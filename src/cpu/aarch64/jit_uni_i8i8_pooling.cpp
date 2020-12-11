@@ -421,12 +421,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_max_op(
             //vmovups(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
             std::cout << __LINE__ << std::endl;
-	    pfalse(p9.b);
-	    zip1(p1.b, mask(0).b, p9.b);
-	    zip1(p1.h, p1.h, p9.h);
+            pfalse(p9.b);
+            zip1(p1.b, mask(0).b, p9.b);
+            zip1(p1.h, p1.h, p9.h);
             ld1w(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
             //mov(ZRegS(IDX(vreg_src(jj))), PReg(0) / T_m, z_tmp0.s);
-	    mov(ZRegS(IDX(vreg_src(jj))), p1 / T_m, z_tmp0.s);
+            mov(ZRegS(IDX(vreg_src(jj))), p1 / T_m, z_tmp0.s);
         } else {
             //vmovdqu8(vreg_src(jj) | mask(0), ptr[aux_reg_src_w + offset]);
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)), offset, x_tmp_0);
@@ -593,12 +593,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
             add_imm(x_tmp_addr, XReg(IDX(aux_reg_src_w)),
                     offset * data_type_size(s32), x_tmp_0);
             if (masked) {
-  	        pfalse(p9.b);
+                pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 ld1w(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
                 //mov(ZRegS(IDX(vr_src)), mask(ll) / T_m, z_tmp0.s);
-		mov(ZRegS(IDX(vr_src)), p1 / T_m, z_tmp0.s);
+                mov(ZRegS(IDX(vr_src)), p1 / T_m, z_tmp0.s);
             } else {
                 ldr(ZReg(IDX(vr_src)), ptr(x_tmp_addr));
             }
@@ -776,7 +776,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
             case s32:
                 //vmovups(ptr[reg_ptr_dst_i8 + offset], vreg_dst(jj) | mask(0));
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
-		pfalse(p9.b);
+                pfalse(p9.b);
                 zip1(p1.b, mask(0).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 st1w(ZRegS(IDX(vreg_dst(jj))), p1, ptr(x_tmp_addr));
@@ -785,7 +785,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
             case u8:
                 //vmovdqu8(ptr[reg_ptr_dst_i8 + offset], vreg_dst(jj) | mask(0));
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
-		/*
+                /*
 		pfalse(p9.b);
                 zip1(p1.b, mask(0).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
@@ -961,7 +961,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr_dst_i8)), offset, x_tmp_0);
             if (masked) {
                 std::cout << __LINE__ << std::endl;
-		pfalse(p9.b);
+                pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 st1w(ZRegS(IDX(vr_dst)), p1, ptr(x_tmp_addr));
@@ -978,7 +978,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
-		pfalse(p9.b);
+                pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
@@ -997,7 +997,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 std::cout << __LINE__ << std::endl;
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 umin(z_tmp0.s, 255);
-		pfalse(p9.b);
+                pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
