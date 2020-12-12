@@ -422,7 +422,8 @@ private:
      */
     static constexpr bool binary_op_with_unaligned_mem_operand_allowed_
             //= !utils::one_of(isa, avx, sse41);
-            = !utils::one_of(isa, asimd, sve_512);
+    //= !utils::one_of(isa, asimd, sve_512);
+              = !utils::one_of(isa, asimd, sve_128);
 };
 
 } // namespace binary_injector

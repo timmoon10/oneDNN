@@ -629,7 +629,8 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
             || with_tail_not_fusable_to_binary_op
             || !binary_op_with_unaligned_mem_operand_allowed_;
 
-    if (/*process_rhs_arg_using_tmp_vmm*/ false) {
+    //if (/*process_rhs_arg_using_tmp_vmm*/ false) {
+    if (process_rhs_arg_using_tmp_vmm) {
 
         const TReg tmp_vmm = TReg(rhs_arg_static_params_.rhs_dt_helper_vmm_idx);
 
@@ -1050,9 +1051,17 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
         case data_type::s32:
             //host_->vmovups(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
             if (vlen == 64) {
+	        CG::pfalse(xa::PRegB(9));
+		CG::zip1(xa::PRegB(1), xa::PRegB(IDX(tail_opmask)), xa::PRegB(9));
+		CG::zip1(xa::PRegH(1), xa::PRegH(1), xa::PRegH(9));
+		CG::ld1w(xa::ZRegS(IDX(tmp_vmm)),
+                        xa::PReg(1) / xa::T_z,
+                        xa::ptr(rhs_addr.getXn()));
+		/*
                 CG::ld1w(xa::ZRegS(IDX(tmp_vmm)),
                         xa::PReg(IDX(tail_opmask)) / xa::T_z,
                         xa::ptr(rhs_addr.getXn()));
+		*/
             } else if (vlen == 32) {
                 CG::sub(xa::XReg(22), xa::XReg(22), 8);
                 CG::str(xa::PReg(7), xa::ptr(xa::XReg(22)));
@@ -1220,10 +1229,15 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
     //const std::type_info& infoB = typeid(rhs);
     switch (binary_alg) {
         case alg_kind::binary_add:
-            //CG::ldr(xa::ZReg(31), xa::ptr(rhs.getXn()));
+  	    CG::ptrue(xa::PReg(1).b);
+	    CG::sub_imm(xa::XReg(22), xa::XReg(22), 64, xa::XReg(23));
+	    CG::st1w(xa::ZRegS(1), xa::PReg(1), xa::ptr(xa::XReg(22)));
+            CG::ldr(xa::ZReg(1), xa::ptr(rhs.getXn()));
             //CG::ld1w(xa::ZRegS(24), xa::PReg(0)/xa::T_z, xa::ptr(rhs.getXn()));
             CG::fadd(
-                    xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s, xa::ZReg(31).s);
+                    xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s, xa::ZReg(1).s);
+	    CG::ld1w(xa::ZRegS(1), xa::PReg(1), xa::ptr(xa::XReg(22)));
+	    CG::add_imm(xa::XReg(22), xa::XReg(22), 64, xa::XReg(23));
             break;
             /*
         case alg_kind::binary_mul: host_->uni_vmulps(dst, lhs, rhs); break;

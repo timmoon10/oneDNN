@@ -324,13 +324,23 @@ template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::prepare_tail_mask() {
     //if (is_superset(isa, avx512_common)) {
     if (is_superset(isa, sve_512)) {
-        size_t c_tail_mask = jpp.c_tail;
+      //size_t c_tail_mask = jpp.c_tail;
+        size_t c_tail_mask = (1ULL << jpp.c_tail) - 1ULL;
+	/*
         mov_imm(X_TMP_0, c_tail_mask);
         dup(z_tmp0.s, W_TMP_0);
         index(z_tmp1.s, 0, 1);
+	*/
         /* PRegS(IDX(k_c_tail_mask)) keeps flags in the context
            of 32-bit elements. */
-        cmplt(PRegS(IDX(k_c_tail_mask)), p_512 / T_z, z_tmp1.s, z_tmp0.s);
+        //cmplt(PRegS(IDX(k_c_tail_mask)), p_512 / T_z, z_tmp1.s, z_tmp0.s);
+	/* PRegS(IDX(k_c_tail_mask)) keeps flags in the context
+           of 8-bit elements. */
+        mov_imm(X_TMP_0, c_tail_mask);
+	sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        str(X_TMP_0, ptr(X_TRANSLATOR_STACK));
+        ldr(PReg(k_c_tail_mask), ptr(X_TRANSLATOR_STACK));
+        add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
         //} else if (isa == avx || isa == avx2) {
     } else if (isa == sve_128 || isa == sve_256) {
         static const uint32_t mask[16] = {0xffffffff, 0xffffffff, 0xffffffff,
@@ -558,8 +568,15 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
             } else {
                 //get mem address
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
+		pfalse(p9.b);
+		zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+		zip1(p1.h, p1.h, p9.h);
+		ld1w(ZRegS(idx), p1 / T_z,
+                        ptr(x_tmp_addr));
+		/*
                 ld1w(ZRegS(idx), PReg(IDX(k_c_tail_mask)) / T_z,
                         ptr(x_tmp_addr));
+		*/
             }
         } else {
             //get mem address
@@ -581,7 +598,12 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
             int vlen = cpu_isa_traits<isa>::vlen;
             if (vlen == 64) {
-                st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
+	      // under construction 
+	        pfalse(p9.b);
+		zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+		zip1(p1.h, p1.h, p9.h);
+		st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
+                //st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
             } else if (vlen == 32) {
                 bic(p_tmp0.b, P_ALL_ONE / T_z, PRegB(IDX(k_c_tail_mask)),
                         P_MSB_256.b);
@@ -634,7 +656,11 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
             } else {
                 //get mem address
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
-                st1w(ZRegS(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
+		pfalse(p9.b);
+		zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+		zip1(p1.h, p1.h, p9.h);
+		st1w(ZRegS(idx), p1, ptr(x_tmp_addr));
+                //st1w(ZRegS(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
             }
         } else {
             //get mem address
@@ -695,11 +721,13 @@ void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
             for (int bci = 0; bci < ur_bc; bci++) {
                 const auto vmm_idx
                         = vreg(reg_ind(0, bci, jj, ur_bc, ur_w)).getIdx();
-                add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(c_elem_off),
+
+                add_imm(reg_adrimm, XReg(IDX(reg_param)), GET_OFF(c_elem_off),
                         x_tmp_0);
+
                 rhs_arg_params.vmm_idx_to_oc_elem_off_addr.emplace(
                         //vmm_idx, ptr[reg_param + GET_OFF(c_elem_off)]);
-                        vmm_idx, ptr(x_tmp_addr));
+                        vmm_idx, ptr(reg_adrimm));
                 rhs_arg_params.vmm_idx_to_oc_elem_off_val.emplace(
                         vmm_idx, bci * c_block + sse_elem_off);
                 if (is_tail_predicate && is_tail_predicate(bci))
@@ -2423,8 +2451,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             if (vlen == 64) {
                                 mov(z_tmp0.d, ZRegD(IDX(vr)));
                                 umin(z_tmp0.s, 255);
+				pfalse(p9.b);
+				zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+				zip1(p1.h, p1.h, p9.h);
+				st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
+				/*
                                 st1b(z_tmp0.s, PReg(IDX(k_c_tail_mask)),
                                         ptr(x_tmp_addr));
+				*/
                             } else if (vlen == 32) {
                                 assert(!"unreachable");
                             } else if (vlen == 16) {
@@ -2558,18 +2592,28 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                 if (is_tail_processing(bci) && !jpp.is_c_padded) {
 
                     ZReg z_indvr(IDX(indvr));
+		    /*
                     pfalse(p_tmp1.b);
                     // 32-bit context -> 16-bit conext
                     uzp1(p_tmp0.b, PRegB(IDX(k_c_tail_mask)), p_tmp1.b);
                     // 16-bit context -> 8-bit conext
                     uzp1(p_tmp0.b, p_tmp0.b, p_tmp1.b);
+		    */
                     add_imm(X_DEFAULT_ADDR, XReg(IDX(reg_index)), step_index,
                             X_TMP_0);
-                    ld1b(z_indvr.b, p_tmp0 / T_z, ptr(X_DEFAULT_ADDR));
+                    //ld1b(z_indvr.b, p_tmp0 / T_z, ptr(X_DEFAULT_ADDR));
+		    ld1b(z_indvr.b, PReg(IDX(k_c_tail_mask)) / T_z, ptr(X_DEFAULT_ADDR));
                     zip1(z_indvr.b, z_indvr.b, z_tmp0.b);
                     zip1(z_indvr.h, z_indvr.h, z_tmp0.h);
+		    pfalse(p9.b);
+		    zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+		    zip1(p1.h, p1.h, p9.h);
+		    uxtb(ZRegS(IDX(indvr)), p1 / T_m,
+                            z_indvr.s);
+		    /*
                     uxtb(ZRegS(IDX(indvr)), PReg(IDX(k_c_tail_mask)) / T_m,
                             z_indvr.s);
+		    */
 
                 } else {
                     /* get mem address */

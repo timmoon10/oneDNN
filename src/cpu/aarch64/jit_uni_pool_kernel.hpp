@@ -288,6 +288,7 @@ private:
     xreg_t x_tmp_0 = XReg(23);
     xreg_t X_TMP_0 = XReg(23);
     xreg_t X_TRANSLATOR_STACK = XReg(22);
+    xreg_t reg_adrimm = XReg(24);
 
     //Reg32 reg_shuf_mask = esi;
     WReg reg_shuf_mask = WReg(7);
