@@ -48,7 +48,7 @@ template <typename conv_pd_t>
 inline void rtus_prepare(conv_pd_t *self, const convolution_desc_t *&conv_d,
         const memory_desc_t *&src_d, const memory_desc_t *dst_d) {
     const int ndims = src_d->ndims;
-
+    
     bool rtus_applicable = utils::one_of(ndims, 3, 4);
     if (ndims == 3)
         rtus_applicable = rtus_applicable && conv_d->strides[0] != 1
@@ -72,8 +72,9 @@ inline void rtus_prepare(conv_pd_t *self, const convolution_desc_t *&conv_d,
 
     const bool is_nspc
             = utils::one_of(dat_tag, format_tag::nwc, format_tag::nhwc);
-    if (is_nspc && !mayiuse(avx2)) return;
-
+    if (is_nspc && !mayiuse(sve_256)) return;
+    
+#if 0
     // rtus is applicable, configure it.
     self->rtus_.reduce_src_ = true;
     conv_d = &(self->rtus_.conv_d_ = *conv_d);
@@ -97,6 +98,7 @@ inline void rtus_prepare(conv_pd_t *self, const convolution_desc_t *&conv_d,
         memory_desc_wrapper::compute_blocking(
                 self->rtus_.conv_d_.src_desc, dat_tag);
     }
+#endif
 }
 
 template <typename conv_pd_t>
@@ -132,7 +134,7 @@ struct rtus_driver_t : public jit_generator {
     void (*ker_)(const call_params_t *p);
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(rtus_driver_t)
-
+#if 0
     Xbyak::Reg64 reg_ws = r12;
     Xbyak::Reg64 reg_src = r13;
     Xbyak::Reg64 reg_icb = rdx;
@@ -151,6 +153,7 @@ struct rtus_driver_t : public jit_generator {
     Xbyak::Reg64 reg_tail_mask = r14;
     Xbyak::Reg64 reg_icb_remainder = rcx;
     Xbyak::Reg64 reg_ws_copy = r15;
+#endif
 
     int iw_, stride_w_;
     int src_step_h_, src_step_icb_, ws_step_icb_, vlen_, vlen_shift_;
@@ -158,10 +161,10 @@ struct rtus_driver_t : public jit_generator {
     size_t typesize_;
     int ic_, ic_tail_;
     bool is_nspc_;
-
+#if 0
     Xbyak::Xmm reg_zero;
     Xbyak::Xmm reg_v;
-
+#endif
     rtus_driver_t(int iw, int stride_w, int src_step_h, int src_step_icb,
             int ws_step_icb, bool src_to_ws, size_t typesize, int ic,
             bool is_nspc = false)
@@ -174,6 +177,7 @@ struct rtus_driver_t : public jit_generator {
         , typesize_(typesize)
         , ic_(ic)
         , is_nspc_(is_nspc) {
+#if 0
         using namespace Xbyak;
 
         assert(ic_ > 0);
@@ -239,9 +243,11 @@ struct rtus_driver_t : public jit_generator {
         ic_tail_ = ic_ % simd_w;
 
         generate();
+#endif
     }
 
     void loop_is() {
+#if 0
         using namespace Xbyak;
 
         mov(reg_cur_src, reg_src);
@@ -295,9 +301,11 @@ struct rtus_driver_t : public jit_generator {
 
         /* restore dst */
         sub(reg_ws, reg_os);
+#endif
     }
 
     void loop_is_nspc() {
+#if 0
         using namespace Xbyak;
 
         assert(is_nspc_);
@@ -477,9 +485,11 @@ struct rtus_driver_t : public jit_generator {
             sub(reg_os, 1);
             jnz(is_loop);
         }
+#endif
     }
 
     void generate() {
+#if 0
         using namespace Xbyak;
         assert(isa == avx2 || isa == avx512_common || isa == avx512_core
                 || isa == avx512_mic || isa == sve);
@@ -531,6 +541,7 @@ struct rtus_driver_t : public jit_generator {
         postamble();
         this->ker_ = reinterpret_cast<decltype(ker_)>(
                 const_cast<uint8_t *>(this->getCode()));
+#endif
     }
 };
 

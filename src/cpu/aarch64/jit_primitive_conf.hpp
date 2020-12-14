@@ -31,6 +31,7 @@ namespace aarch64 {
 enum conv_version_t {
     ver_unused,
     ver_fma,
+    ver_sve_512,
 };
 enum conv_loop_order_t {
     loop_cgn,

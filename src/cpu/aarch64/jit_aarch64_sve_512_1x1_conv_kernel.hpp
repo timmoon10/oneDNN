@@ -22,7 +22,11 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
+
+#define DISABLE_ELTWISE
+#ifndef DISABLE_ELTWISE
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
+#endif
 
 #define PRFMMIN 0
 #define PRFWMAX 31
@@ -31,6 +35,8 @@
 #define ADDMAX 4095
 #define PRFMMAX 32760
 #define MOVMAX 65535
+
+using namespace Xbyak_aarch64;
 
 namespace dnnl {
 namespace impl {
@@ -43,20 +49,26 @@ namespace aarch64 {
 struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
     jit_aarch64_sve_512_1x1_conv_kernel(
             const jit_1x1_conv_conf_t &ajcp, const primitive_attr_t &attr)
-        : jit_generator(nullptr, 1024 * 1024)
-        , jcp(ajcp)
+        : jcp(ajcp)
         , attr_(attr)
+#ifndef DISABLE_ELTWISE
         , eltwise_injector_(nullptr) {
-
+#else
+        {
+#endif
         if (jcp.with_eltwise) {
+#ifndef DISABLE_ELTWISE
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
+#endif
         }
-        this->generate();
-        jit_ker = (void (*)(jit_1x1_conv_call_s *))this->getCode32();
     }
 
-    ~jit_aarch64_sve_512_1x1_conv_kernel() { delete eltwise_injector_; }
+    ~jit_aarch64_sve_512_1x1_conv_kernel() { 
+#ifndef DISABLE_ELTWISE
+        delete eltwise_injector_; 
+#endif
+    }
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_1x1_conv_kernel)
 
@@ -74,11 +86,10 @@ struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
 
     jit_1x1_conv_conf_t jcp;
     const primitive_attr_t &attr_;
-    void (*jit_ker)(jit_1x1_conv_call_s *);
 
 private:
-    using reg64_t = const xa::XReg;
-    const xa::PReg reg_p_all_ones = p2;
+    using reg64_t = const XReg;
+    const PReg reg_p_all_ones = p2;
 
     /* Flags and loop variables */
     reg64_t reg_reduce_pos_flag = x1;
@@ -123,61 +134,62 @@ private:
 
         bool cacheline_alinged = ((ofs & 0xFF) == 0) ? true : false;
         if (cacheline_alinged == true) {
-            xa::Prfop op;
+            Prfop op;
             switch (level) {
                 case 1:
-                    op = (for_load == true) ? xa::PLDL1KEEP : xa::PSTL1KEEP;
+                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
                     break;
                 case 2:
-                    op = (for_load == true) ? xa::PLDL2KEEP : xa::PSTL2KEEP;
+                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
                     break;
                 case 3:
-                    op = (for_load == true) ? xa::PLDL3KEEP : xa::PSTL3KEEP;
+                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                CGA64::prfm(op, xa::ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
             } else {
-                CGA64::add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
-                CGA64::prfm(op, xa::ptr(reg_tmp_ofs));
+                add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
+                prfm(op, ptr(reg_tmp_ofs));
             }
         } else {
-            xa::PrfopSve op_sve;
+            PrfopSve op_sve;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? xa::PLDL1KEEP_SVE
-                                                : xa::PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
+                                                : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? xa::PLDL2KEEP_SVE
-                                                : xa::PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
+                                                : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? xa::PLDL3KEEP_SVE
-                                                : xa::PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
+                                                : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
 
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                CGA64::prfw(op_sve, reg_p_all_ones,
-                        xa::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                prfw(op_sve, reg_p_all_ones,
+                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
-                CGA64::add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
-                CGA64::prfw(op_sve, reg_p_all_ones, xa::ptr(reg_tmp_ofs));
+                add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
+                prfw(op_sve, reg_p_all_ones, ptr(reg_tmp_ofs));
             }
         }
     }
 
+#ifndef DISABLE_ELTWISE
     jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
-
+#endif
     void bcast_loop(int load_loop_blk);
     void reduce_loop(int load_loop_blk, int ur, int substep, bool wraparound);
 
-    void generate();
+    void generate() override;
     static void balance(jit_1x1_conv_conf_t &jcp);
 };
 

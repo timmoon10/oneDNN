@@ -103,7 +103,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
 
     auto p = jit_1x1_conv_call_s();
 
-    auto rp = rtus_driver_t<sve>::call_params_t();
+    auto rp = rtus_driver_t<sve_512>::call_params_t();
     const int nb_oc = jcp.nb_load;
     const int nb_ic = jcp.nb_reduce;
     const int nb_ic_blocking = jcp.nb_reduce_blocking;
@@ -205,7 +205,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
         } else
             p.bcast_data = src + data_blk_off(src_d, n, ic_off_idx, id, ih, iw);
 
-        kernel_->jit_ker(&p);
+        (*kernel_)(&p);
     };
     auto conv_1x1 = [&](int bcast_start, int bcast_end, int ocb_start,
                             int ocb_end) {
@@ -295,6 +295,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
             assert(!"unsupported loop order");
         }
     };
+#if 0
     auto ker_dw = [&](int n, int ocb_start, int load_step, int &dw_oh) {
         auto &jcp_dw = pd()->dw_conv_pd_->jcp_;
         int oh_1x1 = nstl::max(dw_oh * jcp_dw.stride_h - jcp_dw.t_pad, 0);
@@ -339,12 +340,14 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
             par_conv_dw.kh_padding = (size_t)nstl::max(0, kh_padding);
 
             par_conv_dw.ch_blocks = nstl::min(ch + ch_num, jcp_dw.nb_ch) - ch;
-            kernel_dw_->jit_ker(&par_conv_dw);
+            (*kernel_dw_)(&par_conv_dw);
             for (int i = 0; i < jcp_dw.kh; ++i)
                 addrs[i] += wch_stride;
         }
     };
+#endif
     auto conv_dw = [&]() {
+#if 0
         // Set variables
         auto dw_conv_buffer
                 = dw_scratchpad.get<dst_data_t>(key_fusion_inout_buffer);
@@ -392,6 +395,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
             }
             ocb_start += load_step;
         }
+#endif
     };
 
     if (jcp.with_dw_conv) {
@@ -409,6 +413,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
 
 template struct jit_aarch64_sve_512_1x1_convolution_fwd_t<data_type::f32>;
 
+#if 0
 /* convolution backward wtr data */
 template <data_type_t diff_dst_type, data_type_t wei_type,
         data_type_t diff_src_type>
@@ -449,7 +454,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_data_t<diff_dst_type, wei_type,
 
     parallel(jcp.nthr, [&](const int ithr, const int nthr) {
         auto p = jit_1x1_conv_call_s();
-        auto rp = rtus_driver_t<sve>::call_params_t();
+        auto rp = rtus_driver_t<sve_512>::call_params_t();
 
         int bcast_start {0}, bcast_end {0}, icb_start {0}, icb_end {0};
         balance2D(nthr, ithr, work_amount, bcast_start, bcast_end, jcp.nb_load,
@@ -577,7 +582,7 @@ jit_aarch64_sve_512_1x1_convolution_bwd_weights_t ::
             pd()->jcp_, *pd()->attr());
     acc_ker_ = new cpu_accumulator_1d_t<data_type::f32>();
     reducer_bias_ = new cpu_reducer_t<data_type::f32>(pd()->reducer_bia_conf_);
-    init_rtus_driver<sve>(this);
+    init_rtus_driver<sve_512>(this);
 }
 
 void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
@@ -766,7 +771,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                         const data_t *local_src = diff_src;
 
                         auto p = jit_1x1_conv_call_s();
-                        auto rp = rtus_driver_t<sve>::call_params_t();
+                        auto rp = rtus_driver_t<sve_512>::call_params_t();
                         p.output_stride = utils::rnd_up(jcp.ic, jcp.ic_block)
                                 * jcp.oc_block * jcp.typesize_out;
 
@@ -1010,7 +1015,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
         }
     }
 }
-
+#endif
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl
