@@ -83,7 +83,7 @@ struct _jit_aarch64_sve_512_conv_fwd_kernel : public jit_generator {
 #ifndef DISABLE_ELTWISE
     ~_jit_aarch64_sve_512_conv_fwd_kernel() { delete eltwise_injector_; }
 #else // #ifndef DISABLE_ELTWISE
-    ~_jit_aarch64_sve_512_conv_fwd_kernel() { }
+    ~_jit_aarch64_sve_512_conv_fwd_kernel() {}
 #endif // #ifndef DISABLE_ELTWISE
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_fwd_kernel)
@@ -150,15 +150,9 @@ private:
         if (cacheline_aligned == true) {
             Prfop op = PLDL1KEEP;
             switch (level) {
-                case 1:
-                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
-                    break;
-                case 2:
-                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
-                    break;
-                case 3:
-                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
-                    break;
+                case 1: op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP; break;
+                case 2: op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP; break;
+                case 3: op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP; break;
                 default: assert(!"invalid prfop"); break;
             }
 
@@ -172,16 +166,13 @@ private:
             PrfopSve op_sve = PLDL1KEEP_SVE;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
-                                                : PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
-                                                : PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
-                                                : PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid level"); break;
             }
@@ -267,9 +258,8 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
         : kernel_(nullptr) {
         switch (ajcp.oc_block) {
             case 16:
-                kernel_ 
-                        = new _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>(
-                                ajcp, attr);
+                kernel_ = new _jit_aarch64_sve_512_conv_fwd_kernel<ZReg>(
+                        ajcp, attr);
                 return;
             default: assert(!"invalid channel blocking");
         }
@@ -294,15 +284,13 @@ struct jit_aarch64_sve_512_conv_fwd_kernel {
 private:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_aarch64_sve_512_conv_fwd_kernel);
     jit_generator *kernel_;
-
 };
 
 template <typename Vmm>
 struct _jit_aarch64_sve_512_conv_bwd_data_kernel_f32 : public jit_generator {
 
     _jit_aarch64_sve_512_conv_bwd_data_kernel_f32(const jit_conv_conf_t &ajcp)
-        : jcp(ajcp) {
-    }
+        : jcp(ajcp) {}
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(_jit_aarch64_sve_512_conv_bwd_data_kernel_f32)
     jit_conv_conf_t jcp;
@@ -378,15 +366,9 @@ private:
         if (cacheline_alinged == true) {
             Prfop op = PLDL1KEEP;
             switch (level) {
-                case 1:
-                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
-                    break;
-                case 2:
-                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
-                    break;
-                case 3:
-                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
-                    break;
+                case 1: op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP; break;
+                case 2: op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP; break;
+                case 3: op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP; break;
                 default: assert(!"invalid prfop"); break;
             }
 
@@ -394,8 +376,7 @@ private:
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
                 prfm(op, ptr(in, static_cast<int32_t>(ofs)));
             } else if ((tmp_ofs <= PRFMMAX) && (tmp_ofs >= 0)) {
-                prfm(op,
-                        ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
+                prfm(op, ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
             } else {
                 add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
                 prfm(op, ptr(reg_tmp_addr));
@@ -405,16 +386,13 @@ private:
             PrfopSve op_sve = PLDL1KEEP_SVE;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
-                                                : PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
-                                                : PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
-                                                : PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
@@ -505,9 +483,8 @@ struct jit_aarch64_sve_512_conv_bwd_data_kernel_f32 {
         : kernel_(nullptr) {
         switch (ajcp.ic_block) {
             case 16:
-                kernel_
-                        = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
-                                ZReg>(ajcp);
+                kernel_ = new _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<
+                        ZReg>(ajcp);
                 return;
             default: assert(!"invalid channel blocking");
         }
@@ -622,15 +599,9 @@ private:
         if (cacheline_alinged == true) {
             Prfop op;
             switch (level) {
-                case 1:
-                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
-                    break;
-                case 2:
-                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
-                    break;
-                case 3:
-                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
-                    break;
+                case 1: op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP; break;
+                case 2: op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP; break;
+                case 3: op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP; break;
                 default: assert(!"invalid prfop"); break;
             }
 
@@ -644,16 +615,13 @@ private:
             PrfopSve op_sve;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
-                                                : PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
-                                                : PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
-                                                : PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid prfop"); break;
             }

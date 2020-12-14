@@ -49,7 +49,7 @@ template <typename conv_pd_t>
 inline void rtus_prepare(conv_pd_t *self, const convolution_desc_t *&conv_d,
         const memory_desc_t *&src_d, const memory_desc_t *dst_d) {
     const int ndims = src_d->ndims;
-    
+
     bool rtus_applicable = utils::one_of(ndims, 3, 4);
     if (ndims == 3)
         rtus_applicable = rtus_applicable && conv_d->strides[0] != 1
@@ -74,7 +74,7 @@ inline void rtus_prepare(conv_pd_t *self, const convolution_desc_t *&conv_d,
     const bool is_nspc
             = utils::one_of(dat_tag, format_tag::nwc, format_tag::nhwc);
     if (is_nspc && !mayiuse(sve_256)) return;
-    
+
 #if 0
     // rtus is applicable, configure it.
     self->rtus_.reduce_src_ = true;
@@ -131,7 +131,6 @@ struct rtus_driver_t : public jit_generator {
         size_t os;
         size_t iw_start;
     };
-
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(rtus_driver_t)
 #if 0
@@ -570,7 +569,7 @@ inline status_t init_rtus_driver(conv_t *self) {
             = types::data_type_size(self->pd()->invariant_src_md()->data_type);
 
     CHECK(safe_ptr_assign(self->rtus_driver_,
-           new rtus_driver_t<isa>(iw, stride_w, src_step_h, src_step_icb,
+            new rtus_driver_t<isa>(iw, stride_w, src_step_h, src_step_icb,
                     ws_step_icb, src_to_ws, typesize, ic, is_nspc)));
     return self->rtus_driver_->create_kernel();
 }

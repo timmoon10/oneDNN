@@ -163,8 +163,7 @@ struct jit_aarch64_sve_512_convolution_bwd_data_t : public primitive_t {
     };
 
     jit_aarch64_sve_512_convolution_bwd_data_t(const pd_t *apd)
-        : primitive_t(apd) {
-    }
+        : primitive_t(apd) {}
 
     typedef typename prec_traits<diff_dst_type>::type diff_dst_data_t;
     typedef typename prec_traits<wei_type>::type wei_data_t;
@@ -172,11 +171,9 @@ struct jit_aarch64_sve_512_convolution_bwd_data_t : public primitive_t {
 
     status_t init(engine_t *engine) override {
         CHECK(safe_ptr_assign(kernel_,
-                new jit_aarch64_sve_512_conv_bwd_data_kernel_f32(
-                        pd()->jcp_)));
+                new jit_aarch64_sve_512_conv_bwd_data_kernel_f32(pd()->jcp_)));
         return kernel_->create_kernel();
     }
-
 
     status_t execute(const exec_ctx_t &ctx) const override {
         if (pd()->ndims() == 3)
@@ -242,7 +239,7 @@ struct jit_aarch64_sve_512_convolution_bwd_weights_t : public primitive_t {
         jit_conv_conf_t jcp_;
         typename cpu_reducer_t<diff_weights_type>::conf_t reducer_bia_conf_;
 
-        private:
+    private:
         void init_balancers() {
             const size_t max_buffer_size = jcp_.nthr * 3 * 5 * 5 * 16 * 16;
             if (with_bias()) {

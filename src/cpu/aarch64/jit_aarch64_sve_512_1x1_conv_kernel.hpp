@@ -54,7 +54,7 @@ struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
 #ifndef DISABLE_ELTWISE
         , eltwise_injector_(nullptr) {
 #else
-        {
+    {
 #endif
         if (jcp.with_eltwise) {
 #ifndef DISABLE_ELTWISE
@@ -64,9 +64,9 @@ struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
         }
     }
 
-    ~jit_aarch64_sve_512_1x1_conv_kernel() { 
+    ~jit_aarch64_sve_512_1x1_conv_kernel() {
 #ifndef DISABLE_ELTWISE
-        delete eltwise_injector_; 
+        delete eltwise_injector_;
 #endif
     }
 
@@ -136,15 +136,9 @@ private:
         if (cacheline_alinged == true) {
             Prfop op;
             switch (level) {
-                case 1:
-                    op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP;
-                    break;
-                case 2:
-                    op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP;
-                    break;
-                case 3:
-                    op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP;
-                    break;
+                case 1: op = (for_load == true) ? PLDL1KEEP : PSTL1KEEP; break;
+                case 2: op = (for_load == true) ? PLDL2KEEP : PSTL2KEEP; break;
+                case 3: op = (for_load == true) ? PLDL3KEEP : PSTL3KEEP; break;
                 default: assert(!"invalid prfop"); break;
             }
 
@@ -158,16 +152,13 @@ private:
             PrfopSve op_sve;
             switch (level) {
                 case 1:
-                    op_sve = (for_load == true) ? PLDL1KEEP_SVE
-                                                : PSTL1KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL1KEEP_SVE : PSTL1KEEP_SVE;
                     break;
                 case 2:
-                    op_sve = (for_load == true) ? PLDL2KEEP_SVE
-                                                : PSTL2KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL2KEEP_SVE : PSTL2KEEP_SVE;
                     break;
                 case 3:
-                    op_sve = (for_load == true) ? PLDL3KEEP_SVE
-                                                : PSTL3KEEP_SVE;
+                    op_sve = (for_load == true) ? PLDL3KEEP_SVE : PSTL3KEEP_SVE;
                     break;
                 default: assert(!"invalid prfop"); break;
             }
