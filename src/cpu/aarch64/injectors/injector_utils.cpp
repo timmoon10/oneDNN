@@ -59,24 +59,26 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
         host_->str(xa::XReg(reg), xa::pre_ptr(host_->X_TRANSLATOR_STACK, -8));
 
     if (!vmm_stack_.empty()) {
-      //int i = 0;
+        //int i = 0;
         host_->sub_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
                 host_->X_TMP_0);
 
         auto stack_offset = vmm_to_preserve_size_bytes_;
         for (const auto &vmm : vmm_to_preserve) {
             const auto idx = vmm.getIdx();
-	    stack_offset -= get_vmm_size_bytes(vmm);
+            stack_offset -= get_vmm_size_bytes(vmm);
 
-            if (mayiuse(sve_512)){
-	      //stack_offset -= 64;
-	      host_->str(xa::ZReg(idx), xa::ptr(host_->X_SP, (int32_t)stack_offset));
-	      //host_->str(xa::ZReg(idx), xa::ptr(host_->X_SP, i++));
-            }else{
-	      //stack_offset -= 16;
-	      host_->str(xa::QReg(idx), xa::ptr(host_->X_SP, (int32_t)stack_offset));
-	      //host_->str(xa::QReg(idx), xa::ptr(host_->X_SP, i++));
-	    }
+            if (mayiuse(sve_512)) {
+                //stack_offset -= 64;
+                host_->str(xa::ZReg(idx),
+                        xa::ptr(host_->X_SP, (int32_t)stack_offset));
+                //host_->str(xa::ZReg(idx), xa::ptr(host_->X_SP, i++));
+            } else {
+                //stack_offset -= 16;
+                host_->str(xa::QReg(idx),
+                        xa::ptr(host_->X_SP, (int32_t)stack_offset));
+                //host_->str(xa::QReg(idx), xa::ptr(host_->X_SP, i++));
+            }
         }
     }
 }
@@ -90,12 +92,14 @@ register_preserve_guard_t::~register_preserve_guard_t() {
         const xa::VReg &vmm = vmm_stack_.top();
         const auto idx = vmm.getIdx();
         if (mayiuse(sve_512))
-	  host_->ldr(xa::ZReg(idx), xa::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
-	  //host_->ldr(xa::ZReg(idx), xa::ptr(host_->X_SP, i++));
+            host_->ldr(xa::ZReg(idx),
+                    xa::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
+        //host_->ldr(xa::ZReg(idx), xa::ptr(host_->X_SP, i++));
         else
-	  host_->ldr(xa::QReg(idx), xa::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
-	  //host_->ldr(xa::QReg(idx), xa::ptr(host_->X_SP, i++));
-	/*
+            host_->ldr(xa::QReg(idx),
+                    xa::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
+        //host_->ldr(xa::QReg(idx), xa::ptr(host_->X_SP, i++));
+        /*
         host_->add_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
                 host_->X_TMP_0);
 	*/
@@ -110,7 +114,7 @@ register_preserve_guard_t::~register_preserve_guard_t() {
     }
 
     while (!reg64_stack_.empty()) {
-      /*
+        /*
         host_->ldr(xa::XReg(IDX(reg64_stack_.top())),
                 xa::post_ptr(host_->X_SP, 8));
       */

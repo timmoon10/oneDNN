@@ -63,8 +63,8 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
         if (high_half_block_empty) postop_tail -= sse41_single_block_size;
 
         const binary_injector::rhs_arg_static_params_t rhs_sp {
-		static_cast<std::size_t>(VReg(4).getIdx()), XReg(7),
-                XReg(2), preserve_gpr, preserve_vmm,
+                static_cast<std::size_t>(VReg(4).getIdx()), XReg(7), XReg(2),
+                preserve_gpr, preserve_vmm,
                 GET_OFF(post_ops_binary_rhs_arg_vec),
                 memory_desc_wrapper(*dst_md), postop_tail, k_c_tail_mask,
                 use_exact_tail_scalar_bcast};
@@ -167,8 +167,7 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
 
     jpp.isa = isa;
 
-    const bool args_ok = true && mayiuse(isa)
-            && (fmt_tag != format_tag::undef)
+    const bool args_ok = true && mayiuse(isa) && (fmt_tag != format_tag::undef)
             && IMPLICATION(jpp.is_bf16, mayiuse(sve_512))
             && utils::one_of(pd.alg_kind, pooling_max,
                     pooling_avg_include_padding, pooling_avg_exclude_padding);
@@ -263,7 +262,7 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
 
         //take into account cache re-usage after zeroing on backward
         if (jpp.is_backward && ndims < 5) {
-	  //assert(!"unsupported");
+            //assert(!"unsupported");
         }
 
         jpp.ur_bc_tail = jpp.nb_c % jpp.ur_bc;
@@ -305,10 +304,10 @@ template <cpu_isa_t isa>
 inline void jit_uni_pool_kernel<isa>::prepare_tail_mask() {
     if (is_superset(isa, sve_512)) {
         size_t c_tail_mask = (1ULL << jpp.c_tail) - 1ULL;
-	/* PRegS(IDX(k_c_tail_mask)) keeps flags in the context
+        /* PRegS(IDX(k_c_tail_mask)) keeps flags in the context
            of 8-bit elements. */
         mov_imm(X_TMP_0, c_tail_mask);
-	sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
         str(X_TMP_0, ptr(X_TRANSLATOR_STACK));
         ldr(PReg(k_c_tail_mask), ptr(X_TRANSLATOR_STACK));
         add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
@@ -362,8 +361,7 @@ inline void jit_uni_pool_kernel<isa>::push_vmm_val(const int idx) {
     if (vlen == 64) {
         str(ZReg(IDX(val_to_store)), ptr(rsp));
     } else if (vlen == 32) {
-        st1w(ZRegS(IDX(val_to_store)), p_lsb,
-                ptr(rsp));
+        st1w(ZRegS(IDX(val_to_store)), p_lsb, ptr(rsp));
     } else if (vlen == 16) {
         str(QReg(IDX(val_to_store)), ptr(rsp));
     } else {
@@ -377,12 +375,11 @@ inline void jit_uni_pool_kernel<isa>::pop_vmm_val(const int idx) {
     TReg val_to_load(idx);
     XReg rsp = sp;
     int vlen = cpu_isa_traits<isa>::vlen;
-    if (vlen == 64) { 
+    if (vlen == 64) {
         ldr(ZReg(IDX(val_to_load)), ptr(rsp));
-    } else if (vlen == 32) { 
-        ld1w(ZRegS(IDX(val_to_load)), p_lsb / T_z,
-                ptr(rsp));
-    } else if (vlen == 16) { 
+    } else if (vlen == 32) {
+        ld1w(ZRegS(IDX(val_to_load)), p_lsb / T_z, ptr(rsp));
+    } else if (vlen == 16) {
         ldr(QReg(z_tmp0.getIdx()), ptr(rsp));
         mov(ZRegD(IDX(val_to_load)), p_lsb / T_m, z_tmp0.d);
     } else {
@@ -491,16 +488,15 @@ inline void jit_uni_pool_kernel<isa>::load(const int idx, const xreg_t &reg_ptr,
     } else {
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
             if (isa == asimd) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else if (isa == sve_128 || isa == sve_256) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else {
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
-		pfalse(p9.b);
-		zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
-		zip1(p1.h, p1.h, p9.h);
-		ld1w(ZRegS(idx), p1 / T_z,
-                        ptr(x_tmp_addr));
+                pfalse(p9.b);
+                zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                ld1w(ZRegS(idx), p1 / T_z, ptr(x_tmp_addr));
             }
         } else {
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
@@ -518,12 +514,12 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
             int vlen = cpu_isa_traits<isa>::vlen;
             if (vlen == 64) {
-	      assert(!"unsupported");
-	      // under construction 
-	        pfalse(p9.b);
-		zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
-		zip1(p1.h, p1.h, p9.h);
-		st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
+                assert(!"unsupported");
+                // under construction
+                pfalse(p9.b);
+                zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1h(ZRegH(idx), PReg(IDX(k_c_tail_mask)), ptr(x_tmp_addr));
             } else if (vlen == 32) {
                 bic(p_tmp0.b, P_ALL_ONE / T_z, PRegB(IDX(k_c_tail_mask)),
                         P_MSB_256.b);
@@ -542,15 +538,15 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
     } else {
         if (is_c_tail_proccessing && !jpp.is_c_padded) {
             if (isa == asimd) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else if (isa == sve_128 || isa == sve_256) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else {
                 add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
-		pfalse(p9.b);
-		zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
-		zip1(p1.h, p1.h, p9.h);
-		st1w(ZRegS(idx), p1, ptr(x_tmp_addr));
+                pfalse(p9.b);
+                zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+                zip1(p1.h, p1.h, p9.h);
+                st1w(ZRegS(idx), p1, ptr(x_tmp_addr));
             }
         } else {
             add_imm(x_tmp_addr, XReg(IDX(reg_ptr)), offset, x_tmp_0);
@@ -695,7 +691,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
 
     const auto is_tail_processing = [&](int bc) {
         if (isa == asimd && !jpp.is_c_padded) {
-	  assert(!"unsupported");
+            assert(!"unsupported");
         } else
             return with_c_tail_proccessing && bc == (ur_bc - 1);
     };
@@ -800,14 +796,13 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                         if (!isa_has_bf16(jpp.isa)) {
                             bf16_emu_->vcvtneps2bf16(inpyr, zreg(inpr_i));
                         } else {
-			  assert(!"unreachable");
+                            assert(!"unreachable");
                         }
                     }
                     store(reg_idx(inpr_i), aux_reg_input, input_offset,
                             is_tail_processing(bci));
                 } else {
-                    if (jpp.is_bf16
-                            || is_tail_processing(bci)
+                    if (jpp.is_bf16 || is_tail_processing(bci)
                             || (isa == asimd
                                     && c_off % (jpp.c_block / 2) != 0)) {
                         load(vmm_tmp_1.getIdx(), aux_xreg_input, input_offset,
@@ -916,7 +911,7 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                     if (!isa_has_bf16(jpp.isa)) {
                         bf16_emu_->vcvtneps2bf16(accyr, acczr);
                     } else {
-		      assert(!"unsupported");
+                        assert(!"unsupported");
                     }
                 }
                 store(reg_idx(accr_i), xreg_output, output_offset,
@@ -939,7 +934,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
 
     auto is_tail_processing = [&](int bc) {
         if (isa == asimd && !jpp.is_c_padded) {
-	  assert(!"unsupported");
+            assert(!"unsupported");
         } else
             return with_c_tail_proccessing && bc == (ur_bc - 1);
     };
@@ -969,12 +964,12 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
     for (int bci = 0; bci < ur_bc; bci++) {
         const auto accvr = vreg(reg_ind(0, bci, jj, ur_bc, ur_w));
         int vlen = cpu_isa_traits<isa>::vlen;
-        if (vlen == 64) { 
+        if (vlen == 64) {
             mov(ZRegD(IDX(accvr)), ZRegD(IDX(vmm_tmp)));
-        } else if (vlen == 32) { 
+        } else if (vlen == 32) {
             mov(ZRegD(IDX(accvr)), ZRegD(IDX(vmm_tmp)));
             mov(ZRegS(IDX(accvr)), P_MSB_256 / T_m, 0);
-        } else if (vlen == 16) { 
+        } else if (vlen == 16) {
             mov(VReg16B(IDX(accvr)), VReg16B(IDX(vmm_tmp)));
         } else {
             assert(!"unreachable");
@@ -1056,7 +1051,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                 load(reg_idx(inpr_i), aux_xreg_input, input_offset,
                         is_tail_processing(bci));
                 if (isa == asimd) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else if (isa == sve_128 || isa == sve_256) {
                     int vlen = cpu_isa_traits<isa>::vlen;
                     if (vlen == 64) {
@@ -1884,7 +1879,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                 }
 
                 if (isa == sve_128 && !mayiuse(sve_256)) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else {
                     int vlen = cpu_isa_traits<isa>::vlen;
                     if (vlen == 64) {
@@ -1946,7 +1941,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                 assert(!"unreachable");
             }
             if (isa == sve_128 && !mayiuse(sve_256)) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else {
                 int vlen = cpu_isa_traits<isa>::vlen;
                 if (vlen == 64) {
@@ -1995,7 +1990,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
             if (!isa_has_bf16(jpp.isa)) {
                 bf16_emu_->vcvtneps2bf16(accyr, acczr);
             } else {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             }
         }
         store(reg_idx(accr_i), xreg_output, output_offset,
@@ -2010,11 +2005,11 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
             if (jpp.ind_dt == data_type::u8) {
                 auto xr = xreg(indr_i);
                 if (isa == asimd) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else if (isa == sve_128 || isa == sve_256) {
                     auto yr = yreg(indr_i);
                     if (is_tail_processing(bci) && !jpp.is_c_padded) {
-		      assert(!"unsupported");
+                        assert(!"unsupported");
                     } else {
                         if (is_tail_processing(bci)) {
                             assert(jpp.is_c_padded);
@@ -2026,7 +2021,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                                         ZRegD(IDX(vmm_c_tail_mask)));
                                 mov(ZRegS(IDX(yr)), P_MSB_256 / T_m, 0);
                             } else {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             }
                         }
                         if (jj == 0) {
@@ -2130,11 +2125,11 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                                 umin(z_tmp0.s, 255);
                                 st1b(z_tmp0.s, p_512, ptr(x_tmp_addr));
                             } else if (vlen == 32) {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             } else if (vlen == 16) {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             } else {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             }
                         } else {
                             add_imm(x_tmp_addr, XReg(IDX(reg_index)),
@@ -2143,16 +2138,16 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             if (vlen == 64) {
                                 mov(z_tmp0.d, ZRegD(IDX(vr)));
                                 umin(z_tmp0.s, 255);
-				pfalse(p9.b);
-				zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
-				zip1(p1.h, p1.h, p9.h);
-				st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
+                                pfalse(p9.b);
+                                zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+                                zip1(p1.h, p1.h, p9.h);
+                                st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
                             } else if (vlen == 32) {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             } else if (vlen == 16) {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             } else {
-			      assert(!"unsupported");
+                                assert(!"unsupported");
                             }
                         }
                     } else {
@@ -2164,11 +2159,11 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             umin(z_tmp0.s, 255);
                             st1b(z_tmp0.s, p_512, ptr(x_tmp_addr));
                         } else if (vlen == 32) {
-			  assert(!"unsupported");
+                            assert(!"unsupported");
                         } else if (vlen == 16) {
-			  assert(!"unsupported");
+                            assert(!"unsupported");
                         } else {
-			  assert(!"unsupported");
+                            assert(!"unsupported");
                         }
                     }
                 }
@@ -2194,7 +2189,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
 
     const auto is_tail_processing = [&](int bc) {
         if (isa == asimd) {
-	  assert(!"unsupported");
+            assert(!"unsupported");
         } else
             return with_c_tail_proccessing && bc == (ur_bc - 1);
     };
@@ -2212,17 +2207,17 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         if (jpp.ind_dt == data_type::u8) {
             auto indxr = xreg(indr_i);
             if (isa == asimd) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else if (isa == sve_128 || isa == sve_256) {
                 if (is_tail_processing(bci) && !jpp.is_c_padded) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else {
                     add_imm(x_tmp_addr, XReg(IDX(reg_index)), step_index,
                             x_tmp_0);
                     ldr(DReg(IDX(indxr)), ptr(x_tmp_addr));
                 }
                 if (!mayiuse(sve_256)) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else {
                     int vlen = cpu_isa_traits<isa>::vlen;
                     if (vlen == 64) {
@@ -2250,14 +2245,14 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
 
                     add_imm(X_DEFAULT_ADDR, XReg(IDX(reg_index)), step_index,
                             X_TMP_0);
-		    ld1b(z_indvr.b, PReg(IDX(k_c_tail_mask)) / T_z, ptr(X_DEFAULT_ADDR));
+                    ld1b(z_indvr.b, PReg(IDX(k_c_tail_mask)) / T_z,
+                            ptr(X_DEFAULT_ADDR));
                     zip1(z_indvr.b, z_indvr.b, z_tmp0.b);
                     zip1(z_indvr.h, z_indvr.h, z_tmp0.h);
-		    pfalse(p9.b);
-		    zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
-		    zip1(p1.h, p1.h, p9.h);
-		    uxtb(ZRegS(IDX(indvr)), p1 / T_m,
-                            z_indvr.s);
+                    pfalse(p9.b);
+                    zip1(p1.b, PReg(IDX(k_c_tail_mask)).b, p9.b);
+                    zip1(p1.h, p1.h, p9.h);
+                    uxtb(ZRegS(IDX(indvr)), p1 / T_m, z_indvr.s);
                 } else {
                     add_imm(x_tmp_addr, XReg(IDX(reg_index)), step_index,
                             x_tmp_0);
@@ -2309,9 +2304,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
     if (jpp.simple_alg && jpp.ndims == 5) {
         str(XReg(IDX(reg_input)), pre_ptr(X_TRANSLATOR_STACK, -8));
         str(XReg(IDX(reg_output)), pre_ptr(X_TRANSLATOR_STACK, -8));
-        if (isa == asimd) {
-	  assert(!"unsupported");
-        }
+        if (isa == asimd) { assert(!"unsupported"); }
         mov(XReg(IDX(aux_reg_input_d)), XReg(IDX(reg_input)));
 
         add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(kd_padding), x_tmp_0);
@@ -2351,9 +2344,9 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                 load(reg_idx(inpr_i), aux_xreg_input, inp_offset,
                         is_tail_processing(bci));
                 if (isa == asimd) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else if (isa == sve_128 || isa == sve_256) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else {
                     auto indzr = zreg(inpr_i);
                     auto indyr = yreg(inpr_i);
@@ -2388,7 +2381,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                         if (!isa_has_bf16(jpp.isa)) {
                             bf16_emu_->vcvtneps2bf16(indyr, indzr);
                         } else {
-			  assert(!"unsupported");
+                            assert(!"unsupported");
                         }
                     }
                     store(inpvr.getIdx(), aux_xreg_input, inp_offset,
@@ -2402,7 +2395,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
             }
 
             if (isa == sve_128 && !mayiuse(sve_256)) {
-	      assert(!"unsupported");
+                assert(!"unsupported");
             } else {
                 int vlen = cpu_isa_traits<isa>::vlen;
                 if (vlen == 64) {
@@ -2456,7 +2449,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
             assert(!"unreachable");
         }
         if (isa == sve_128 && !mayiuse(sve_256)) {
-	  assert(!"unsupported");
+            assert(!"unsupported");
         } else {
             int vlen = cpu_isa_traits<isa>::vlen;
             if (vlen == 64) {
@@ -2480,9 +2473,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         cmp(XReg(IDX(ki)), x_tmp_0);
 
         b(GT, kd_label);
-        if (isa == asimd) {
-	  assert(!"unsupported");
-        }
+        if (isa == asimd) { assert(!"unsupported"); }
         ldr(XReg(IDX(reg_output)), post_ptr(X_TRANSLATOR_STACK, 8));
 
         ldr(XReg(IDX(reg_input)), post_ptr(X_TRANSLATOR_STACK, 8));
@@ -2562,7 +2553,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
             for (int bci = 0; bci < ur_bc; bci++) {
                 const int offs = i + bci * jpp.c_block * jpp.dt_size;
                 if (isa == asimd) {
-		  assert(!"unsupported");
+                    assert(!"unsupported");
                 } else {
                     store(vzero.getIdx(), xreg_zero_ptr, offs,
                             is_tail_processing(bci));
@@ -2587,7 +2578,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
 
     L(l_skip);
 }
-  
+
 template <cpu_isa_t isa>
 void jit_uni_pool_kernel<isa>::generate() {
 
@@ -2648,9 +2639,7 @@ void jit_uni_pool_kernel<isa>::generate() {
     add_imm(x_tmp_addr, XReg(IDX(reg_param)), GET_OFF(ur_bc), x_tmp_0);
     ldr(XReg(IDX(reg_nbc)), ptr(x_tmp_addr));
 
-    if (jpp.is_bf16) {
-      assert(!"unsupported");
-    }
+    if (jpp.is_bf16) { assert(!"unsupported"); }
 
     int r_pad
             = nstl::max(0, calculate_end_padding(l_pad, ow, iw, stride_w, kw));
@@ -2675,7 +2664,7 @@ void jit_uni_pool_kernel<isa>::generate() {
                  * corresponding to the piece with padded zeros doesn't exist in binary
                  * postops arg1 tensor (nchw format) in per_oc bcast strategy.
                  */
-	      assert(!"unsupported");
+                assert(!"unsupported");
             }
         }
 
@@ -2741,10 +2730,7 @@ void jit_uni_pool_kernel<isa>::generate() {
                 put_one_in_vmm();
             }
 
-            if (isa == sve_128
-                    || isa == sve_256) {
-	      assert(!"unsupported");
-            }
+            if (isa == sve_128 || isa == sve_256) { assert(!"unsupported"); }
         }
 
         auto ur_w = nstl::min(jpp.ow, jpp.ur / jpp.ur_bc);

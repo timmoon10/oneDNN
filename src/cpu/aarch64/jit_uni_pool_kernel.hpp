@@ -98,8 +98,7 @@ private:
     XReg bf16_emu_reserv_4 = XReg(11);
     ZReg bf16_emu_reserv_5 = ZReg(8);
 
-    const std::vector<uint32_t> tmp_vec_idx
-            = {4, 5, 6, 7};
+    const std::vector<uint32_t> tmp_vec_idx = {4, 5, 6, 7};
     ZReg z_tmp0 = ZReg(4);
     ZReg z_tmp1 = ZReg(5);
     ZReg z_tmp2 = ZReg(6);
@@ -130,44 +129,44 @@ private:
     // While this is only required by the backward pass, the quirk above
     // is applied to the forward pass as well to keep things simpler.
     using xreg_t = const XReg;
-  xreg_t reg_param = XReg(0); // Always mimic the Unix ABI
-  xreg_t reg_input = XReg(4);
-  xreg_t aux_reg_input = XReg(5);
+    xreg_t reg_param = XReg(0); // Always mimic the Unix ABI
+    xreg_t reg_input = XReg(4);
+    xreg_t aux_reg_input = XReg(5);
     xreg_t reg_index = XReg(10);
     xreg_t reg_output = XReg(12);
     xreg_t reg_kd_pad_shift = XReg(13);
-  xreg_t dst_ptr = XReg(0); // Must be rdi due to maskmovdqu
+    xreg_t dst_ptr = XReg(0); // Must be rdi due to maskmovdqu
 
     xreg_t kj = XReg(14);
     xreg_t oi_iter = XReg(15);
-  xreg_t reg_kh = XReg(7);
-  xreg_t reg_k_shift = XReg(3);
-  xreg_t tmp_gpr = XReg(6); // Must be rcx because rdi is used above
+    xreg_t reg_kh = XReg(7);
+    xreg_t reg_k_shift = XReg(3);
+    xreg_t tmp_gpr = XReg(6); // Must be rcx because rdi is used above
     xreg_t reg_ker_area_h = XReg(2);
-  xreg_t reg_nbc = XReg(1);
+    xreg_t reg_nbc = XReg(1);
 
-  xreg_t reg_zero_ptr = XReg(5);
+    xreg_t reg_zero_ptr = XReg(5);
     xreg_t reg_zero_id = XReg(13);
     xreg_t reg_zero_ih = XReg(14);
     xreg_t aux_reg_zero_ih = XReg(15);
     xreg_t ki = XReg(12);
-  xreg_t aux_reg_input_d = XReg(4);
+    xreg_t aux_reg_input_d = XReg(4);
 
     using wreg_t = const WReg;
     wreg_t w_tmp_0 = WReg(23);
     wreg_t W_TMP_0 = WReg(23);
 
-  xreg_t aux_xreg_input = XReg(5);
+    xreg_t aux_xreg_input = XReg(5);
     xreg_t xreg_output = XReg(12);
     xreg_t xreg_index = XReg(10);
-  xreg_t xreg_zero_ptr = XReg(5);
+    xreg_t xreg_zero_ptr = XReg(5);
     xreg_t x_tmp_addr = XReg(28);
     xreg_t x_tmp_0 = XReg(23);
     xreg_t X_TMP_0 = XReg(23);
     xreg_t X_TRANSLATOR_STACK = XReg(22);
     xreg_t reg_adrimm = XReg(24);
 
-  WReg reg_shuf_mask = WReg(1);
+    WReg reg_shuf_mask = WReg(1);
 
     bool sse_high_half = false;
     bool disable_postops_when_sse_high_half_processed_ = false;
@@ -207,11 +206,11 @@ private:
         } else
             avg_step(ur_w, ur_bc, pad_l, pad_r, with_c_tail_proccessing);
     }
-  
+
     void generate() override;
 
     void avx_vpadd1(const ZReg &y0, const VReg &x1, const VReg &xtmp) {
-      assert(false /*function should not be used*/);
+        assert(false /*function should not be used*/);
     }
 
     void avx_vpadd1(const VReg &x0, const VReg &x1, const VReg &) {
@@ -219,7 +218,7 @@ private:
     }
 
     void avx_pmovzxbd(const ZReg &y0, const VReg &x1, const VReg &xtmp) {
-      assert(false /*function should not be used*/);
+        assert(false /*function should not be used*/);
     }
 
     void avx_pmovzxbd(const VReg &x0, const VReg &x1, const VReg &) {
@@ -228,7 +227,7 @@ private:
 
     void avx_pcmpeqd(
             const ZReg &y0, const ZReg &y1, const ZReg &y2, const VReg &xtmp) {
-      assert(false /*function should not be used*/);
+        assert(false /*function should not be used*/);
     }
 
     void avx_pcmpeqd(
