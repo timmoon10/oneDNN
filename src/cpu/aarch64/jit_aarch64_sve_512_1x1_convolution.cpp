@@ -569,20 +569,18 @@ template struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t<data_type::f32>;
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
 
-#if 0
-jit_aarch64_sve_512_1x1_convolution_bwd_weights_t ::
-        jit_aarch64_sve_512_1x1_convolution_bwd_weights_t(const pd_t *apd)
-    : primitive_t(apd)
-    , kernel_(nullptr)
-    , acc_ker_(nullptr)
-    , reducer_bias_(nullptr)
-    , rtus_driver_(nullptr) {
+status_t jit_aarch64_sve_512_1x1_convolution_bwd_weights_t ::init(engine_t *engine){
 
-    kernel_ = new jit_aarch64_sve_512_1x1_conv_kernel(
-            pd()->jcp_, *pd()->attr());
-    acc_ker_ = new cpu_accumulator_1d_t<data_type::f32>();
-    reducer_bias_ = new cpu_reducer_t<data_type::f32>(pd()->reducer_bia_conf_);
-    init_rtus_driver<sve_512>(this);
+    CHECK(safe_ptr_assign(kernel_, new jit_aarch64_sve_512_1x1_conv_kernel(
+            pd()->jcp_, *pd()->attr())));
+    CHECK(safe_ptr_assign(acc_ker_, new cpu_accumulator_1d_t<data_type::f32>()));
+    CHECK(safe_ptr_assign(reducer_bias_, new cpu_reducer_t<data_type::f32>(pd()->reducer_bia_conf_)));
+    CHECK(kernel_->create_kernel());
+    CHECK(acc_ker_->create_kernel());
+    CHECK(reducer_bias_->create_kernel());
+
+    CHECK(init_rtus_driver<sve_512>(this));
+    return status::success;
 }
 
 void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
@@ -628,7 +626,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
 
     const auto reducer_bia_scratchpad
             = memory_tracking::grantor_t(scratchpad, prefix_reducer_bia);
-    auto rb = this->reducer_bias_;
+    auto rb = this->reducer_bias_.get();
     rb->init(reducer_bia_scratchpad);
 
     // TODO (Roma): remove this restriction
@@ -668,7 +666,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
     auto ker = [&](const int ithr, const int nthr) {
         assert(nthr == jcp.nthr);
         const bool ready_for_async
-                = utils::one_of(jcp.ver, ver_fma, ver_avx512_core);
+                = utils::one_of(jcp.ver, ver_fma);
         MAYBE_UNUSED(ready_for_async);
         assert(IMPLICATION(
                 !ready_for_async && !dnnl_thr_syncable(), jcp.nthr_mb == 1));
@@ -823,7 +821,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                             p.bcast_data = local_src + sp * ic_mult;
                         }
 
-                        kernel_->jit_ker(&p);
+                        (*kernel_)(&p);
                     }
                 }
             }
@@ -1015,7 +1013,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
         }
     }
 }
-#endif
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

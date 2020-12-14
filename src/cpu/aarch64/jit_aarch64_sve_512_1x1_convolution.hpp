@@ -384,7 +384,6 @@ private:
 using jit_aarch64_sve_512_1x1_convolution_bwd_data_f32_t
         = jit_aarch64_sve_512_1x1_convolution_bwd_data_t<data_type::f32>;
 
-#if 0
 /* Backward weight */
 struct jit_aarch64_sve_512_1x1_convolution_bwd_weights_t : public primitive_t {
     struct pd_t : public cpu_convolution_bwd_weights_pd_t {
@@ -394,7 +393,7 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_weights_t : public primitive_t {
             , jcp_()
             , rtus_() {}
 
-        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit_1x1:", sve, ""),
+        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit_1x1:", sve_512, ""),
                 jit_aarch64_sve_512_1x1_convolution_bwd_weights_t);
 
         status_t init(engine_t *engine) {
@@ -458,18 +457,14 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_weights_t : public primitive_t {
     };
 
     template <cpu_isa_t isa, typename conv_t>
-    friend void init_rtus_driver(conv_t *self);
+    friend status_t init_rtus_driver(conv_t *self);
 
-    jit_aarch64_sve_512_1x1_convolution_bwd_weights_t(const pd_t *apd);
-
-    ~jit_aarch64_sve_512_1x1_convolution_bwd_weights_t() {
-        delete kernel_;
-        delete acc_ker_;
-        delete reducer_bias_;
-        delete rtus_driver_;
-    }
+    jit_aarch64_sve_512_1x1_convolution_bwd_weights_t(const pd_t *apd)
+        : primitive_t(apd) {}
 
     typedef typename prec_traits<data_type::f32>::type data_t;
+
+    status_t init(engine_t *engine) override;
 
     status_t execute(const exec_ctx_t &ctx) const override {
         execute_backward_weights(ctx);
@@ -479,12 +474,13 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_weights_t : public primitive_t {
 private:
     void execute_backward_weights(const exec_ctx_t &ctx) const;
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
-    jit_aarch64_sve_512_1x1_conv_kernel *kernel_;
-    cpu_accumulator_1d_t<data_type::f32> *acc_ker_;
-    cpu_reducer_t<data_type::f32> *reducer_bias_;
-    rtus_driver_t<sve_512> *rtus_driver_;
+
+    std::unique_ptr<jit_aarch64_sve_512_1x1_conv_kernel> kernel_;
+    std::unique_ptr<cpu_accumulator_1d_t<data_type::f32>> acc_ker_;
+    std::unique_ptr<cpu_reducer_t<data_type::f32>> reducer_bias_;
+    std::unique_ptr<rtus_driver_t<sve_512>> rtus_driver_;
 };
-#endif
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl
