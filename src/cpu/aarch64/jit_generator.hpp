@@ -127,6 +127,10 @@ public:
     const Xbyak_aarch64::PReg P_MSB_384 = p14;
     const Xbyak_aarch64::PReg P_ALL_ONE = p15;
 
+    const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
+            = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
+    constexpr static int x_tmp_vec_size = 5;
+
     const Xbyak_aarch64::XReg param1 = abi_param1;
     constexpr static size_t translator_stack_offset = 1024 * 128;
     constexpr static uint32_t DUMMY_IDX = 99;
@@ -160,12 +164,6 @@ public:
             not_(P_MSB_256.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_256.b);
             pfalse(P_ALL_ZERO.b);
         }
-        mov(x7, x0); /* First arg. */
-        mov(x6, x1); /* Sedond arg. */
-        mov(x2, x2);
-        mov(x1, x3);
-        mov(x8, x4);
-        mov(x9, x5); /* 6-th arg. */
         mov(X_SP, sp);
         sub_imm(X_TRANSLATOR_STACK, X_SP, translator_stack_offset, X_TMP_0);
     }
