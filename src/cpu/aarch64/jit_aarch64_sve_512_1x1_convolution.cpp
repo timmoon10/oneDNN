@@ -199,7 +199,7 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
                                          : jcp.is * ic_off_idx * jcp.ic_block);
             if (ocb == ocb_start) {
                 rp.src = src + data_blk_off(src_d, n, ic_off_idx, id, ih, iw);
-                rtus_driver_->ker_(&rp);
+                (*rtus_driver_)(&rp);
             }
             p.bcast_data = rp.ws;
         } else
@@ -413,7 +413,6 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
 
 template struct jit_aarch64_sve_512_1x1_convolution_fwd_t<data_type::f32>;
 
-#if 0
 /* convolution backward wtr data */
 template <data_type_t diff_dst_type, data_type_t wei_type,
         data_type_t diff_src_type>
@@ -553,9 +552,9 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_data_t<diff_dst_type, wei_type,
                         p.reduce_dim = this_block_size(ocb * jcp.oc_block,
                                 jcp.oc, nb_oc_blocking_step * jcp.oc_block);
 
-                        kernel_->jit_ker(&p);
+                        (*kernel_)(&p);
                     }
-                    if (pd()->rtus_.reduce_src_) { rtus_driver_->ker_(&rp); }
+                    if (pd()->rtus_.reduce_src_) { (*rtus_driver_)(&rp); }
                 }
             }
         }
@@ -570,6 +569,7 @@ template struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t<data_type::f32>;
     (pd()->with_groups() ? (d).blk_off((g), __VA_ARGS__) \
                          : (d).blk_off(__VA_ARGS__))
 
+#if 0
 jit_aarch64_sve_512_1x1_convolution_bwd_weights_t ::
         jit_aarch64_sve_512_1x1_convolution_bwd_weights_t(const pd_t *apd)
     : primitive_t(apd)
@@ -814,7 +814,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                                 rp.src = local_src
                                         + ih * src_d.blocking_desc().strides[2]
                                         + iw * src_d.blocking_desc().strides[3];
-                            rtus_driver_->ker_(&rp);
+                            (*rtus_driver_)(&rp);
 
                             p.bcast_data = rp.ws;
                         } else {

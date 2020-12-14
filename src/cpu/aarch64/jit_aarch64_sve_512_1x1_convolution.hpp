@@ -26,7 +26,7 @@
 
 #include "cpu/cpu_convolution_pd.hpp"
 #include "cpu/platform.hpp"
-
+#include "cpu/aarch64/cpu_reducer.hpp"
 #include "cpu/aarch64/jit_aarch64_sve_512_1x1_conv_kernel.hpp"
 
 #define DISABLE_DW
@@ -36,7 +36,6 @@
 #endif
 #include "cpu/aarch64/jit_uni_1x1_conv_utils.hpp"
 
-#include "cpu/aarch64/cpu_reducer.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -244,7 +243,7 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
 
 
     template <cpu_isa_t isa, typename conv_t>
-    friend void init_rtus_driver(conv_t *self);
+    friend status_t init_rtus_driver(conv_t *self);
 
     typedef typename prec_traits<src_type>::type src_data_t;
     typedef typename prec_traits<wei_type>::type wei_data_t;
@@ -264,8 +263,8 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
                     kernel_dw_, new dw_conv_kernel_t(pd()->dw_conv_pd_->jcp_)));
             CHECK(kernel_dw_->create_kernel());
         }
-        CHECK(init_rtus_driver<sve_512>(this));
 #endif
+        CHECK(init_rtus_driver<sve_512>(this));
         return status::success;
     }
 
@@ -287,14 +286,13 @@ private:
     std::unique_ptr<rtus_driver_t<sve_512>> rtus_driver_;
 #ifndef DISABLE_DW
     using dw_conv_kernel_t = jit_uni_dw_conv_fwd_kernel_f32<sve_512>;
-    std::unique_ptr<dw_conv_kernel_t> kernel_dw_ = nullptr;
+    std::unique_ptr<dw_conv_kernel_t> kernel_dw_;
 #endif
 };
 
 using jit_aarch64_sve_512_1x1_convolution_fwd_f32_t
         = jit_aarch64_sve_512_1x1_convolution_fwd_t<data_type::f32>;
 
-#if 0
 template <impl::data_type_t diff_dst_type,
         impl::data_type_t wei_type = diff_dst_type,
         impl::data_type_t diff_src_type = diff_dst_type>
@@ -305,7 +303,7 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t : public primitive_t {
             : cpu_convolution_bwd_data_pd_t(adesc, attr, hint_fwd_pd)
             , jcp_()
             , rtus_() {}
-        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit_1x1:", sve, ""),
+        DECLARE_COMMON_PD_T(JIT_IMPL_NAME_HELPER("jit_1x1:", sve_512, ""),
                 jit_aarch64_sve_512_1x1_convolution_bwd_data_t);
 
         status_t init(engine_t *engine) {
@@ -353,18 +351,18 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t : public primitive_t {
     };
 
     template <cpu_isa_t isa, typename conv_t>
-    friend void init_rtus_driver(conv_t *self);
+    friend status_t init_rtus_driver(conv_t *self);
 
     jit_aarch64_sve_512_1x1_convolution_bwd_data_t(const pd_t *apd)
-        : primitive_t(apd), kernel_(nullptr), rtus_driver_(nullptr) {
-        kernel_ = new jit_aarch64_sve_512_1x1_conv_kernel(
-                pd()->jcp_, *pd()->attr());
-        init_rtus_driver<sve_512>(this);
-    }
+        : primitive_t(apd) {}
 
-    ~jit_aarch64_sve_512_1x1_convolution_bwd_data_t() {
-        delete kernel_;
-        delete rtus_driver_;
+    status_t init(engine_t *engine) override {
+        CHECK(safe_ptr_assign(kernel_, 
+                new jit_aarch64_sve_512_1x1_conv_kernel(
+                pd()->jcp_, *pd()->attr())));
+        CHECK(kernel_->create_kernel());
+        CHECK(init_rtus_driver<sve_512>(this));
+        return status::success;
     }
 
     typedef typename prec_traits<diff_dst_type>::type diff_dst_data_t;
@@ -379,13 +377,14 @@ struct jit_aarch64_sve_512_1x1_convolution_bwd_data_t : public primitive_t {
 private:
     void execute_backward_data(const exec_ctx_t &ctx) const;
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
-    jit_aarch64_sve_512_1x1_conv_kernel *kernel_;
-    rtus_driver_t<sve_512> *rtus_driver_;
+    std::unique_ptr<jit_aarch64_sve_512_1x1_conv_kernel> kernel_;
+    std::unique_ptr<rtus_driver_t<sve_512>> rtus_driver_;
 };
 
 using jit_aarch64_sve_512_1x1_convolution_bwd_data_f32_t
         = jit_aarch64_sve_512_1x1_convolution_bwd_data_t<data_type::f32>;
 
+#if 0
 /* Backward weight */
 struct jit_aarch64_sve_512_1x1_convolution_bwd_weights_t : public primitive_t {
     struct pd_t : public cpu_convolution_bwd_weights_pd_t {
