@@ -14,5 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #===============================================================================
-export CC="fcc -Nclang -Kfast -Knolargepage -Kopenmp"
-export CXX="FCC -Nclang -Kfast -Knolargepage -Kopenmp"
+export TCSDS_PATH="/opt/FJSVstclanga/v1.1.0"
+export PATH=${TCSDS_PATH}/bin:$PATH
+export LD_LIBRARY_PATH="${TCSDS_PATH}/lib64:${LD_LIBRARY_PATH}"
+
+export CC="fcc -Nclang -Kfast -Knolargepage -Kopenmp -Nlibomp"
+export CXX="FCC -Nclang -Kfast -Knolargepage -Kopenmp -Nlibomp"
