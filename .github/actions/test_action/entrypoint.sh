@@ -28,11 +28,11 @@ qemu-aarch64 --version
 # Set compiler
 source .github/automation/env/setenv-gcc-qemu
 
-echo "##################################################"
-echo "# Download git submodules"
-echo "##################################################"
-git submodule sync --recursive
-git submodule update --init --recursive
+#echo "##################################################"
+#echo "# Download git submodules"
+#echo "##################################################"
+#git submodule sync --recursive
+#git submodule update --init --recursive
 
 # Build libxed
 #echo "##################################################"
