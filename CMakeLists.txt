@@ -116,8 +116,8 @@ include("cmake/mkldnn_compat.cmake")
 include("cmake/utils.cmake")
 include("cmake/options.cmake")
 include("cmake/SYCL.cmake")
-if (NOT CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
-      CMAKE_C_COMPILER MATCHES ".*/fcc$")
+if (NOT (CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
+      CMAKE_C_COMPILER MATCHES ".*/fcc$"))
     include("cmake/OpenMP.cmake")
 endif()
 include("cmake/TBB.cmake")
