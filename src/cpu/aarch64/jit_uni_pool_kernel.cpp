@@ -68,7 +68,8 @@ jit_uni_pool_kernel<isa>::jit_uni_pool_kernel(
 
         const binary_injector::rhs_arg_static_params_t rhs_sp {
                 //static_cast<std::size_t>(this->xmm4.getIdx()), this->rax,
-                static_cast<std::size_t>(VReg(4).getIdx()), XReg(0),
+                //static_cast<std::size_t>(VReg(4).getIdx()), XReg(0),
+		static_cast<std::size_t>(VReg(4).getIdx()), XReg(7),
                 //this->rdx, preserve_gpr, preserve_vmm,
                 XReg(2), preserve_gpr, preserve_vmm,
                 GET_OFF(post_ops_binary_rhs_arg_vec),
@@ -430,7 +431,8 @@ inline void jit_uni_pool_kernel<isa>::pop_vmm_val(const int idx) {
     }
 
     //add_imm(XReg(IDX(rsp)), XReg(IDX(rsp)), val_to_load.getBit(),
-    add_imm(XReg(5), XReg(5), val_to_load.getBit(), x_tmp_0);
+    //add_imm(XReg(5), XReg(5), val_to_load.getBit(), x_tmp_0);
+    add_imm(XReg(9), XReg(9), val_to_load.getBit(), x_tmp_0);
 }
 
 template <cpu_isa_t isa>

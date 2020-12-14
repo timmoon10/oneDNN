@@ -106,13 +106,17 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
     Reg64 reg_mask = r15; // only used during mask init
   */
-    XReg reg_param = XReg(1); // Our "unified abi_param1"
-    XReg reg_ptr_src_i8 = XReg(8);
-    XReg reg_ptr_dst_i8 = XReg(9);
-    XReg reg_ptr_maskmovdqu_dst = XReg(7); // store destination - must be rdi
+    //XReg reg_param = XReg(1); // Our "unified abi_param1"
+  XReg reg_param = XReg(3); // Our "unified abi_param1"
+  //XReg reg_ptr_src_i8 = XReg(8);
+  XReg reg_ptr_src_i8 = XReg(4);
+  //XReg reg_ptr_dst_i8 = XReg(9);
+  XReg reg_ptr_dst_i8 = XReg(5);
+  //XReg reg_ptr_maskmovdqu_dst = XReg(7); // store destination - must be rdi
+  XReg reg_ptr_maskmovdqu_dst = XReg(0); // store destination - must be rdi
 
-    XReg reg_kd_index = XReg(
-            7); // shared with reg_ptr_maskmovdqu_dst; only used before store
+  //XReg reg_kd_index = XReg(7); // shared with reg_ptr_maskmovdqu_dst; only used before store
+  XReg reg_kd_index = XReg(0); // shared with reg_ptr_maskmovdqu_dst; only used before store
     XReg reg_kh_index = XReg(11);
     XReg reg_kw_index = XReg(10);
     XReg reg_kd = XReg(14);
@@ -120,14 +124,17 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     XReg reg_kw = XReg(12);
     XReg c_iter = XReg(15); // shared with reg_mask; only used after mask init
 
-    XReg aux_reg_src_d = XReg(
-            2); // shared with reg_tmp; loaded before each accum loop, unused during store
-    XReg aux_reg_src_h = XReg(0);
-    XReg aux_reg_src_w = XReg(3);
+    XReg aux_reg_src_d = XReg(2); // shared with reg_tmp; loaded before each accum loop, unused during store
+  //XReg aux_reg_src_h = XReg(0);
+  XReg aux_reg_src_h = XReg(7);
+  //XReg aux_reg_src_w = XReg(3);
+  XReg aux_reg_src_w = XReg(1);
 
     XReg reg_tmp = XReg(2); // only used during mask init and store
-    XReg reg_src_safe_access = XReg(5);
-    XReg reg_dst_safe_access = XReg(6);
+  //XReg reg_src_safe_access = XReg(5);
+  XReg reg_src_safe_access = XReg(9);
+  //XReg reg_dst_safe_access = XReg(6);
+  XReg reg_dst_safe_access = XReg(1);
 
     XReg reg_mask = XReg(15); // only used during mask init
 
@@ -163,10 +170,8 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
     // only in case of <isa> == avx2
     TReg vreg_mask = vreg(2); // full byte-mask
-    VReg xreg_mask_lo = xreg(
-            2); // low 128-bits part of byte-mask (alias for xmm part of vreg_mask)
-    VReg xreg_mask_hi = xreg(
-            3); // "max" - high 128-bits part of byte-mask (stored separately)
+    VReg xreg_mask_lo = xreg(2); // low 128-bits part of byte-mask (alias for xmm part of vreg_mask)
+    VReg xreg_mask_hi = xreg(3); // "max" - high 128-bits part of byte-mask (stored separately)
 
     // vreg_mask shifted left (aligned left) to be used in tail processing.
     // Example:       idx [31..0]
@@ -299,7 +304,8 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
             const binary_injector::rhs_arg_static_params_t rhs_sp {
                     //tmp_vmm_injector, rax, r14, preserve_gpr, preserve_vmm,
-                    tmp_vmm_injector, XReg(0), XReg(14), preserve_gpr,
+                    //tmp_vmm_injector, XReg(0), XReg(14), preserve_gpr,
+		    tmp_vmm_injector, XReg(7), XReg(14), preserve_gpr,
                     preserve_vmm, GET_OFF(post_ops_binary_rhs_arg_vec),
                     memory_desc_wrapper(*dst_md), c_tail_elems,
                     mask(post_op_tail_opmask_idx_),
@@ -1848,7 +1854,8 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::generate() {
     // Always use rcx as abi_param1 -
     // see the note about maskmovdqu/maskmovq near reg_param.
     //mov(rcx, rdi);
-    mov(XReg(1), XReg(7));
+    //mov(XReg(1), XReg(7));
+    mov(XReg(3), XReg(0));
 #endif
     /*
 #define READ_PARAM(reg, field) \
