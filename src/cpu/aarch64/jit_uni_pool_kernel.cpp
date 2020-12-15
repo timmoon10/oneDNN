@@ -263,7 +263,7 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
 
         //take into account cache re-usage after zeroing on backward
         if (jpp.is_backward && ndims < 5) {
-	  //assert(!"unsupported");
+	  //unsupported
         }
 
         jpp.ur_bc_tail = jpp.nb_c % jpp.ur_bc;
