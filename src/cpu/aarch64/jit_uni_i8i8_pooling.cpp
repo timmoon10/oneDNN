@@ -75,12 +75,13 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     // maskmovdqu and maskmovq instructions which has its destination hardcoded in rdi.
     // Windows ABI: abi_param1 is rcx - nothing to do else
     // Unix ABI: abi_param1 is rdi - copy it to rcx and use it as abi_param1
-  XReg reg_param = XReg(3); // Our "unified abi_param1"
-  XReg reg_ptr_src_i8 = XReg(4);
-  XReg reg_ptr_dst_i8 = XReg(5);
-  XReg reg_ptr_maskmovdqu_dst = XReg(0); // store destination - must be rdi
+    XReg reg_param = XReg(3); // Our "unified abi_param1"
+    XReg reg_ptr_src_i8 = XReg(4);
+    XReg reg_ptr_dst_i8 = XReg(5);
+    XReg reg_ptr_maskmovdqu_dst = XReg(0); // store destination - must be rdi
 
-  XReg reg_kd_index = XReg(0); // shared with reg_ptr_maskmovdqu_dst; only used before store
+    XReg reg_kd_index = XReg(
+            0); // shared with reg_ptr_maskmovdqu_dst; only used before store
     XReg reg_kh_index = XReg(11);
     XReg reg_kw_index = XReg(10);
     XReg reg_kd = XReg(14);
@@ -88,13 +89,14 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     XReg reg_kw = XReg(12);
     XReg c_iter = XReg(15); // shared with reg_mask; only used after mask init
 
-    XReg aux_reg_src_d = XReg(2); // shared with reg_tmp; loaded before each accum loop, unused during store
-  XReg aux_reg_src_h = XReg(7);
-  XReg aux_reg_src_w = XReg(1);
+    XReg aux_reg_src_d = XReg(
+            2); // shared with reg_tmp; loaded before each accum loop, unused during store
+    XReg aux_reg_src_h = XReg(7);
+    XReg aux_reg_src_w = XReg(1);
 
     XReg reg_tmp = XReg(2); // only used during mask init and store
-  XReg reg_src_safe_access = XReg(9);
-  XReg reg_dst_safe_access = XReg(1);
+    XReg reg_src_safe_access = XReg(9);
+    XReg reg_dst_safe_access = XReg(1);
 
     XReg reg_mask = XReg(15); // only used during mask init
 
@@ -125,8 +127,10 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
     // only in case of <isa> == avx2
     TReg vreg_mask = vreg(2); // full byte-mask
-    VReg xreg_mask_lo = xreg(2); // low 128-bits part of byte-mask (alias for xmm part of vreg_mask)
-    VReg xreg_mask_hi = xreg(3); // "max" - high 128-bits part of byte-mask (stored separately)
+    VReg xreg_mask_lo = xreg(
+            2); // low 128-bits part of byte-mask (alias for xmm part of vreg_mask)
+    VReg xreg_mask_hi = xreg(
+            3); // "max" - high 128-bits part of byte-mask (stored separately)
 
     // vreg_mask shifted left (aligned left) to be used in tail processing.
     // Example:       idx [31..0]
@@ -246,7 +250,7 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
             static constexpr std::size_t tmp_vmm_injector = 0u;
 
             const binary_injector::rhs_arg_static_params_t rhs_sp {
-		    tmp_vmm_injector, XReg(7), XReg(14), preserve_gpr,
+                    tmp_vmm_injector, XReg(7), XReg(14), preserve_gpr,
                     preserve_vmm, GET_OFF(post_ops_binary_rhs_arg_vec),
                     memory_desc_wrapper(*dst_md), c_tail_elems,
                     mask(post_op_tail_opmask_idx_),
@@ -264,13 +268,13 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::load_src_max_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::load_src_max_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 };
 
 template <>
@@ -300,13 +304,13 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_max_op(
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::load_src_avg_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::load_src_avg_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 };
 
 template <>
@@ -396,13 +400,13 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::load_src(int jj, int ll, int c_tail) {
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::store_dst_max_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::store_dst_max_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
@@ -435,13 +439,13 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::store_dst_avg_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::store_dst_avg_op(
         int jj, int ll, size_t offset, bool masked, uint64_t msk) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
@@ -536,12 +540,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::store_dst(
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::compute_max_op(const int jj) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::compute_max_op(const int jj) {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
@@ -671,7 +675,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_max_step(
 
     for (int jj = 0; jj < ur_c; jj++) {
         int vlen = cpu_isa_traits<isa>::vlen;
-        if (vlen == 64) { 
+        if (vlen == 64) {
             mov(ZRegD(IDX(vreg_dst(jj))), ZRegD(IDX(vreg_tmp)));
         } else if (vlen == 32) {
             mov(ZRegD(IDX(vreg_dst(jj))), ZRegD(IDX(vreg_tmp)));
@@ -997,12 +1001,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_c_block() {
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<asimd>::init_mask() {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_256>::init_mask() {
-  assert(false /*function should not be used*/);
+    assert(false /*function should not be used*/);
 }
 
 template <>
@@ -1093,7 +1097,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
                 }
 
             } else {
-	      assert(!"unreachable");
+                assert(!"unreachable");
             }
             break;
         default: assert(!"unsupported pooling algorithm");
@@ -1383,7 +1387,7 @@ void jit_uni_i8i8_pooling_fwd_t<isa>::execute_forward(
 //
 template struct jit_uni_i8i8_pooling_fwd_ker_t<sve_512>;
 template struct jit_uni_i8i8_pooling_fwd_t<sve_512>;
-  
+
 } // namespace aarch64
 } // namespace cpu
 } // namespace impl

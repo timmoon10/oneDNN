@@ -48,7 +48,8 @@ fi
 if [ "${TEST_KIND}" == "gtest" ]; then
     CTEST_OPTS="-E benchdnn"
 elif [ "${TEST_KIND}" == "benchdnn" ]; then
-    CTEST_OPTS="-R benchdnn --verbose"
+#    CTEST_OPTS="-R benchdnn --verbose"
+    CTEST_OPTS="-R benchdnn"
 else
     echo "Error: unknown test kind: ${TEST_KIND}"
     exit 1

@@ -53,7 +53,7 @@ echo "##################################################"
 .github/automation/build.sh --threading omp --mode Release --source-dir $(pwd) --build-dir $(pwd)/build --cmake-opt "-DDNNL_TARGET_ARCH=AARCH64 -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=AARCH64 -DCMAKE_FIND_ROOT_PATH=/usr/aarch64-linux-gnu -DDNNL_TARGET_EMULATOR=qemu-aarch64"
 
 
-# Teste oneDNN
+# Test oneDNN
 echo "##################################################"
 echo "# Test oneDNN"
 echo "# Wait for a few minutes"
