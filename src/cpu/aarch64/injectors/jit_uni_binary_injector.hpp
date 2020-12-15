@@ -70,17 +70,7 @@ enum class broadcasting_strategy_t {
 
 bool binary_args_broadcast_supported(
         const post_ops_t &post_ops, const memory_desc_wrapper &dst_d);
-/*
-bool binary_args_tail_supported(
-        const post_ops_t &post_ops, const memory_desc_wrapper &dst_d, int vlen);
 
-bool any_binary_postop_rhs_per_oc_broadcast(
-        const post_ops_t &post_ops, const memory_desc_wrapper &dst_d);
-
-bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
-        const memory_desc_wrapper &dst_d,
-        const std::function<bool(const memory_desc_wrapper &)> predicate);
-  */
 /*
  * Represents params related to all binary post-ops right-hand side arguments
  * (arg1) that don't change during jit_uni_binary_injector_t object lifetime
@@ -115,10 +105,6 @@ bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
  */
 struct rhs_arg_static_params_t {
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
-            /*
-            const Xbyak::Reg64 &rhs_addr_reg,
-            const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
-			    */
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_vmm_helper,
@@ -126,26 +112,18 @@ struct rhs_arg_static_params_t {
             std::size_t tail_size = 0u,
             bool use_exact_tail_scalar_bcast = false);
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
-            /*
-            const Xbyak::Reg64 &rhs_addr_reg,
-            const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
-			    */
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_vmm_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
             std::size_t tail_size,
-            //const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast);
             const Xbyak_aarch64::PReg &tail_opmask,
             bool use_exact_tail_scalar_bcast);
 
     bool is_opmask_set() const noexcept { return is_opmask_set_; }
 
     mutable std::size_t rhs_dt_helper_vmm_idx;
-    /*
-    Xbyak::Reg64 rhs_addr_reg;
-    Xbyak::Reg64 rhs_helper_reg;
-  */
+  
     Xbyak_aarch64::XReg rhs_addr_reg;
     Xbyak_aarch64::XReg rhs_helper_reg;
     bool preserve_gpr_helpers;
@@ -153,22 +131,16 @@ struct rhs_arg_static_params_t {
     std::size_t abi_param_offset;
     memory_desc_wrapper dst_d;
     std::size_t tail_size;
-    //Xbyak::Opmask tail_opmask;
     Xbyak_aarch64::PReg tail_opmask;
     bool use_exact_tail_scalar_bcast;
 
 private:
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
-            /*
-            const Xbyak::Reg64 &rhs_addr_reg,
-            const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
-			    */
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_vmm_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
             std::size_t tail_size,
-            //const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast,
             const Xbyak_aarch64::PReg &tail_opmask,
             bool use_exact_tail_scalar_bcast, bool is_opmask_set);
 
@@ -190,7 +162,6 @@ private:
  * object.
  */
 struct static_params_t {
-    //static_params_t(const Xbyak::Reg64 &param1,
     static_params_t(const Xbyak_aarch64::XReg &param1,
             bool use_per_oc_spatial_strategy,
             const rhs_arg_static_params_t &rhs_arg_static_params)
@@ -198,12 +169,10 @@ struct static_params_t {
         , use_per_oc_spatial_strategy(use_per_oc_spatial_strategy)
         , rhs_arg_static_params(rhs_arg_static_params) {}
 
-    //static_params_t(const Xbyak::Reg64 &param1,
     static_params_t(const Xbyak_aarch64::XReg &param1,
             const rhs_arg_static_params_t &rhs_arg_static_params)
         : static_params_t(param1, true, rhs_arg_static_params) {}
 
-    //Xbyak::Reg64 param1;
     Xbyak_aarch64::XReg param1;
     bool use_per_oc_spatial_strategy;
     rhs_arg_static_params_t rhs_arg_static_params;
@@ -233,20 +202,12 @@ struct static_params_t {
  * @param vmm_tail_idx - vmm idxes that contains data don't fill the whole vector (tail).
  */
 struct rhs_arg_dynamic_params_t {
-    //std::map<int, Xbyak::Address> vmm_idx_to_out_elem_off_addr;
-    //std::map<int, Address_t> vmm_idx_to_out_elem_off_addr;
     std::map<int, Xbyak_aarch64::AdrNoOfs> vmm_idx_to_out_elem_off_addr;
     std::map<int, int> vmm_idx_to_out_elem_off_val;
-    //std::map<int, Xbyak::Operand> vmm_idx_to_out_off_oprnd;
-    //std::map<int, Xbyak_aarch64::Operand> vmm_idx_to_out_off_oprnd;
     std::map<int, Xbyak_aarch64::XReg> vmm_idx_to_out_off_oprnd;
 
-    //std::map<int, Xbyak::Address> vmm_idx_to_oc_elem_off_addr;
-    //std::map<int, Address_t> vmm_idx_to_oc_elem_off_addr;
     std::map<int, Xbyak_aarch64::AdrNoOfs> vmm_idx_to_oc_elem_off_addr;
     std::map<int, int> vmm_idx_to_oc_elem_off_val;
-    //std::map<int, Xbyak::Operand> vmm_idx_to_oc_off_oprnd;
-    //std::map<int, Xbyak_aarch64::Operand> vmm_idx_to_oc_off_oprnd;
     std::map<int, Xbyak_aarch64::XReg> vmm_idx_to_oc_off_oprnd;
     std::unordered_set<int> vmm_tail_idx_;
 };
@@ -289,11 +250,7 @@ public:
      * for computations based on internally determined broadcast strategy and information
      * about stored data in particular vmm described inside rhs_arg_params.
      */
-    /*
-    void compute_vector(size_t idx, std::size_t rhs_arg_idx,
-            const dnnl_post_ops::entry_t &post_op,
-            const rhs_arg_dynamic_params_t &rhs_arg_params) const;
-  */
+    //unsupported
 
 private:
     /*
@@ -309,8 +266,6 @@ private:
      * address of rhs tensor slice needed for binary operation and returns
      * ptr to it.
      */
-    //Xbyak::Address prepare_rhs_arg_addr(std::size_t vmm_idx,
-    //Address_t prepare_rhs_arg_addr(std::size_t vmm_idx,
     Xbyak_aarch64::AdrNoOfs prepare_rhs_arg_addr(std::size_t vmm_idx,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params,
@@ -319,37 +274,22 @@ private:
      * Loads data and applies particular binary operation.
      */
     void inject_binary(const dnnl_post_ops::entry_t &post_op, TReg dst,
-            //const Xbyak::Address &rhs_addr, bool with_tail) const;
-            //const Address_t &rhs_addr, bool with_tail) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const;
     /*
      * Helper functions responsible for preparing rhs tensor slice address.
      */
     void append_offset_from_operand(
-            /*
-            const std::map<int, Xbyak::Operand> &vmm_idx_to_elem_addr_off,
-            int vmm_idx, const Xbyak::Reg64 &addr_reg,
-            const Xbyak::Reg64 &tmp_reg, std::size_t elem_size_bytes) const;
-				    */
-            //const std::map<int, Xbyak_aarch64::Operand> &vmm_idx_to_elem_addr_off,
             const std::map<int, Xbyak_aarch64::XReg> &vmm_idx_to_elem_addr_off,
             int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
             const Xbyak_aarch64::XReg &tmp_reg,
             std::size_t elem_size_bytes) const;
     void append_offset_under_mem_addr(
-            /*
-            const std::map<int, Xbyak::Address> &vmm_idx_to_elem_addr_off,
-            int vmm_idx, const Xbyak::Reg64 &addr_reg,
-            const Xbyak::Reg64 &tmp_reg, std::size_t elem_size_bytes) const;
-				      */
-            //const std::map<int, Address_t> &vmm_idx_to_elem_addr_off,
             const std::map<int, Xbyak_aarch64::AdrNoOfs>
                     &vmm_idx_to_elem_addr_off,
             int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
             const Xbyak_aarch64::XReg &tmp_reg,
             std::size_t elem_size_bytes) const;
     void append_value_offset(const std::map<int, int> &vmm_idx_to_elem_val_off,
-            //int vmm_idx, const Xbyak::Reg64 &addr_reg,
             int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
             std::size_t elem_size_bytes) const;
 
@@ -357,39 +297,23 @@ private:
             const TReg &rhs) const;
 
     void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
-            //const Address_t &rhs) const;
             const Xbyak_aarch64::AdrNoOfs &rhs) const;
     /*
      * Used in scalar broadcast strategy, broadcasting single value of given
      * data type over entire vector TReg register.
      */
-    /*
-    void execute_broadcast(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak::Address &rhs_addr,
-            bool with_tail = false) const;
-  */
+
     void load_rhs(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
             //const Xbyak::Address &rhs_addr, bool with_tail = false) const;
             //const Address_t &rhs_addr, bool with_tail = false) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr,
             bool with_tail = false) const;
-    /*
-    void execute_broadcast_tail(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak::Address &rhs_addr) const;
-  */
+  
     void load_rhs_tail(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
             //const Xbyak::Address &rhs_addr) const;
             //const Address_t &rhs_addr) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
-    /*
-    void execute_broadcast_no_tail(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak::Address &rhs_addr) const;
-    void execute_broadcast_s8u8_no_tail(const data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak::Address &rhs_addr) const;
-    void load_rhs_no_tail(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
-            const Xbyak::Address &rhs_addr) const;
-    void cvt_to_f32(const TReg &tmp_reg) const;
-  */
+
     /*
      * Returns pair consisting of flag indication preservation is needed for vmm
      * index in second member that should be used as temporary vmm inside inject
@@ -401,13 +325,9 @@ private:
      * Used in isa != avx512 where m32bcst is not supported, replaces ptr_b
      * with ptr.
      */
-    /*
-    Xbyak::Address remove_bcast_bit(const Xbyak::Address &rhs_addr) const;
-  */
 
     jit_generator *host_;
     const rhs_arg_static_params_t rhs_arg_static_params_;
-    //const Xbyak::Reg64 param1_;
     const Xbyak_aarch64::XReg param1_;
     const bool use_per_oc_spatial_strategy_;
     static constexpr bool is_sve_512_
@@ -421,8 +341,6 @@ private:
      * address is 64 byte aligned, which can cause segmentation fault.
      */
     static constexpr bool binary_op_with_unaligned_mem_operand_allowed_
-            //= !utils::one_of(isa, avx, sse41);
-            //= !utils::one_of(isa, asimd, sve_512);
             = !utils::one_of(isa, asimd, sve_128);
 };
 

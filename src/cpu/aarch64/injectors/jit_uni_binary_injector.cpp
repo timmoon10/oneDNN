@@ -20,7 +20,6 @@
 #include "common/primitive.hpp"
 #include "common/primitive_attr.hpp"
 #include "common/primitive_exec_types.hpp"
-//#include "cpu/x64/injectors/jit_uni_binary_injector.hpp"
 #include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
 
 #ifdef DNNL_AARCH64
@@ -76,9 +75,9 @@ static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
     }
 
     if (all_ones) {
-        //return broadcasting_strategy_t::scalar;
+      //unsupported
     } else if (mask.none()) {
-        //return broadcasting_strategy_t::no_broadcast;
+      //unsupported
     }
 
     const auto &mb_rhs = rhs_arg_md.dims[0];
@@ -86,25 +85,15 @@ static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
     const bool broadcast_per_oc = !mask.test(1);
 
     if (broadcast_per_mb && broadcast_per_oc && mb_rhs != 1) {
-        //return broadcasting_strategy_t::unsupported;
+      //unsupported
     } else if (broadcast_per_oc) {
         if (use_per_oc_spatial_strategy && dst_d.is_blocking_desc()) {
             const auto &strides = dst_d.blocking_desc().strides;
-
-            //per_oc_spatial basically used in nchw data format
-            /*
-            return dst_d.is_plain() && strides[1] != 1
-                            && strides[0] >= strides[1]
-                            && IMPLICATION(ndims >= 3, strides[1] >= strides[2])
-                    ? broadcasting_strategy_t::per_oc_spatial
-                    : broadcasting_strategy_t::per_oc;
-	    */
             return broadcasting_strategy_t::per_oc;
         } else {
             return broadcasting_strategy_t::per_oc;
         }
     }
-    //return broadcasting_strategy_t::unsupported;
 }
 
 bool binary_args_broadcast_supported(
@@ -120,91 +109,13 @@ bool binary_args_broadcast_supported(
                 return false;
             });
 }
-/*
-bool binary_args_tail_supported(const post_ops_t &post_ops,
-        const memory_desc_wrapper &dst_d, int vlen) {
-    const auto dims = injector_utils::make_output_dims(dst_d);
-    const int vmm_l_len = vlen / 4;
-
-    return std::none_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
-            [&](const post_ops_t::entry_t &entry) -> bool {
-                if (entry.is_binary()) {
-                    const auto bcast_type = get_rhs_arg_broadcasting_strategy(
-                            entry.binary.src1_desc, dst_d);
-                    return utils::one_of(bcast_type,
-                                   broadcasting_strategy_t::per_oc,
-                                   broadcasting_strategy_t::per_oc_spatial)
-                            && (dims[1] % vmm_l_len != 0);
-                }
-                return false;
-            });
-}
-
-bool binary_args_matches_tag(format_tag_t tag, const post_ops_t &post_ops) {
-    return std::all_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
-            [&](const post_ops_t::entry_t &entry) {
-                if (entry.is_binary()) {
-                    const memory_desc_wrapper rhs_arg_d(entry.binary.src1_desc);
-                    return rhs_arg_d.matches_tag(tag);
-                }
-                return true;
-            });
-}
-
-bool any_binary_postop_rhs_per_oc_broadcast(
-        const post_ops_t &post_ops, const memory_desc_wrapper &dst_d) {
-    return std::any_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
-            [&](const post_ops_t::entry_t &entry) -> bool {
-                if (entry.is_binary()) {
-                    const auto bcast_type = get_rhs_arg_broadcasting_strategy(
-                            entry.binary.src1_desc, dst_d);
-                    return bcast_type == broadcasting_strategy_t::per_oc
-                            || bcast_type
-                            == broadcasting_strategy_t::per_oc_spatial;
-                }
-                return false;
-            });
-}
-
-bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
-        const memory_desc_wrapper &dst_d,
-        const std::function<bool(const memory_desc_wrapper &)> predicate) {
-    return std::all_of(post_ops.entry_.cbegin(), post_ops.entry_.cend(),
-            [&](const post_ops_t::entry_t &entry) -> bool {
-                if (entry.is_binary()) {
-                    const auto bcast_type = get_rhs_arg_broadcasting_strategy(
-                            entry.binary.src1_desc, dst_d);
-                    if (bcast_type == broadcasting_strategy_t::per_oc
-                            || bcast_type
-                                    == broadcasting_strategy_t::per_oc_spatial)
-                        return predicate(
-                                memory_desc_wrapper(entry.binary.src1_desc));
-                }
-                return true;
-            });
-}
-  */
-/*
-rhs_arg_static_params_t::rhs_arg_static_params_t(
-        std::size_t rhs_dt_helper_vmm_idx, const Xbyak::Reg64 &rhs_addr_reg,
-        const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
-        bool preserve_vmm_helper, std::size_t abi_param_offset,
-        const memory_desc_wrapper &dst_d, std::size_t tail_size,
-        bool use_exact_tail_scalar_bcast)
-    : rhs_arg_static_params_t(rhs_dt_helper_vmm_idx, rhs_addr_reg,
-            rhs_helper_reg, preserve_gpr_helpers, preserve_vmm_helper,
-            abi_param_offset, dst_d, tail_size, Xbyak::Opmask(2),*/
-/*use_exact_tail_scalar_bcast, false*/ /*is_opmask_set*/ /*) {}*/
 
 rhs_arg_static_params_t::rhs_arg_static_params_t(
-        //std::size_t rhs_dt_helper_vmm_idx, const Xbyak::Reg64 &rhs_addr_reg,
         std::size_t rhs_dt_helper_vmm_idx,
         const Xbyak_aarch64::XReg &rhs_addr_reg,
-        //const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
         const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
         bool preserve_vmm_helper, std::size_t abi_param_offset,
         const memory_desc_wrapper &dst_d, std::size_t tail_size,
-        //const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast)
         const Xbyak_aarch64::PReg &tail_opmask,
         bool use_exact_tail_scalar_bcast)
     : rhs_arg_static_params_t(rhs_dt_helper_vmm_idx, rhs_addr_reg,
@@ -213,14 +124,11 @@ rhs_arg_static_params_t::rhs_arg_static_params_t(
             use_exact_tail_scalar_bcast, true /*is_opmask_set*/) {}
 
 rhs_arg_static_params_t::rhs_arg_static_params_t(
-        //std::size_t rhs_dt_helper_vmm_idx, const Xbyak::Reg64 &rhs_addr_reg,
         std::size_t rhs_dt_helper_vmm_idx,
         const Xbyak_aarch64::XReg &rhs_addr_reg,
-        //const Xbyak::Reg64 &rhs_helper_reg, bool preserve_gpr_helpers,
         const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
         bool preserve_vmm_helper, std::size_t abi_param_offset,
         const memory_desc_wrapper &dst_d, std::size_t tail_size,
-        //const Xbyak::Opmask &tail_opmask, bool use_exact_tail_scalar_bcast,
         const Xbyak_aarch64::PReg &tail_opmask,
         bool use_exact_tail_scalar_bcast, bool is_opmask_set)
     : rhs_dt_helper_vmm_idx(rhs_dt_helper_vmm_idx)
@@ -248,10 +156,8 @@ bool operator!=(
     return lhs.getIdx() != rhs.getIdx();
 }
 
-//bool operator!=(const Address_t &lhs, const Address_t &rhs)
 bool operator!=(const Xbyak_aarch64::AdrNoOfs &lhs,
         const Xbyak_aarch64::AdrNoOfs &rhs) {
-    //return lhs.base_reg != rhs.base_reg;
     return lhs.getXn() != rhs.getXn();
 }
 
@@ -277,14 +183,10 @@ static bool rhs_arg_params_differ(size_t vmm_idx1, size_t vmm_idx2,
     const auto &oc_off_oprnd = rhs_arg_params.vmm_idx_to_oc_off_oprnd;
 
     if (rhs_broadcasting_strategy == broadcasting_strategy_t::scalar) {
-        //return false;
+      //unsupported
     } else if (rhs_broadcasting_strategy
             == broadcasting_strategy_t::no_broadcast) {
-        /*
-        return params_differ(out_elem_off_addr, vmm_idx1, vmm_idx2)
-                || params_differ(out_elem_off_val, vmm_idx1, vmm_idx2)
-                || params_differ(out_off_oprnd, vmm_idx1, vmm_idx2);
-      */
+      //unsupported
     } else if (rhs_broadcasting_strategy == broadcasting_strategy_t::per_oc
             || rhs_broadcasting_strategy
                     == broadcasting_strategy_t::per_oc_spatial) {
@@ -292,7 +194,6 @@ static bool rhs_arg_params_differ(size_t vmm_idx1, size_t vmm_idx2,
                 || params_differ(oc_off_val, vmm_idx1, vmm_idx2)
                 || params_differ(oc_off_oprnd, vmm_idx1, vmm_idx2);
     }
-    //return true;
 }
 
 template <cpu_isa_t isa>
@@ -305,64 +206,22 @@ int jit_uni_binary_injector_t<isa>::adjust_temp_vmm_hint(
             = user_hint_in_vector_range || user_hint_exceeded_limit;
 
     if (user_hint_invalid) {
-        /*
-        const bool max_vmm_idx_in_vector_range
-                = max_vmm_idx >= start_idx && max_vmm_idx <= end_idx;
-
-        if (max_vmm_idx_in_vector_range || user_hint_exceeded_limit
-                || user_hint == max_vmm_idx)
-            return 0;
-        else
-            return max_vmm_idx;
-      */
+      //unsupported
     }
 
     return user_hint;
 }
-/*
-template <typename TReg>
-static void push_vmm(jit_generator *host, const TReg &vmm) {
-    host->sub(host->rsp, injector_utils::vmm_size_t<TReg>::bytes);
-    host->uni_vmovups(host->ptr[host->rsp], vmm);
-}
 
-template <typename TReg>
-static void pop_vmm(jit_generator *host, const TReg &vmm) {
-    host->uni_vmovups(vmm, host->ptr[host->rsp]);
-    host->add(host->rsp, injector_utils::vmm_size_t<TReg>::bytes);
-}
-
-template <typename TReg>
-static void restore_stack(jit_generator *host, const TReg &vmm) {
-    host->add(host->rsp, injector_utils::vmm_size_t<TReg>::bytes);
-}
-  */
 template <cpu_isa_t isa>
 std::pair<bool, int> jit_uni_binary_injector_t<isa>::should_preserve_vmm(
         int curr_idx, int vmm_hint, int max_vmm_idx,
         bool dt_helper_vmm_needed) const {
     if (dt_helper_vmm_needed && vmm_hint == curr_idx) {
-        /*
-        if (curr_idx == 0)
-            return std::make_pair(true, max_vmm_idx);
-        else
-            return std::make_pair(true, 0);
-      */
+      //unsupported
     }
     return std::make_pair(false, vmm_hint);
 }
-/*
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::compute_vector_range(size_t start_idx,
-        size_t end_idx, std::size_t rhs_arg_idx,
-        const dnnl_post_ops::entry_t &post_op,
-        const rhs_arg_dynamic_params_t &rhs_arg_params) const {
-    injector_utils::vmm_index_set_t vmm_idxs;
-    for (size_t i = start_idx; i < end_idx; i++)
-        vmm_idxs.emplace(i);
-    compute_vector_range(vmm_idxs, rhs_arg_idx, post_op, rhs_arg_params);
-}
-  */
+
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::compute_vector_range(
         const injector_utils::vmm_index_set_t &vmm_idxs,
@@ -384,14 +243,12 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
     const auto rhs_arg_data_type = post_op.binary.src1_desc.data_type;
     const auto &vmm_tail_idx = rhs_arg_params.vmm_tail_idx_;
     const bool tail_exists_in_range = !vmm_tail_idx.empty();
-    //const bool bcast_f32_non_avx512 = !is_avx512_
     const bool bcast_f32_non_avx512 = !is_sve_512_
             && utils::one_of(rhs_broadcasting_strategy,
                     broadcasting_strategy_t::scalar,
                     broadcasting_strategy_t::per_oc_spatial)
             && rhs_arg_data_type == data_type::f32;
     const bool should_preserve_vmm_tail = tail_exists_in_range
-            //&& (!is_avx512_
             && (!is_sve_512_
                     || !utils::one_of(rhs_broadcasting_strategy,
                             broadcasting_strategy_t::scalar,
@@ -405,26 +262,19 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
     // Phase 2 Protect temporary registers content.
     const injector_utils::register_preserve_guard_t register_guard {host_,
             (rhs_arg_static_params_.preserve_gpr_helpers
-                            //? std::initializer_list<Xbyak::Reg64>(
                             ? std::initializer_list<Xbyak_aarch64::XReg>(
                                     {rhs_arg_static_params_.rhs_addr_reg,
                                             rhs_arg_static_params_
                                                     .rhs_helper_reg})
-                            //: std::initializer_list<Xbyak::Reg64>()),
                             : std::initializer_list<Xbyak_aarch64::XReg>()),
             (rhs_arg_static_params_.preserve_vmm_helper && dt_helper_vmm_needed
-                            //                            ? std::initializer_list<Xbyak::Xmm>({TReg(vmm_hint)})
-                            //? std::initializer_list<Xbyak_aarch64::ZReg>({TReg(vmm_hint)})
                             ? std::initializer_list<Xbyak_aarch64::VReg>(
                                     {xa::VReg(vmm_hint)})
-                            //: std::initializer_list<Xbyak::Xmm>())};
                             : std::initializer_list<Xbyak_aarch64::VReg>())};
 
     bool vmm0_was_preserved = false;
     static const TReg zero_vmm(0);
 
-    //Xbyak::Address rhs_arg_addr(0);
-    //Address_t rhs_arg_addr;
     Xbyak_aarch64::AdrNoOfs rhs_arg_addr(xa::XReg(0));
 
     // Phase 3 Apply binary post-op over all vmms.
@@ -447,29 +297,15 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
                         rhs_arg_static_params_.use_exact_tail_scalar_bcast);
 
         if (vmm_preservation_needed) {
-            /*
-            const TReg vmm_to_preserve(local_vmm_preservation.second);
-            push_vmm(host_, vmm_to_preserve);
-            inject_binary(post_op, dst_vmm, rhs_arg_addr, with_tail);
-            pop_vmm(host_, vmm_to_preserve);
-            // in case all TReg are occupied, TReg(0) is chosen for tmp by default,
-            // so it's content needs to be preserved...
-
-            push_vmm(host_, zero_vmm);
-            vmm0_was_preserved = true;
-	  */
+	  //unsupported
         } else
             inject_binary(post_op, dst_vmm, rhs_arg_addr, with_tail);
     }
     // ...and restored afterwards
-    /*
-    if (vmm0_was_preserved) pop_vmm(host_, zero_vmm);
-    */
+    //unsupported
 }
 
 template <cpu_isa_t isa>
-//Xbyak::Address jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
-//Address_t jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
 Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
         std::size_t vmm_idx, std::size_t rhs_arg_idx,
         const dnnl_post_ops::entry_t &post_op,
@@ -483,34 +319,14 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
     const auto rhs_arg_elem_size
             = types::data_type_size(post_op.binary.src1_desc.data_type);
 
-    //host_->mov(rhs_addr_reg, host_->ptr[param1_ + abi_param_offset]);
-    //CG::add_imm(x_tmp_addr, xa::XReg(IDX(param1_)),
-    CG::add_imm(xa::XReg(28), xa::XReg(IDX(param1_)), abi_param_offset,
+    CG::add_imm(xa::XReg(28), param1_, abi_param_offset,
             xa::XReg(23));
-    CG::ldr(xa::XReg(IDX(rhs_addr_reg)), ptr(xa::XReg(28)));
-    /*
-    host_->mov(rhs_addr_reg,
-            host_->ptr[rhs_addr_reg + rhs_arg_idx * rhs_arg_ptr_size]);
-    */
-    CG::add_imm(xa::XReg(28), xa::XReg(IDX(rhs_addr_reg)),
+    CG::ldr(rhs_addr_reg, ptr(xa::XReg(28)));
+    CG::add_imm(xa::XReg(28), rhs_addr_reg,
             rhs_arg_idx * rhs_arg_ptr_size, xa::XReg(23));
-    CG::ldr(xa::XReg(IDX(rhs_addr_reg)), ptr(xa::XReg(28)));
+    CG::ldr(rhs_addr_reg, ptr(xa::XReg(28)));
 
     switch (rhs_broadcasting_strategy) {
-            /*
-        case broadcasting_strategy_t::scalar: return host_->ptr_b[rhs_addr_reg];
-        case broadcasting_strategy_t::no_broadcast: {
-            append_offset_from_operand(rhs_arg_params.vmm_idx_to_out_off_oprnd,
-                    vmm_idx, rhs_addr_reg, rhs_helper_reg, rhs_arg_elem_size);
-            append_offset_under_mem_addr(
-                    rhs_arg_params.vmm_idx_to_out_elem_off_addr, vmm_idx,
-                    rhs_addr_reg, rhs_helper_reg, rhs_arg_elem_size);
-            append_value_offset(rhs_arg_params.vmm_idx_to_out_elem_off_val,
-                    vmm_idx, rhs_addr_reg, rhs_arg_elem_size);
-
-            return host_->ptr[rhs_addr_reg];
-        }
-      */
         case broadcasting_strategy_t::per_oc:
         case broadcasting_strategy_t::per_oc_spatial: {
             append_offset_from_operand(rhs_arg_params.vmm_idx_to_oc_off_oprnd,
@@ -520,73 +336,51 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
                     rhs_addr_reg, rhs_helper_reg, rhs_arg_elem_size);
             append_value_offset(rhs_arg_params.vmm_idx_to_oc_elem_off_val,
                     vmm_idx, rhs_addr_reg, rhs_arg_elem_size);
-            /*
-            return rhs_broadcasting_strategy
-                            == broadcasting_strategy_t::per_oc_spatial
-                    ? host_->ptr_b[rhs_addr_reg]
-                    : host_->ptr[rhs_addr_reg];
-	    */
-            //return xa::ptr(xa::XReg(IDX(rhs_addr_reg)));
-            //p = (Address_t *)xa::XReg(IDX(rhs_addr_reg)).getBit();
-            return xa::ptr(xa::XReg(IDX(rhs_addr_reg)));
+            return xa::ptr(rhs_addr_reg);
         }
         default: assert(false && "Broadcasting type not supported");
     }
 
-    //return host_->ptr[rhs_addr_reg];
 }
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::append_offset_from_operand(
-        //const std::map<int, Xbyak::Operand> &vmm_idx_to_elem_operand_off,
-        //const std::map<int, xa::Operand> &vmm_idx_to_elem_operand_off,
         const std::map<int, xa::XReg> &vmm_idx_to_elem_operand_off,
-        //int vmm_idx, const Xbyak::Reg64 &addr_reg, const Xbyak::Reg64 &tmp_reg,
         int vmm_idx, const xa::XReg &addr_reg, const xa::XReg &tmp_reg,
         std::size_t elem_size_bytes) const {
 
     const auto it_operand_off = vmm_idx_to_elem_operand_off.find(vmm_idx);
     if (it_operand_off != vmm_idx_to_elem_operand_off.end()) {
         if (elem_size_bytes == 1) {
-            //host_->add(addr_reg, it_operand_off->second);
+	  //unsupported
         } else {
             const int shift_val = std::log2(elem_size_bytes);
-            //host_->mov(tmp_reg, it_operand_off->second);
-            CG::mov(xa::XReg(IDX(tmp_reg)),
+            CG::mov(tmp_reg,
                     xa::XReg(it_operand_off->second.getIdx()));
-            //host_->sal(tmp_reg, shift_val);
-            CG::lsl(xa::XReg(IDX(tmp_reg)), xa::XReg(IDX(tmp_reg)), shift_val);
-            //host_->add(addr_reg, tmp_reg);
-            CG::add(xa::XReg(IDX(addr_reg)), xa::XReg(IDX(addr_reg)),
-                    xa::XReg(IDX(tmp_reg)));
+            CG::lsl(tmp_reg, tmp_reg, shift_val);
+            CG::add(addr_reg, addr_reg,
+                    tmp_reg);
         }
     }
 }
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::append_offset_under_mem_addr(
-        //const std::map<int, Xbyak::Address> &vmm_idx_to_elem_addr_off,
-        //const std::map<int, Address_t> &vmm_idx_to_elem_addr_off,
         const std::map<int, Xbyak_aarch64::AdrNoOfs> &vmm_idx_to_elem_addr_off,
-        //int vmm_idx, const Xbyak::Reg64 &addr_reg, const Xbyak::Reg64 &tmp_reg,
         int vmm_idx, const xa::XReg &addr_reg, const xa::XReg &tmp_reg,
         std::size_t elem_size_bytes) const {
 
     const auto it_off_addr = vmm_idx_to_elem_addr_off.find(vmm_idx);
     if (it_off_addr != vmm_idx_to_elem_addr_off.end()) {
         if (elem_size_bytes == 1) {
-            //host_->add(addr_reg, it_off_addr->second);
+	  //unsupported
         } else {
             const int shift_val = std::log2(elem_size_bytes);
-            //host_->mov(tmp_reg, it_off_addr->second);
-            //CG::mov(xa::XReg(IDX(tmp_reg)), xa::XReg(it_off_addr->second.getIdx()));
-            CG::ldr(xa::XReg(IDX(tmp_reg)),
+            CG::ldr(tmp_reg,
                     xa::ptr(it_off_addr->second.getXn()));
-            //host_->sal(tmp_reg, shift_val);
-            CG::lsl(xa::XReg(IDX(tmp_reg)), xa::XReg(IDX(tmp_reg)), shift_val);
-            //host_->add(addr_reg, tmp_reg);
-            CG::add(xa::XReg(IDX(addr_reg)), xa::XReg(IDX(addr_reg)),
-                    xa::XReg(IDX(tmp_reg)));
+            CG::lsl(tmp_reg, tmp_reg, shift_val);
+            CG::add(addr_reg, addr_reg,
+                    tmp_reg);
         }
     }
 }
@@ -594,13 +388,11 @@ void jit_uni_binary_injector_t<isa>::append_offset_under_mem_addr(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::append_value_offset(
         const std::map<int, int> &vmm_idx_to_elem_val_off, int vmm_idx,
-        //const Xbyak::Reg64 &addr_reg, std::size_t elem_size_bytes) const {
         const xa::XReg &addr_reg, std::size_t elem_size_bytes) const {
 
     const auto it_off_val = vmm_idx_to_elem_val_off.find(vmm_idx);
     if (it_off_val != vmm_idx_to_elem_val_off.end()) {
-        //host_->add(addr_reg, it_off_val->second * elem_size_bytes);
-        CG::add_imm(xa::XReg(IDX(addr_reg)), xa::XReg(IDX(addr_reg)),
+        CG::add_imm(addr_reg, addr_reg,
                 it_off_val->second * elem_size_bytes, xa::XReg(23));
     }
 }
@@ -608,429 +400,69 @@ void jit_uni_binary_injector_t<isa>::append_value_offset(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::inject_binary(
         const dnnl_post_ops::entry_t &post_op, TReg dst,
-        //const Xbyak::Address &rhs_addr, bool with_tail) const {
-        //const Address_t &rhs_addr, bool with_tail) const {
         const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const {
 
     const auto &alg = post_op.binary.alg;
     const auto &rhs_arg_data_type = post_op.binary.src1_desc.data_type;
-    /*
-    const bool scalar_f32
-      = rhs_addr->isBroadcast() && rhs_arg_data_type == data_type::f32;
-      */
     const bool scalar_f32 = false;
     const bool with_tail_not_fusable_to_binary_op
-            //= with_tail && !(scalar_f32 && is_avx512_);
             = with_tail && !(scalar_f32 && is_sve_512_);
     const bool process_rhs_arg_using_tmp_vmm
-            //= rhs_arg_data_type != data_type::f32 || (scalar_f32 && !is_avx512_)
             = rhs_arg_data_type != data_type::f32
             || (scalar_f32 && !is_sve_512_)
             || with_tail_not_fusable_to_binary_op
             || !binary_op_with_unaligned_mem_operand_allowed_;
 
-    //if (/*process_rhs_arg_using_tmp_vmm*/ false) {
     if (process_rhs_arg_using_tmp_vmm) {
 
         const TReg tmp_vmm = TReg(rhs_arg_static_params_.rhs_dt_helper_vmm_idx);
 
-        //if (rhs_addr->isBroadcast()){
-        //if (rhs_addr.isBroadcast()){
         if (false) {
-            /*
-            execute_broadcast(rhs_arg_data_type, tmp_vmm,
-                    remove_bcast_bit(rhs_addr), with_tail);
-	  */
+	  //unsupported
         } else
             load_rhs(rhs_arg_data_type, tmp_vmm, rhs_addr, with_tail);
 
         if (rhs_arg_data_type != data_type::bf16
                 && rhs_arg_data_type != data_type::f32) {
-            //cvt_to_f32(tmp_vmm);
+	  //unsupported
         }
 
         execute_binary(alg, dst, dst, tmp_vmm);
     } else {
         const auto lhs = dst;
         const bool with_tail_fusable_to_binary_op
-                //= with_tail && scalar_f32 && is_avx512_;
                 = with_tail && scalar_f32 && is_sve_512_;
         if (with_tail_fusable_to_binary_op) {
             assert(rhs_arg_static_params_.is_opmask_set()
                     && "Opmask is not set for tail loading avx512");
-            //const auto &tail_opmask = rhs_arg_static_params_.tail_opmask;
-            //dst = dst | tail_opmask | host_->T_z;
         }
 
         execute_binary(alg, dst, lhs, rhs_addr);
     }
 }
-/*
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::execute_broadcast(
-        const dnnl_data_type_t &data_type, const TReg &tmp_reg,
-        const Xbyak::Address &rhs_addr, bool with_tail) const {
-    if (with_tail)
-        execute_broadcast_tail(data_type, tmp_reg, rhs_addr);
-    else
-        execute_broadcast_no_tail(data_type, tmp_reg, rhs_addr);
-}
-  */
+
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs(const dnnl_data_type_t &data_type,
-        //const TReg &tmp_reg, const Xbyak::Address &rhs_addr,
-        //const TReg &tmp_reg, const Address_t &rhs_addr,
         const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
         bool with_tail) const {
     if (with_tail)
         load_rhs_tail(data_type, tmp_reg, rhs_addr);
     else {
-        //load_rhs_no_tail(data_type, tmp_reg, rhs_addr);
-    }
-}
-/*
-template <cpu_isa_t isa>
-Xbyak::Address jit_uni_binary_injector_t<isa>::remove_bcast_bit(
-        const Xbyak::Address &rhs_addr) const {
-    return Xbyak::Address(rhs_addr.getBit(), false, rhs_addr.getRegExp());
-}
-
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::cvt_to_f32(const TReg &tmp_vmm) const {
-    host_->vcvtdq2ps(tmp_vmm, tmp_vmm);
-}
-
-template <>
-void jit_uni_binary_injector_t<sse41>::cvt_to_f32(const TReg &tmp_vmm) const {
-    static_assert(
-            std::is_same<TReg, Xbyak::Xmm>::value, "TReg type should match Xmm");
-    host_->cvtdq2ps(tmp_vmm, tmp_vmm);
-}
-
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::execute_broadcast_no_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    switch (data_type) {
-        case data_type::f32: host_->uni_vbroadcastss(tmp_vmm, rhs_addr); break;
-        case data_type::s32: host_->uni_vpbroadcastd(tmp_vmm, rhs_addr); break;
-        case data_type::s8:
-        case data_type::u8:
-            execute_broadcast_s8u8_no_tail(data_type, tmp_vmm, rhs_addr);
-            break;
-        case data_type::bf16:
-            if (is_avx512_
-                    && utils::one_of(isa, avx512_core_bf16, avx512_core)) {
-                host_->vpbroadcastw(tmp_vmm, rhs_addr);
-                host_->vpslld(tmp_vmm, tmp_vmm, 0x10);
-                break;
-            }
-        default: assert(!"unsupported data type");
+      //unsupported
     }
 }
 
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::execute_broadcast_s8u8_no_tail(
-        const data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    const Xbyak::Xmm xmm(tmp_vmm.getIdx());
-    switch (data_type) {
-        case data_type::s8:
-            host_->vpbroadcastb(xmm, rhs_addr);
-            host_->vpmovsxbd(tmp_vmm, xmm);
-            break;
-        case data_type::u8:
-            host_->vpbroadcastb(xmm, rhs_addr);
-            host_->vpmovzxbd(tmp_vmm, xmm);
-            break;
-        default: assert(!"unsupported data type");
-    }
-}
-
-template <>
-void jit_uni_binary_injector_t<avx>::execute_broadcast_s8u8_no_tail(
-        const data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-
-    if (data_type == data_type::s8 || data_type == data_type::u8) {
-        const auto tmp_reg64_idx
-                = rhs_arg_static_params_.rhs_helper_reg.getIdx();
-        const Xbyak::Reg8 tmp_reg8 = Xbyak::Reg8(tmp_reg64_idx);
-        const Xbyak::Reg32 tmp_reg32 = Xbyak::Reg32(tmp_reg64_idx);
-        const auto tmp_xmm = Xbyak::Xmm(tmp_vmm.getIdx());
-        host_->mov(tmp_reg8, rhs_addr);
-        host_->vmovd(tmp_xmm, tmp_reg32);
-        host_->vpunpcklbw(tmp_xmm, tmp_xmm, tmp_xmm);
-        host_->vpshuflw(tmp_xmm, tmp_xmm, 0);
-        if (data_type == data_type::s8)
-            host_->vpmovsxbd(tmp_xmm, tmp_xmm);
-        else
-            host_->vpmovzxbd(tmp_xmm, tmp_xmm);
-
-        host_->vinsertf128(tmp_vmm, tmp_vmm, tmp_xmm, 1);
-    } else
-        assert(!"unsupported data type");
-}
-
-template <>
-void jit_uni_binary_injector_t<sse41>::execute_broadcast_s8u8_no_tail(
-        const data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-
-    if (data_type == data_type::s8 || data_type == data_type::u8) {
-        const auto tmp_reg64_idx
-                = rhs_arg_static_params_.rhs_helper_reg.getIdx();
-        const Xbyak::Reg8 tmp_reg8 = Xbyak::Reg8(tmp_reg64_idx);
-        host_->mov(tmp_reg8, rhs_addr);
-        const Xbyak::Reg32 tmp_reg32 = Xbyak::Reg32(tmp_reg64_idx);
-        host_->movd(tmp_vmm, tmp_reg32);
-        host_->punpcklbw(tmp_vmm, tmp_vmm);
-        host_->pshuflw(tmp_vmm, tmp_vmm, 0);
-        if (data_type == data_type::s8)
-            host_->pmovsxbd(tmp_vmm, tmp_vmm);
-        else
-            host_->pmovzxbd(tmp_vmm, tmp_vmm);
-    } else
-        assert(!"unsupported data type");
-}
-
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-
-    assert(rhs_arg_static_params_.is_opmask_set()
-            && "Opmask is not set for tail loading avx512");
-    const auto &tail_opmask = rhs_arg_static_params_.tail_opmask;
-
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-    switch (data_type) {
-        case data_type::f32:
-            host_->vbroadcastss(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
-            break;
-        case data_type::s32:
-            host_->vpbroadcastd(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
-            break;
-        case data_type::s8:
-            host_->vpbroadcastb(tmp_vmm | tail_opmask | host_->T_z,
-                    rhs_addr); // broadcast to tmm_xmm should be enough ?
-            host_->vpmovsxbd(tmp_vmm | tail_opmask | host_->T_z, tmp_vmm);
-            break;
-        case data_type::u8:
-            host_->vpbroadcastb(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
-            host_->vpmovzxbd(tmp_vmm | tail_opmask | host_->T_z, tmp_vmm);
-            break;
-        case data_type::bf16:
-            if (is_avx512_
-                    && utils::one_of(isa, avx512_core_bf16, avx512_core)) {
-                host_->vpbroadcastw(tmp_vmm, rhs_addr);
-                host_->vpslld(
-                        tmp_vmm | tail_opmask | host_->T_z, tmp_vmm, 0x10);
-            }
-        default: assert(!"unsupported data type");
-    }
-}
-  */
 static constexpr int xmm_size_elem = 4;
-/*
-static void load_tail_avx(jit_generator *host, std::size_t ymm_idx,
-        std::size_t tail_size, const std::function<void()> &init_op,
-        const std::function<void(int, bool)> &ymm_upper_half_op,
-        const std::function<void(int)> &ymm_lower_half_op) {
 
-    if (init_op) init_op();
-
-    const auto res = std::div(tail_size, xmm_size_elem);
-    const auto &ymm_upper_half_op_data_size = res.rem;
-    const bool should_load_lower_half = res.quot;
-
-    if (ymm_upper_half_op_data_size && ymm_upper_half_op)
-        ymm_upper_half_op(ymm_upper_half_op_data_size, should_load_lower_half);
-
-    if (should_load_lower_half) {
-        const auto tmp_xmm = Xbyak::Xmm(ymm_idx);
-
-        if (ymm_upper_half_op_data_size) push_vmm(host, tmp_xmm);
-
-        if (ymm_lower_half_op) ymm_lower_half_op(ymm_upper_half_op_data_size);
-
-        if (ymm_upper_half_op_data_size) {
-            const auto tmp_ymm = Xbyak::Ymm(ymm_idx);
-            host->vinsertf128(tmp_ymm, tmp_ymm, host->ptr[host->rsp], 1);
-            restore_stack(host, tmp_xmm);
-        }
-    }
-}
-
-static void load_tail_avx(jit_generator *host, std::size_t ymm_idx,
-        std::size_t tail_size,
-        const std::function<void(int, bool)> &ymm_upper_half_op,
-        const std::function<void(int)> &ymm_lower_half_op) {
-    load_tail_avx(host, ymm_idx, tail_size, nullptr, ymm_upper_half_op,
-            ymm_lower_half_op);
-}
-
-static Xbyak::uint8 MM_SHUFFLE(
-        Xbyak::uint8 z, Xbyak::uint8 y, Xbyak::uint8 x, Xbyak::uint8 w) {
-    return (((z) << 6) | ((y) << 4) | ((x) << 2) | (w));
-}
-
-static void execute_broadcast_f32_tail_avx(jit_generator *host,
-        std::size_t ymm_idx, const Xbyak::Address &rhs_addr,
-        std::size_t tail_size) {
-
-    const auto tmp_xmm = Xbyak::Xmm(ymm_idx);
-    static const std::array<Xbyak::uint8, 2> imms {
-            {MM_SHUFFLE(3, 2, 0, 0), MM_SHUFFLE(3, 0, 0, 0)}};
-
-    const auto init_op = [&] { host->vmovss(tmp_xmm, rhs_addr); };
-    const auto upper_half_op
-            = [&](int upper_half_data_size, bool should_load_lower_half) {
-                  // one element is already loaded
-                  if (upper_half_data_size > 1)
-                      host->vshufps(tmp_xmm, tmp_xmm, tmp_xmm,
-                              imms.at(upper_half_data_size - 2));
-              };
-    const auto lower_half_op = [&](int upper_half_data_size) {
-        host->vshufps(tmp_xmm, tmp_xmm, tmp_xmm, 0);
-    };
-
-    load_tail_avx(
-            host, ymm_idx, tail_size, init_op, upper_half_op, lower_half_op);
-}
-
-template <>
-void jit_uni_binary_injector_t<avx2>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    const auto &tail_size = rhs_arg_static_params_.tail_size;
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-
-    if (data_type == data_type::f32 || data_type == data_type::s32) {
-        execute_broadcast_f32_tail_avx(
-                host_, tmp_vmm.getIdx(), rhs_addr, tail_size);
-    } else if (data_type == data_type::u8 || data_type == data_type::s8) {
-        const auto tmp_xmm = Xbyak::Xmm(tmp_vmm.getIdx());
-        for (std::size_t i = 0; i < tail_size; i++)
-            host_->vpinsrb(tmp_xmm, tmp_xmm, rhs_addr, i);
-
-        if (data_type == data_type::s8)
-            host_->vpmovsxbd(tmp_vmm, tmp_xmm);
-        else
-            host_->vpmovzxbd(tmp_vmm, tmp_xmm);
-    } else
-        assert(!"unsupported data type");
-}
-
-template <>
-void jit_uni_binary_injector_t<avx>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-
-    const auto &tail_size = rhs_arg_static_params_.tail_size;
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-
-    if (data_type == data_type::f32 || data_type == data_type::s32) {
-        execute_broadcast_f32_tail_avx(
-                host_, tmp_vmm.getIdx(), rhs_addr, tail_size);
-    } else if (data_type == data_type::u8 || data_type == data_type::s8) {
-        const auto ymm_idx = tmp_vmm.getIdx();
-        const auto tmp_xmm = Xbyak::Xmm(ymm_idx);
-        const auto cvt_to_dword = [&] {
-            if (data_type == data_type::s8)
-                host_->vpmovsxbd(tmp_xmm, tmp_xmm);
-            else
-                host_->vpmovzxbd(tmp_xmm, tmp_xmm);
-        };
-
-        const auto init_op
-                = [&] { host_->vpinsrb(tmp_xmm, tmp_xmm, rhs_addr, 0); };
-
-        const auto upper_half_op
-                = [&](int upper_half_data_size, bool should_load_lower_half) {
-                      for (int i = 1; i < upper_half_data_size; i++)
-                          host_->vpinsrb(tmp_xmm, tmp_xmm, rhs_addr, i);
-
-                      cvt_to_dword();
-                  };
-
-        const auto lower_half_op = [&](int upper_half_data_size) {
-            if (upper_half_data_size) {
-                const auto dword_to_copy = xmm_size_elem - upper_half_data_size;
-                for (int i = upper_half_data_size; i < dword_to_copy; i++)
-                    host_->vpinsrd(tmp_xmm, tmp_xmm, tmp_xmm, i);
-            } else {
-                for (int i = 1; i < xmm_size_elem; i++)
-                    host_->vpinsrb(tmp_xmm, tmp_xmm, rhs_addr, i);
-
-                cvt_to_dword();
-            }
-        };
-
-        load_tail_avx(host_, ymm_idx, tail_size, init_op, upper_half_op,
-                lower_half_op);
-    } else
-        assert(!"unsupported data type");
-}
-
-template <>
-void jit_uni_binary_injector_t<sse41>::execute_broadcast_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-    const auto &tail_size = rhs_arg_static_params_.tail_size;
-    if (data_type == data_type::f32 || data_type == data_type::s32) {
-        static const std::array<Xbyak::uint8, 2> imms {
-                {MM_SHUFFLE(3, 2, 0, 0), MM_SHUFFLE(3, 0, 0, 0)}};
-
-        host_->movss(tmp_vmm, rhs_addr);
-        if (tail_size > 1) host_->shufps(tmp_vmm, tmp_vmm, imms[tail_size - 1]);
-
-    } else if (data_type == data_type::u8 || data_type == data_type::s8) {
-        for (std::size_t i = 0; i < tail_size; i++)
-            host_->pinsrb(tmp_vmm, rhs_addr, i);
-
-        if (data_type == data_type::s8)
-            host_->pmovsxbd(tmp_vmm, tmp_vmm);
-        else
-            host_->pmovzxbd(tmp_vmm, tmp_vmm);
-    } else
-        assert(!"unsupported data type");
-}
-
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::load_rhs_no_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    switch (data_type) {
-        case data_type::f32:
-        case data_type::s32: host_->uni_vmovups(tmp_vmm, rhs_addr); break;
-        case data_type::s8: host_->uni_vpmovsxbd(tmp_vmm, rhs_addr); break;
-        case data_type::u8: host_->uni_vpmovzxbd(tmp_vmm, rhs_addr); break;
-        case data_type::bf16:
-            if (is_avx512_
-                    && utils::one_of(isa, avx512_core_bf16, avx512_core)) {
-                host_->vpmovzxwd(tmp_vmm, rhs_addr);
-                host_->vpslld(tmp_vmm, tmp_vmm, 0x10);
-                break;
-            }
-        default: assert(!"unsupported data type");
-    }
-}
-  */
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs_tail(
         const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        //const Xbyak::Address &rhs_addr) const {
-        //const Address_t &rhs_addr) const {
         const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
 
     assert(rhs_arg_static_params_.is_opmask_set()
             && "Opmask is not set for tail loading avx512");
 
     const auto &tail_opmask = rhs_arg_static_params_.tail_opmask;
-    //host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
     int vlen = cpu_isa_traits<isa>::vlen;
     if (vlen == 64) {
         CG::eor(xa::ZReg(IDX(tmp_vmm)).d, xa::ZReg(IDX(tmp_vmm)).d,
@@ -1049,7 +481,6 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
     switch (data_type) {
         case data_type::f32:
         case data_type::s32:
-            //host_->vmovups(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
             if (vlen == 64) {
                 CG::pfalse(xa::PRegB(9));
                 CG::zip1(xa::PRegB(1), xa::PRegB(IDX(tail_opmask)),
@@ -1057,11 +488,6 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
                 CG::zip1(xa::PRegH(1), xa::PRegH(1), xa::PRegH(9));
                 CG::ld1w(xa::ZRegS(IDX(tmp_vmm)), xa::PReg(1) / xa::T_z,
                         xa::ptr(rhs_addr.getXn()));
-                /*
-                CG::ld1w(xa::ZRegS(IDX(tmp_vmm)),
-                        xa::PReg(IDX(tail_opmask)) / xa::T_z,
-                        xa::ptr(rhs_addr.getXn()));
-		*/
             } else if (vlen == 32) {
                 CG::sub(xa::XReg(22), xa::XReg(22), 8);
                 CG::str(xa::PReg(7), xa::ptr(xa::XReg(22)));
@@ -1089,201 +515,58 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
             }
             break;
         case data_type::s8:
-            /*
-            host_->vpmovsxbd(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
-	  */
+	  //unsupported
             break;
         case data_type::u8:
-            /*
-            host_->vpmovzxbd(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
-	  */
+	  //unsupported
             break;
         case data_type::bf16:
-            /*
-            if (is_avx512_
-                    && utils::one_of(isa, avx512_core_bf16, avx512_core)) {
-                host_->vpmovzxwd(tmp_vmm | tail_opmask | host_->T_z, rhs_addr);
-                host_->vpslld(
-                        tmp_vmm | tail_opmask | host_->T_z, tmp_vmm, 0x10);
-                break;
-            }
-	  */
+	  //unsupported
             break;
         default: assert(!"unsupported data type"); break;
     }
 }
-/*
-template <>
-void jit_uni_binary_injector_t<avx2>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    if (!utils::one_of(data_type, data_type::f32, data_type::s32, data_type::s8,
-                data_type::u8))
-        assert(!"unsupported data type");
 
-    const auto &tail_size = rhs_arg_static_params_.tail_size;
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-    host_->load_data(data_type, tmp_vmm, rhs_arg_static_params_.rhs_addr_reg, 0,
-            tail_size);
-}
-
-template <>
-void jit_uni_binary_injector_t<avx>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-    static constexpr int xmm_size_elem = 4;
-    const auto &tail_size = rhs_arg_static_params_.tail_size;
-    const auto res = std::div(tail_size, xmm_size_elem);
-    const auto ymm_idx = tmp_vmm.getIdx();
-    const auto tmp_xmm = Xbyak::Xmm(ymm_idx);
-
-    if (data_type == data_type::f32 || data_type == data_type::s32) {
-
-        const auto upper_half_op
-                = [&](int upper_half_data_size, bool should_load_lower_half) {
-                      const int offset = should_load_lower_half
-                              ? xmm_size_elem * sizeof(float)
-                              : 0;
-                      for (int i = 0; i < res.rem; i++)
-                          host_->vpinsrd(tmp_xmm, tmp_xmm,
-                                  host_->ptr[rhs_arg_static_params_.rhs_addr_reg
-                                          + offset + i * sizeof(float)],
-                                  i);
-                  };
-
-        const auto lower_half_op = [&](int upper_half_data_size) {
-            host_->vmovups(tmp_xmm, rhs_addr);
-        };
-        load_tail_avx(host_, ymm_idx, tail_size, upper_half_op, lower_half_op);
-
-    } else if (data_type == data_type::u8 || data_type == data_type::s8) {
-        const auto cvt_to_dword = [&](const Xbyak::Operand &operand) {
-            if (data_type == data_type::s8)
-                host_->vpmovsxbd(tmp_vmm, operand);
-            else
-                host_->vpmovzxbd(tmp_xmm, operand);
-        };
-
-        const auto upper_half_op = [&](int upper_half_data_size,
-                                           bool should_load_lower_half) {
-            const int offset = should_load_lower_half ? xmm_size_elem : 0;
-            for (int i = 0; i < upper_half_data_size; i++)
-                host_->vpinsrb(tmp_xmm, tmp_xmm,
-                        host_->ptr[rhs_arg_static_params_.rhs_addr_reg + offset
-                                + i * sizeof(float)],
-                        i);
-            cvt_to_dword(tmp_xmm);
-        };
-
-        const auto lower_half_op
-                = [&](int upper_half_data_size) { cvt_to_dword(rhs_addr); };
-
-        load_tail_avx(host_, ymm_idx, tail_size, upper_half_op, lower_half_op);
-
-    } else
-        assert(!"unsupported data type");
-}
-
-template <>
-void jit_uni_binary_injector_t<sse41>::load_rhs_tail(
-        const dnnl_data_type_t &data_type, const TReg &tmp_vmm,
-        const Xbyak::Address &rhs_addr) const {
-    if (!utils::one_of(data_type, data_type::f32, data_type::s32, data_type::s8,
-                data_type::u8))
-        assert(!"unsupported data type");
-
-    const auto &tail_size = rhs_arg_static_params_.tail_size;
-    host_->uni_vxorps(tmp_vmm, tmp_vmm, tmp_vmm);
-    host_->load_data(data_type, tmp_vmm, rhs_arg_static_params_.rhs_addr_reg, 0,
-            tail_size);
-}
-  */
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
         const TReg &dst, const TReg &lhs, const TReg &rhs) const {
-    //const std::type_info& infoA = typeid(lhs);
-    //const std::type_info& infoB = typeid(rhs);
     switch (binary_alg) {
         case alg_kind::binary_add:
-            //host_->uni_vaddps(dst, lhs, rhs);
             CG::fadd(xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s,
                     xa::ZReg(IDX(rhs)).s);
             break;
-            /*
-        case alg_kind::binary_mul: host_->uni_vmulps(dst, lhs, rhs); break;
-        case alg_kind::binary_max: host_->uni_vmaxps(dst, lhs, rhs); break;
-        case alg_kind::binary_min: host_->uni_vminps(dst, lhs, rhs); break;
-        case alg_kind::binary_div: host_->uni_vdivps(dst, lhs, rhs); break;
-        case alg_kind::binary_sub: host_->uni_vsubps(dst, lhs, rhs); break;
-	  */
+    case alg_kind::binary_mul: /*unsupported*/ break;
+    case alg_kind::binary_max: /*unsupported*/ break;
+    case alg_kind::binary_min: /*unsupported*/ break;
+    case alg_kind::binary_div: /*unsupported*/ break;
+    case alg_kind::binary_sub: /*unsupported*/ break;
         default: assert(!"unsupported algorithm"); break;
     }
 }
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
-        //const TReg &dst, const TReg &lhs, const Address_t &rhs) const {
         const TReg &dst, const TReg &lhs,
         const Xbyak_aarch64::AdrNoOfs &rhs) const {
-    //const std::type_info& infoA = typeid(lhs);
-    //const std::type_info& infoB = typeid(rhs);
     switch (binary_alg) {
         case alg_kind::binary_add:
             CG::ptrue(xa::PReg(1).b);
             CG::sub_imm(xa::XReg(22), xa::XReg(22), 64, xa::XReg(23));
             CG::st1w(xa::ZRegS(1), xa::PReg(1), xa::ptr(xa::XReg(22)));
             CG::ldr(xa::ZReg(1), xa::ptr(rhs.getXn()));
-            //CG::ld1w(xa::ZRegS(24), xa::PReg(0)/xa::T_z, xa::ptr(rhs.getXn()));
             CG::fadd(xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s, xa::ZReg(1).s);
             CG::ld1w(xa::ZRegS(1), xa::PReg(1), xa::ptr(xa::XReg(22)));
             CG::add_imm(xa::XReg(22), xa::XReg(22), 64, xa::XReg(23));
             break;
-            /*
-        case alg_kind::binary_mul: host_->uni_vmulps(dst, lhs, rhs); break;
-        case alg_kind::binary_max: host_->uni_vmaxps(dst, lhs, rhs); break;
-        case alg_kind::binary_min: host_->uni_vminps(dst, lhs, rhs); break;
-        case alg_kind::binary_div: host_->uni_vdivps(dst, lhs, rhs); break;
-        case alg_kind::binary_sub: host_->uni_vsubps(dst, lhs, rhs); break;
-	  */
+    case alg_kind::binary_mul: /*unsupported*/ break;
+    case alg_kind::binary_max: /*unsupported*/ break;
+    case alg_kind::binary_min: /*unsupported*/ break;
+    case alg_kind::binary_div: /*unsupported*/ break;
+    case alg_kind::binary_sub: /*unsupported*/ break;
         default: assert(!"unsupported algorithm"); break;
     }
 }
-/*
-template <>
-template <typename T>
-void jit_uni_binary_injector_t<avx>::execute_binary(alg_kind_t binary_alg,
-        const TReg &dst, const TReg &lhs, const T &rhs) const {
-    switch (binary_alg) {
-        case alg_kind::binary_add: host_->vaddps(dst, lhs, rhs); break;
-        case alg_kind::binary_mul: host_->vmulps(dst, lhs, rhs); break;
-        case alg_kind::binary_max: host_->vmaxps(dst, lhs, rhs); break;
-        case alg_kind::binary_min: host_->vminps(dst, lhs, rhs); break;
-        case alg_kind::binary_div: host_->vdivps(dst, lhs, rhs); break;
-        case alg_kind::binary_sub: host_->vsubps(dst, lhs, rhs); break;
-        default: assert(!"unsupported algorithm");
-    }
-}
-
-template <cpu_isa_t isa>
-void jit_uni_binary_injector_t<isa>::compute_vector(size_t idx,
-        std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
-        const rhs_arg_dynamic_params_t &rhs_arg_params) const {
-    compute_vector_range({idx}, rhs_arg_idx, post_op, rhs_arg_params);
-}
-  */
-/*
-template class jit_uni_binary_injector_t<avx512_core_bf16>;
-template class jit_uni_binary_injector_t<avx512_core>;
-template class jit_uni_binary_injector_t<avx512_common>;
-template class jit_uni_binary_injector_t<avx2>;
-template class jit_uni_binary_injector_t<avx>;
-template class jit_uni_binary_injector_t<sse41>;
-  */
 
 template class jit_uni_binary_injector_t<sve_512>;
-//template class jit_uni_binary_injector_t<sve_256>;
-//template class jit_uni_binary_injector_t<sve_128>;
-//template class jit_uni_binary_injector_t<asimd>;
 
 } // namespace binary_injector
 } // namespace aarch64
