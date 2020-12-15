@@ -75,9 +75,9 @@ static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
     }
 
     if (all_ones) {
-      //unsupported
+        //unsupported
     } else if (mask.none()) {
-      //unsupported
+        //unsupported
     }
 
     const auto &mb_rhs = rhs_arg_md.dims[0];
@@ -85,7 +85,7 @@ static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
     const bool broadcast_per_oc = !mask.test(1);
 
     if (broadcast_per_mb && broadcast_per_oc && mb_rhs != 1) {
-      //unsupported
+        //unsupported
     } else if (broadcast_per_oc) {
         if (use_per_oc_spatial_strategy && dst_d.is_blocking_desc()) {
             const auto &strides = dst_d.blocking_desc().strides;
@@ -183,10 +183,10 @@ static bool rhs_arg_params_differ(size_t vmm_idx1, size_t vmm_idx2,
     const auto &oc_off_oprnd = rhs_arg_params.vmm_idx_to_oc_off_oprnd;
 
     if (rhs_broadcasting_strategy == broadcasting_strategy_t::scalar) {
-      //unsupported
+        //unsupported
     } else if (rhs_broadcasting_strategy
             == broadcasting_strategy_t::no_broadcast) {
-      //unsupported
+        //unsupported
     } else if (rhs_broadcasting_strategy == broadcasting_strategy_t::per_oc
             || rhs_broadcasting_strategy
                     == broadcasting_strategy_t::per_oc_spatial) {
@@ -206,7 +206,7 @@ int jit_uni_binary_injector_t<isa>::adjust_temp_vmm_hint(
             = user_hint_in_vector_range || user_hint_exceeded_limit;
 
     if (user_hint_invalid) {
-      //unsupported
+        //unsupported
     }
 
     return user_hint;
@@ -217,7 +217,7 @@ std::pair<bool, int> jit_uni_binary_injector_t<isa>::should_preserve_vmm(
         int curr_idx, int vmm_hint, int max_vmm_idx,
         bool dt_helper_vmm_needed) const {
     if (dt_helper_vmm_needed && vmm_hint == curr_idx) {
-      //unsupported
+        //unsupported
     }
     return std::make_pair(false, vmm_hint);
 }
@@ -297,7 +297,7 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
                         rhs_arg_static_params_.use_exact_tail_scalar_bcast);
 
         if (vmm_preservation_needed) {
-	  //unsupported
+            //unsupported
         } else
             inject_binary(post_op, dst_vmm, rhs_arg_addr, with_tail);
     }
@@ -319,11 +319,10 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
     const auto rhs_arg_elem_size
             = types::data_type_size(post_op.binary.src1_desc.data_type);
 
-    CG::add_imm(xa::XReg(28), param1_, abi_param_offset,
-            xa::XReg(23));
+    CG::add_imm(xa::XReg(28), param1_, abi_param_offset, xa::XReg(23));
     CG::ldr(rhs_addr_reg, ptr(xa::XReg(28)));
-    CG::add_imm(xa::XReg(28), rhs_addr_reg,
-            rhs_arg_idx * rhs_arg_ptr_size, xa::XReg(23));
+    CG::add_imm(xa::XReg(28), rhs_addr_reg, rhs_arg_idx * rhs_arg_ptr_size,
+            xa::XReg(23));
     CG::ldr(rhs_addr_reg, ptr(xa::XReg(28)));
 
     switch (rhs_broadcasting_strategy) {
@@ -340,26 +339,23 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
         }
         default: assert(false && "Broadcasting type not supported");
     }
-
 }
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::append_offset_from_operand(
-        const std::map<int, xa::XReg> &vmm_idx_to_elem_operand_off,
-        int vmm_idx, const xa::XReg &addr_reg, const xa::XReg &tmp_reg,
+        const std::map<int, xa::XReg> &vmm_idx_to_elem_operand_off, int vmm_idx,
+        const xa::XReg &addr_reg, const xa::XReg &tmp_reg,
         std::size_t elem_size_bytes) const {
 
     const auto it_operand_off = vmm_idx_to_elem_operand_off.find(vmm_idx);
     if (it_operand_off != vmm_idx_to_elem_operand_off.end()) {
         if (elem_size_bytes == 1) {
-	  //unsupported
+            //unsupported
         } else {
             const int shift_val = std::log2(elem_size_bytes);
-            CG::mov(tmp_reg,
-                    xa::XReg(it_operand_off->second.getIdx()));
+            CG::mov(tmp_reg, xa::XReg(it_operand_off->second.getIdx()));
             CG::lsl(tmp_reg, tmp_reg, shift_val);
-            CG::add(addr_reg, addr_reg,
-                    tmp_reg);
+            CG::add(addr_reg, addr_reg, tmp_reg);
         }
     }
 }
@@ -373,14 +369,12 @@ void jit_uni_binary_injector_t<isa>::append_offset_under_mem_addr(
     const auto it_off_addr = vmm_idx_to_elem_addr_off.find(vmm_idx);
     if (it_off_addr != vmm_idx_to_elem_addr_off.end()) {
         if (elem_size_bytes == 1) {
-	  //unsupported
+            //unsupported
         } else {
             const int shift_val = std::log2(elem_size_bytes);
-            CG::ldr(tmp_reg,
-                    xa::ptr(it_off_addr->second.getXn()));
+            CG::ldr(tmp_reg, xa::ptr(it_off_addr->second.getXn()));
             CG::lsl(tmp_reg, tmp_reg, shift_val);
-            CG::add(addr_reg, addr_reg,
-                    tmp_reg);
+            CG::add(addr_reg, addr_reg, tmp_reg);
         }
     }
 }
@@ -392,8 +386,8 @@ void jit_uni_binary_injector_t<isa>::append_value_offset(
 
     const auto it_off_val = vmm_idx_to_elem_val_off.find(vmm_idx);
     if (it_off_val != vmm_idx_to_elem_val_off.end()) {
-        CG::add_imm(addr_reg, addr_reg,
-                it_off_val->second * elem_size_bytes, xa::XReg(23));
+        CG::add_imm(addr_reg, addr_reg, it_off_val->second * elem_size_bytes,
+                xa::XReg(23));
     }
 }
 
@@ -418,13 +412,13 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
         const TReg tmp_vmm = TReg(rhs_arg_static_params_.rhs_dt_helper_vmm_idx);
 
         if (false) {
-	  //unsupported
+            //unsupported
         } else
             load_rhs(rhs_arg_data_type, tmp_vmm, rhs_addr, with_tail);
 
         if (rhs_arg_data_type != data_type::bf16
                 && rhs_arg_data_type != data_type::f32) {
-	  //unsupported
+            //unsupported
         }
 
         execute_binary(alg, dst, dst, tmp_vmm);
@@ -448,7 +442,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs(const dnnl_data_type_t &data_type,
     if (with_tail)
         load_rhs_tail(data_type, tmp_reg, rhs_addr);
     else {
-      //unsupported
+        //unsupported
     }
 }
 
@@ -515,13 +509,13 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
             }
             break;
         case data_type::s8:
-	  //unsupported
+            //unsupported
             break;
         case data_type::u8:
-	  //unsupported
+            //unsupported
             break;
         case data_type::bf16:
-	  //unsupported
+            //unsupported
             break;
         default: assert(!"unsupported data type"); break;
     }
@@ -535,11 +529,11 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
             CG::fadd(xa::ZReg(IDX(dst)).s, xa::ZReg(IDX(lhs)).s,
                     xa::ZReg(IDX(rhs)).s);
             break;
-    case alg_kind::binary_mul: /*unsupported*/ break;
-    case alg_kind::binary_max: /*unsupported*/ break;
-    case alg_kind::binary_min: /*unsupported*/ break;
-    case alg_kind::binary_div: /*unsupported*/ break;
-    case alg_kind::binary_sub: /*unsupported*/ break;
+        case alg_kind::binary_mul: /*unsupported*/ break;
+        case alg_kind::binary_max: /*unsupported*/ break;
+        case alg_kind::binary_min: /*unsupported*/ break;
+        case alg_kind::binary_div: /*unsupported*/ break;
+        case alg_kind::binary_sub: /*unsupported*/ break;
         default: assert(!"unsupported algorithm"); break;
     }
 }
@@ -557,11 +551,11 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
             CG::ld1w(xa::ZRegS(1), xa::PReg(1), xa::ptr(xa::XReg(22)));
             CG::add_imm(xa::XReg(22), xa::XReg(22), 64, xa::XReg(23));
             break;
-    case alg_kind::binary_mul: /*unsupported*/ break;
-    case alg_kind::binary_max: /*unsupported*/ break;
-    case alg_kind::binary_min: /*unsupported*/ break;
-    case alg_kind::binary_div: /*unsupported*/ break;
-    case alg_kind::binary_sub: /*unsupported*/ break;
+        case alg_kind::binary_mul: /*unsupported*/ break;
+        case alg_kind::binary_max: /*unsupported*/ break;
+        case alg_kind::binary_min: /*unsupported*/ break;
+        case alg_kind::binary_div: /*unsupported*/ break;
+        case alg_kind::binary_sub: /*unsupported*/ break;
         default: assert(!"unsupported algorithm"); break;
     }
 }

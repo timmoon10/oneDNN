@@ -116,14 +116,13 @@ struct rhs_arg_static_params_t {
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_vmm_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
-            std::size_t tail_size,
-            const Xbyak_aarch64::PReg &tail_opmask,
+            std::size_t tail_size, const Xbyak_aarch64::PReg &tail_opmask,
             bool use_exact_tail_scalar_bcast);
 
     bool is_opmask_set() const noexcept { return is_opmask_set_; }
 
     mutable std::size_t rhs_dt_helper_vmm_idx;
-  
+
     Xbyak_aarch64::XReg rhs_addr_reg;
     Xbyak_aarch64::XReg rhs_helper_reg;
     bool preserve_gpr_helpers;
@@ -140,8 +139,7 @@ private:
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_vmm_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
-            std::size_t tail_size,
-            const Xbyak_aarch64::PReg &tail_opmask,
+            std::size_t tail_size, const Xbyak_aarch64::PReg &tail_opmask,
             bool use_exact_tail_scalar_bcast, bool is_opmask_set);
 
     bool is_opmask_set_;
@@ -308,7 +306,7 @@ private:
             //const Address_t &rhs_addr, bool with_tail = false) const;
             const Xbyak_aarch64::AdrNoOfs &rhs_addr,
             bool with_tail = false) const;
-  
+
     void load_rhs_tail(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
             //const Xbyak::Address &rhs_addr) const;
             //const Address_t &rhs_addr) const;

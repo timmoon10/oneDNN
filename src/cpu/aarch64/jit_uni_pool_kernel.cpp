@@ -262,7 +262,7 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
 
         //take into account cache re-usage after zeroing on backward
         if (jpp.is_backward && ndims < 5) {
-	  //unsupported
+            //unsupported
         }
 
         jpp.ur_bc_tail = jpp.nb_c % jpp.ur_bc;
@@ -315,8 +315,7 @@ inline void jit_uni_pool_kernel<isa>::prepare_tail_mask() {
         static const uint32_t mask[16] = {0xffffffff, 0xffffffff, 0xffffffff,
                 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0,
                 0, 0, 0, 0, 0, 0, 0};
-        mov_imm(tmp_gpr,
-                reinterpret_cast<size_t>(&mask[8 - jpp.c_tail]));
+        mov_imm(tmp_gpr, reinterpret_cast<size_t>(&mask[8 - jpp.c_tail]));
         ld1w(ZRegS(IDX(vmm_c_tail_mask)), p_lsb / T_z, ptr(tmp_gpr));
     }
 }
@@ -521,12 +520,10 @@ inline void jit_uni_pool_kernel<isa>::store(const int idx,
                 zip1(p1.h, p1.h, p9.h);
                 st1h(ZRegH(idx), k_c_tail_mask, ptr(x_tmp_addr));
             } else if (vlen == 32) {
-                bic(p_tmp0.b, P_ALL_ONE / T_z, k_c_tail_mask.b,
-                        P_MSB_256.b);
+                bic(p_tmp0.b, P_ALL_ONE / T_z, k_c_tail_mask.b, P_MSB_256.b);
                 st1h(ZRegH(idx), p_tmp0, ptr(x_tmp_addr));
             } else if (vlen == 16) {
-                bic(p_tmp0.b, P_ALL_ONE / T_z, k_c_tail_mask.b,
-                        P_MSB_384.b);
+                bic(p_tmp0.b, P_ALL_ONE / T_z, k_c_tail_mask.b, P_MSB_384.b);
                 st1h(ZRegH(idx), p_tmp0, ptr(x_tmp_addr));
             } else {
                 assert(!"unreachable");
@@ -603,8 +600,7 @@ void jit_uni_pool_kernel<isa>::apply_postops(int ur_bc, int ur_w, int c_block,
                 const auto vmm_idx
                         = vreg(reg_ind(0, bci, jj, ur_bc, ur_w)).getIdx();
 
-                add_imm(reg_adrimm, reg_param, GET_OFF(c_elem_off),
-                        x_tmp_0);
+                add_imm(reg_adrimm, reg_param, GET_OFF(c_elem_off), x_tmp_0);
 
                 rhs_arg_params.vmm_idx_to_oc_elem_off_addr.emplace(
                         vmm_idx, ptr(reg_adrimm));
@@ -825,8 +821,8 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                         }
                     } else {
                         int vlen = cpu_isa_traits<isa>::vlen;
-                        add_imm(x_tmp_addr, aux_reg_input,
-                                input_offset, x_tmp_0);
+                        add_imm(x_tmp_addr, aux_reg_input, input_offset,
+                                x_tmp_0);
 
                         if (vlen == 64) {
                             ldr(z_tmp0, ptr(x_tmp_addr));
@@ -848,8 +844,8 @@ inline void jit_uni_pool_kernel<isa>::avg_step(int ur_w, int ur_bc, int pad_l,
                 }
             }
         }
-        add_imm(aux_reg_input, aux_reg_input,
-                (jpp.dt_size * iw * c_off), x_tmp_0);
+        add_imm(aux_reg_input, aux_reg_input, (jpp.dt_size * iw * c_off),
+                x_tmp_0);
 
         adds(kj, kj, 1);
 
@@ -939,8 +935,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
             return with_c_tail_proccessing && bc == (ur_bc - 1);
     };
 
-    mov_imm(tmp_gpr,
-            float2int(nstl::numeric_limits<float>::lowest()));
+    mov_imm(tmp_gpr, float2int(nstl::numeric_limits<float>::lowest()));
 
     ptrue(p_tmp0.d, VL2);
     mov(ZRegD(IDX(xmm_tmp)), p_tmp0 / T_m, 0);
@@ -1850,19 +1845,16 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                     }
                     if (jpp.is_training) {
                         if (vlen == 64) {
-                            sel(ZRegS(IDX(indvr)),
-                                    k_store_mask / T_m,
+                            sel(ZRegS(IDX(indvr)), k_store_mask / T_m,
                                     ZRegS(IDX(vmm_k_offset)),
                                     ZRegS(IDX(indvr)));
                         } else if (vlen == 32) {
-                            sel(ZRegS(IDX(indvr)),
-                                    k_store_mask / T_m,
+                            sel(ZRegS(IDX(indvr)), k_store_mask / T_m,
                                     ZRegS(IDX(vmm_k_offset)),
                                     ZRegS(IDX(indvr)));
                             mov(ZReg(IDX(indvr)).s, P_MSB_256 / T_m, 0);
                         } else if (vlen == 16) {
-                            sel(ZRegS(IDX(indvr)),
-                                    k_store_mask / T_m,
+                            sel(ZRegS(IDX(indvr)), k_store_mask / T_m,
                                     ZRegS(IDX(vmm_k_offset)),
                                     ZRegS(IDX(indvr)));
                             mov(ZReg(IDX(indvr)).s, P_MSB_384 / T_m, 0);
@@ -1905,8 +1897,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
             }
         }
 
-        add_imm(aux_reg_input, aux_reg_input,
-                (jpp.dt_size * iw * c_off), x_tmp_0);
+        add_imm(aux_reg_input, aux_reg_input, (jpp.dt_size * iw * c_off),
+                x_tmp_0);
 
         adds(kj, kj, 1);
 
@@ -1919,8 +1911,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
         add_imm(aux_reg_input_d, aux_reg_input_d,
                 (jpp.dt_size * jpp.ih * iw * c_off), x_tmp_0);
         if (jpp.is_training) {
-            add_imm(x_tmp_addr, reg_param, GET_OFF(kd_padding_shift),
-                    x_tmp_0);
+            add_imm(x_tmp_addr, reg_param, GET_OFF(kd_padding_shift), x_tmp_0);
             ldr(tmp_gpr, ptr(x_tmp_addr));
 
             ptrue(p_tmp0.d, VL2);
@@ -2063,8 +2054,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             orr(p_tmp0.b, p_512, p_tmp1.b, P_MSB_256.b);
                             mov(ZRegB(IDX(yr)), p_tmp0 / T_m, 0);
 
-                            add_imm(x_tmp_addr, reg_index,
-                                    step_index, x_tmp_0);
+                            add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                             str(SReg(IDX(xr)), ptr(x_tmp_addr));
 
                             ptrue(p_tmp0.d, VL2);
@@ -2099,10 +2089,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             orr(p_tmp0.b, p_512, p_tmp1.b, P_MSB_256.b);
                             mov(ZRegB(IDX(t)), p_tmp0 / T_m, 0);
 
-                            add_imm(x_tmp_addr, reg_index,
-                                    step_index, x_tmp_0);
-                            add_imm(x_tmp_addr, reg_index,
-                                    step_index, x_tmp_0);
+                            add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
+                            add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                             str(SReg(IDX(t)), ptr(x_tmp_addr));
 
                             mov(z_tmp0.d, ZRegD(IDX(yr)));
@@ -2117,8 +2105,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                 } else {
                     if (is_tail_processing(bci)) {
                         if (jpp.is_c_padded) {
-                            add_imm(x_tmp_addr, reg_index,
-                                    step_index, x_tmp_0);
+                            add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                             int vlen = cpu_isa_traits<isa>::vlen;
                             if (vlen == 64) {
                                 mov(z_tmp0.d, ZRegD(IDX(vr)));
@@ -2132,8 +2119,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                                 assert(!"unsupported");
                             }
                         } else {
-                            add_imm(x_tmp_addr, reg_index,
-                                    step_index, x_tmp_0);
+                            add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                             int vlen = cpu_isa_traits<isa>::vlen;
                             if (vlen == 64) {
                                 mov(z_tmp0.d, ZRegD(IDX(vr)));
@@ -2151,8 +2137,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_fwd(int ur_w, int ur_bc,
                             }
                         }
                     } else {
-                        add_imm(x_tmp_addr, reg_index, step_index,
-                                x_tmp_0);
+                        add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                         int vlen = cpu_isa_traits<isa>::vlen;
                         if (vlen == 64) {
                             mov(z_tmp0.d, ZRegD(IDX(vr)));
@@ -2212,8 +2197,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                 if (is_tail_processing(bci) && !jpp.is_c_padded) {
                     assert(!"unsupported");
                 } else {
-                    add_imm(x_tmp_addr, reg_index, step_index,
-                            x_tmp_0);
+                    add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                     ldr(DReg(IDX(indxr)), ptr(x_tmp_addr));
                 }
                 if (!mayiuse(sve_256)) {
@@ -2243,10 +2227,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
 
                     ZReg z_indvr(IDX(indvr));
 
-                    add_imm(X_DEFAULT_ADDR, reg_index, step_index,
-                            X_TMP_0);
-                    ld1b(z_indvr.b, k_c_tail_mask / T_z,
-                            ptr(X_DEFAULT_ADDR));
+                    add_imm(X_DEFAULT_ADDR, reg_index, step_index, X_TMP_0);
+                    ld1b(z_indvr.b, k_c_tail_mask / T_z, ptr(X_DEFAULT_ADDR));
                     zip1(z_indvr.b, z_indvr.b, z_tmp0.b);
                     zip1(z_indvr.h, z_indvr.h, z_tmp0.h);
                     pfalse(p9.b);
@@ -2254,8 +2236,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     zip1(p1.h, p1.h, p9.h);
                     uxtb(ZRegS(IDX(indvr)), p1 / T_m, z_indvr.s);
                 } else {
-                    add_imm(x_tmp_addr, reg_index, step_index,
-                            x_tmp_0);
+                    add_imm(x_tmp_addr, reg_index, step_index, x_tmp_0);
                     int vlen = cpu_isa_traits<isa>::vlen;
                     if (vlen == 64) {
                         ldr(QReg(IDX(z_tmp0)), ptr(x_tmp_addr));
@@ -2310,8 +2291,7 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
         add_imm(x_tmp_addr, reg_param, GET_OFF(kd_padding), x_tmp_0);
         ldr(ki, ptr(x_tmp_addr));
 
-        add_imm(x_tmp_addr, reg_param, GET_OFF(kd_padding_shift),
-                x_tmp_0);
+        add_imm(x_tmp_addr, reg_param, GET_OFF(kd_padding_shift), x_tmp_0);
         ldr(reg_kd_pad_shift, ptr(x_tmp_addr));
         L(kd_label);
 
@@ -2351,8 +2331,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
                     auto indzr = zreg(inpr_i);
                     auto indyr = yreg(inpr_i);
 
-                    cmpeq(k_store_mask.s, p_lsb / T_z,
-                            ZRegS(IDX(indvr)), ZRegS(IDX(vmm_k_offset)));
+                    cmpeq(k_store_mask.s, p_lsb / T_z, ZRegS(IDX(indvr)),
+                            ZRegS(IDX(vmm_k_offset)));
 
                     not_(p_tmp0.b, P_ALL_ONE.b, k_store_mask.b);
                     int vlen = cpu_isa_traits<isa>::vlen;
@@ -2416,8 +2396,8 @@ inline void jit_uni_pool_kernel<isa>::max_step_bwd(int ur_w, int ur_bc,
             if (with_c_tail_proccessing && (isa == sve_128 || isa == sve_256))
                 pop_vmm_val(vmm_c_tail_mask.getIdx());
         }
-        add_imm(aux_reg_input, aux_reg_input,
-                (jpp.dt_size * iw * c_off), x_tmp_0);
+        add_imm(aux_reg_input, aux_reg_input, (jpp.dt_size * iw * c_off),
+                x_tmp_0);
 
         adds(kj, kj, 1);
 
@@ -2559,8 +2539,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
                             is_tail_processing(bci));
                 }
             }
-            add_imm(reg_zero_ptr, reg_zero_ptr,
-                    width_size, x_tmp_0);
+            add_imm(reg_zero_ptr, reg_zero_ptr, width_size, x_tmp_0);
 
             subs(aux_reg_zero_ih, aux_reg_zero_ih, 1);
 
@@ -2568,8 +2547,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
         }
         mov(reg_zero_ptr, aux_reg_zero_ptr);
 
-        add_imm(reg_zero_ptr, reg_zero_ptr,
-                (width_size * jpp.ih), x_tmp_0);
+        add_imm(reg_zero_ptr, reg_zero_ptr, (width_size * jpp.ih), x_tmp_0);
 
         subs(reg_zero_id, reg_zero_id, 1);
 
@@ -2629,8 +2607,7 @@ void jit_uni_pool_kernel<isa>::generate() {
     add_imm(x_tmp_addr, reg_param, GET_OFF(kh_padding), x_tmp_0);
     ldr(reg_kh, ptr(x_tmp_addr));
 
-    add_imm(x_tmp_addr, reg_param, GET_OFF(kh_padding_shift),
-            x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, GET_OFF(kh_padding_shift), x_tmp_0);
     ldr(reg_k_shift, ptr(x_tmp_addr));
 
     add_imm(x_tmp_addr, reg_param, GET_OFF(ker_area_h), x_tmp_0);
@@ -2675,8 +2652,8 @@ void jit_uni_pool_kernel<isa>::generate() {
         add_imm(reg_input, reg_input,
                 (dt_size * (ur_w * stride_w - lpad) * c_off - shift), x_tmp_0);
 
-        add_imm(reg_output, reg_output,
-                (dt_size * ur_w * c_off - shift), x_tmp_0);
+        add_imm(reg_output, reg_output, (dt_size * ur_w * c_off - shift),
+                x_tmp_0);
         if (jpp.alg == pooling_max && (jpp.is_training || jpp.is_backward)) {
             auto ishift = (isa == asimd) ? jpp.c_block / 2 : 0;
             auto ind_dt_size = types::data_type_size(jpp.ind_dt);

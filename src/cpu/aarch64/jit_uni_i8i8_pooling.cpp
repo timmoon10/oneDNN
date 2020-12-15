@@ -322,8 +322,8 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
 
     switch (jpp.src_dt) {
         case s32:
-            add_imm(x_tmp_addr, aux_reg_src_w,
-                    offset * data_type_size(s32), x_tmp_0);
+            add_imm(x_tmp_addr, aux_reg_src_w, offset * data_type_size(s32),
+                    x_tmp_0);
             if (masked) {
                 pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
@@ -548,28 +548,28 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
         case s32:
             switch (_cmp_lt_os) {
                 case 0:
-                    cmpeq(k_cmp_mask.s, p_512 / T_z,
-                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
+                    cmpeq(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
+                            ZRegS(IDX(vreg_src(jj))));
                     break; //EQ
                 case 1:
-                    cmplt(k_cmp_mask.s, p_512 / T_z,
-                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
+                    cmplt(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
+                            ZRegS(IDX(vreg_src(jj))));
                     break; //LT
                 case 2:
-                    cmple(k_cmp_mask.s, p_512 / T_z,
-                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
+                    cmple(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
+                            ZRegS(IDX(vreg_src(jj))));
                     break; //LE
                 case 4:
-                    cmpne(k_cmp_mask.s, p_512 / T_z,
-                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
+                    cmpne(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
+                            ZRegS(IDX(vreg_src(jj))));
                     break; //NEQ
                 case 5:
-                    cmpge(k_cmp_mask.s, p_512 / T_z,
-                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
+                    cmpge(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
+                            ZRegS(IDX(vreg_src(jj))));
                     break; //NLT
                 case 6:
-                    cmpgt(k_cmp_mask.s, p_512 / T_z,
-                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
+                    cmpgt(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
+                            ZRegS(IDX(vreg_src(jj))));
                     break; //NLE
                 case 3:
                 case 7:
@@ -579,29 +579,29 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
         case s8:
             switch (_cmp_lt_os) {
                 case 0:
-                    cmpeq(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmpeq(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //EQ
                 case 1:
-                    cmplt(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmplt(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //LT
                 case 2:
-                    cmple(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmple(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //LE
                 case 4:
-                    cmpne(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmpne(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //NEQ
                 case 5:
-                    cmplt(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmplt(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLT
                 case 6:
-                    cmple(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmple(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLE
                 case 3:
@@ -612,29 +612,29 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
         case u8:
             switch (_cmp_lt_os) {
                 case 0:
-                    cmpeq(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmpeq(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //EQ
                 case 1:
-                    cmpls(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmpls(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //LT
                 case 2:
-                    cmplo(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmplo(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //LE
                 case 4:
-                    cmpne(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmpne(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     break; //NEQ
                 case 5:
-                    cmplo(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmplo(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLT
                 case 6:
-                    cmpls(k_cmp_mask.b, p_512 / T_z,
-                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    cmpls(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
+                            ZRegB(IDX(vreg_src(jj))));
                     not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLE
                 case 3:
@@ -679,38 +679,34 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_max_step(
     }
 
     mov(aux_reg_src_d, reg_ptr_src_i8);
-    eor(reg_kd_index, reg_kd_index,
-            reg_kd_index);
+    eor(reg_kd_index, reg_kd_index, reg_kd_index);
     L(l_kd);
     {
         mov(aux_reg_src_h, aux_reg_src_d);
-        eor(reg_kh_index, reg_kh_index,
-                reg_kh_index);
+        eor(reg_kh_index, reg_kh_index, reg_kh_index);
         L(l_kh);
         {
             mov(aux_reg_src_w, aux_reg_src_h);
-            eor(reg_kw_index, reg_kw_index,
-                    reg_kw_index);
+            eor(reg_kw_index, reg_kw_index, reg_kw_index);
             L(l_kw);
             {
                 for (int jj = 0; jj < ur_c; jj++) {
                     load_src(jj, 0, c_tail);
                     compute_max_op(jj);
                 }
-                add(aux_reg_src_w, aux_reg_src_w,
-                        c * sizeof_src_dt());
+                add(aux_reg_src_w, aux_reg_src_w, c * sizeof_src_dt());
                 adds(reg_kw_index, reg_kw_index, 1);
                 cmp(reg_kw_index, reg_kw);
                 b(LT, l_kw);
             }
-            add_imm(aux_reg_src_h, aux_reg_src_h,
-                    iw * c * sizeof_src_dt(), x_tmp_0);
+            add_imm(aux_reg_src_h, aux_reg_src_h, iw * c * sizeof_src_dt(),
+                    x_tmp_0);
             adds(reg_kh_index, reg_kh_index, 1);
             cmp(reg_kh_index, reg_kh);
             b(LT, l_kh);
         }
-        add_imm(aux_reg_src_d, aux_reg_src_d,
-                ih * iw * c * sizeof_src_dt(), x_tmp_0);
+        add_imm(aux_reg_src_d, aux_reg_src_d, ih * iw * c * sizeof_src_dt(),
+                x_tmp_0);
         adds(reg_kd_index, reg_kd_index, 1);
         cmp(reg_kd_index, reg_kd);
         b(LT, l_kd);
@@ -761,18 +757,15 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
     }
 
     mov(aux_reg_src_d, reg_ptr_src_i8);
-    eor(reg_kd_index, reg_kd_index,
-            reg_kd_index);
+    eor(reg_kd_index, reg_kd_index, reg_kd_index);
     L(l_kd);
     {
         mov(aux_reg_src_h, aux_reg_src_d);
-        eor(reg_kh_index, reg_kh_index,
-                reg_kh_index);
+        eor(reg_kh_index, reg_kh_index, reg_kh_index);
         L(l_kh);
         {
             mov(aux_reg_src_w, aux_reg_src_h);
-            eor(reg_kw_index, reg_kw_index,
-                    reg_kw_index);
+            eor(reg_kw_index, reg_kw_index, reg_kw_index);
             L(l_kw);
             {
                 for (int jj = 0; jj < ur_c; jj++) {
@@ -802,20 +795,19 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                         }
                     }
                 }
-                add(aux_reg_src_w, aux_reg_src_w,
-                        c * sizeof_src_dt());
+                add(aux_reg_src_w, aux_reg_src_w, c * sizeof_src_dt());
                 adds(reg_kw_index, reg_kw_index, 1);
                 cmp(reg_kw_index, reg_kw);
                 b(LT, l_kw);
             }
-            add_imm(aux_reg_src_h, aux_reg_src_h,
-                    iw * c * sizeof_src_dt(), x_tmp_0);
+            add_imm(aux_reg_src_h, aux_reg_src_h, iw * c * sizeof_src_dt(),
+                    x_tmp_0);
             adds(reg_kh_index, reg_kh_index, 1);
             cmp(reg_kh_index, reg_kh);
             b(LT, l_kh);
         }
-        add_imm(aux_reg_src_d, aux_reg_src_d,
-                ih * iw * c * sizeof_src_dt(), x_tmp_0);
+        add_imm(aux_reg_src_d, aux_reg_src_d, ih * iw * c * sizeof_src_dt(),
+                x_tmp_0);
         adds(reg_kd_index, reg_kd_index, 1);
         cmp(reg_kd_index, reg_kd);
         b(LT, l_kd);
@@ -1024,8 +1016,8 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
     switch (jpp.alg) {
         case pooling_avg_include_padding:
         case pooling_avg_exclude_padding:
-            add_imm(x_tmp_addr, reg_param,
-                    offsetof(call_params_t, idivider), x_tmp_0);
+            add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, idivider),
+                    x_tmp_0);
             ldr(reg_tmp, ptr(x_tmp_addr));
             bic(VReg(IDX(xmm_tmp)).b16, VReg(IDX(xmm_tmp)).b16,
                     VReg(IDX(xmm_tmp)).b16);
@@ -1045,16 +1037,13 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
         case pooling_max:
             switch (jpp.src_dt) {
                 case s32:
-                    mov_imm(reg_tmp,
-                            nstl::numeric_limits<int32_t>::lowest());
+                    mov_imm(reg_tmp, nstl::numeric_limits<int32_t>::lowest());
                     break;
                 case s8:
-                    mov_imm(reg_tmp,
-                            nstl::numeric_limits<int8_t>::lowest());
+                    mov_imm(reg_tmp, nstl::numeric_limits<int8_t>::lowest());
                     break;
                 case u8:
-                    mov(reg_tmp,
-                            nstl::numeric_limits<uint8_t>::lowest());
+                    mov(reg_tmp, nstl::numeric_limits<uint8_t>::lowest());
                     break;
                 default: assert(!"unsupported src data_type");
             }
@@ -1113,26 +1102,21 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::generate() {
     // see the note about maskmovdqu/maskmovq near reg_param.
     mov(XReg(3), XReg(0));
 #endif
-    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, src_i8),
-            x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, src_i8), x_tmp_0);
     ldr(reg_ptr_src_i8, ptr(x_tmp_addr));
-    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, dst_i8),
-            x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, dst_i8), x_tmp_0);
     ldr(reg_ptr_dst_i8, ptr(x_tmp_addr));
-    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kd_range),
-            x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kd_range), x_tmp_0);
     ldr(reg_kd, ptr(x_tmp_addr));
-    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kh_range),
-            x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kh_range), x_tmp_0);
     ldr(reg_kh, ptr(x_tmp_addr));
-    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kw_range),
-            x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kw_range), x_tmp_0);
     ldr(reg_kw, ptr(x_tmp_addr));
-    add_imm(x_tmp_addr, reg_param,
-            offsetof(call_params_t, src_safe_access), x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, src_safe_access),
+            x_tmp_0);
     ldr(reg_src_safe_access, ptr(x_tmp_addr));
-    add_imm(x_tmp_addr, reg_param,
-            offsetof(call_params_t, dst_safe_access), x_tmp_0);
+    add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, dst_safe_access),
+            x_tmp_0);
     ldr(reg_dst_safe_access, ptr(x_tmp_addr));
 
     eor(VReg16B(IDX(vreg_zeros)), VReg16B(IDX(vreg_zeros)),
