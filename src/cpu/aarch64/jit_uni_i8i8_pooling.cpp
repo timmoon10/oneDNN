@@ -334,7 +334,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
                 ldr(ZReg(IDX(vr_src)), ptr(x_tmp_addr));
             }
             break;
-        case s8:
+        case data_type::s8:
             add_imm(x_tmp_addr, aux_reg_src_w, offset, x_tmp_0);
             if (masked) {
                 pfalse(p9.b);
@@ -420,7 +420,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
                 zip1(p1.h, p1.h, p9.h);
                 st1w(ZRegS(IDX(vreg_dst(jj))), p1, ptr(x_tmp_addr));
                 break;
-            case s8:
+            case data_type::s8:
             case u8:
                 add_imm(x_tmp_addr, reg_ptr_dst_i8, offset, x_tmp_0);
                 st1b(ZRegB(IDX(vreg_dst(jj))), mask(0), ptr(x_tmp_addr));
@@ -466,7 +466,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 str(ZReg(IDX(vr_dst)), ptr(x_tmp_addr));
             }
             break;
-        case s8:
+        case data_type::s8:
             add_imm(x_tmp_addr, reg_ptr_dst_i8, offset, x_tmp_0);
             if (masked) {
                 mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
@@ -576,7 +576,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
                 default: assert(!"unreachable"); break;
             }
             break;
-        case s8:
+        case data_type::s8:
             switch (_cmp_lt_os) {
                 case 0:
                     cmpeq(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
@@ -1039,7 +1039,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
                 case s32:
                     mov_imm(reg_tmp, nstl::numeric_limits<int32_t>::lowest());
                     break;
-                case s8:
+                case data_type::s8:
                     mov_imm(reg_tmp, nstl::numeric_limits<int8_t>::lowest());
                     break;
                 case u8:
