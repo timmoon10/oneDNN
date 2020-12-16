@@ -136,6 +136,7 @@ if (CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
       CMAKE_C_COMPILER MATCHES ".*/fcc$")
     include("cmake/blas_ssl2.cmake")
 endif()
+include("cmake/xbyak_translator_aarch64.cmake")
 
 # Handle cases when OpenMP runtime is requested but not found: override CPU
 # runtime to be sequential
