@@ -678,7 +678,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                         VReg4S v(ur);
                         VReg4S v_r(ur + r);
                         dup(VReg16B(ur + r), VReg16B(ur)[0]);
-                        ins_(VReg4S(ur + r)[0], VReg4S(ur)[r]);
+                        ins(VReg4S(ur + r)[0], VReg4S(ur)[r]);
                     }
             } else {
                 for (int ur = 0; ur < reg_unroll; ur += load_step)
