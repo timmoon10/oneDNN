@@ -380,21 +380,33 @@ status_t jit_uni_eltwise_fwd_t<isa, d_type>::execute(
     src += data_d.offset0();
     dst += data_d.offset0();
 
-    parallel(0, [&](const int ithr, const int nthr) {
-        dim_t start {0}, end {0};
-
-        balance211(utils::div_up(nelems, simd_w), nthr, ithr, start, end);
-        start = nstl::min(nelems, start * simd_w);
-        end = nstl::min(nelems, end * simd_w);
-        if (start == end) return;
-
+    if (nelems <= MAX_NUM_SINGLE_ELTWISE) {
         jit_args args;
-        args.src = src + start;
-        args.dst = dst + start;
+        args.src = src;
+        args.dst = dst;
         args.diff_dst = nullptr;
-        args.work_amount = end - start;
-        (*kernel_)(&args);
-    });
+        args.work_amount = nelems;
+        if (args.work_amount) (*kernel_)(&args);
+    } else {
+        int num_threads = std::min<long unsigned int>(dnnl_get_max_threads(),
+                ((nelems + MAX_NUM_SINGLE_ELTWISE - 1)
+                        / MAX_NUM_SINGLE_ELTWISE));
+        parallel(num_threads, [&](const int ithr, const int nthr) {
+            dim_t start {0}, end {0};
+
+            balance211(utils::div_up(nelems, simd_w), nthr, ithr, start, end);
+            start = nstl::min(nelems, start * simd_w);
+            end = nstl::min(nelems, end * simd_w);
+            if (start == end) return;
+
+            jit_args args;
+            args.src = src + start;
+            args.dst = dst + start;
+            args.diff_dst = nullptr;
+            args.work_amount = end - start;
+            (*kernel_)(&args);
+        });
+    }
 
     return status::success;
 }
@@ -445,21 +457,33 @@ status_t jit_uni_eltwise_bwd_t<isa, d_type>::execute(
     diff_dst += diff_data_d.offset0();
     diff_src += diff_data_d.offset0();
 
-    parallel(0, [&](const int ithr, const int nthr) {
-        dim_t start {0}, end {0};
-
-        balance211(utils::div_up(nelems, simd_w), nthr, ithr, start, end);
-        start = nstl::min(nelems, start * simd_w);
-        end = nstl::min(nelems, end * simd_w);
-        if (start == end) return;
-
+    if (nelems <= MAX_NUM_SINGLE_ELTWISE) {
         jit_args args;
-        args.src = src + start;
-        args.dst = diff_src + start;
-        args.diff_dst = diff_dst + start;
-        args.work_amount = end - start;
-        (*kernel_)(&args);
-    });
+        args.src = src;
+        args.dst = diff_src;
+        args.diff_dst = diff_dst;
+        args.work_amount = nelems;
+        if (args.work_amount) (*kernel_)(&args);
+    } else {
+        int num_threads = std::min<long unsigned int>(dnnl_get_max_threads(),
+                ((nelems + MAX_NUM_SINGLE_ELTWISE - 1)
+                        / MAX_NUM_SINGLE_ELTWISE));
+        parallel(num_threads, [&](const int ithr, const int nthr) {
+            dim_t start {0}, end {0};
+
+            balance211(utils::div_up(nelems, simd_w), nthr, ithr, start, end);
+            start = nstl::min(nelems, start * simd_w);
+            end = nstl::min(nelems, end * simd_w);
+            if (start == end) return;
+
+            jit_args args;
+            args.src = src + start;
+            args.dst = diff_src + start;
+            args.diff_dst = diff_dst + start;
+            args.work_amount = end - start;
+            (*kernel_)(&args);
+        });
+    }
 
     return status::success;
 }

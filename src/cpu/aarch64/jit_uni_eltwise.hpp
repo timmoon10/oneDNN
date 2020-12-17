@@ -28,6 +28,8 @@
 
 #include "cpu/aarch64/cpu_isa_traits.hpp"
 
+#define MAX_NUM_SINGLE_ELTWISE 4096
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
