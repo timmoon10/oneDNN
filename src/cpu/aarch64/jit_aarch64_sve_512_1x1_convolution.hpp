@@ -77,12 +77,14 @@ struct jit_aarch64_sve_512_1x1_convolution_fwd_t : public primitive_t {
                     jcp_, *conv_d, *src_d, *weights_md(), *dst_md(), *attr(),
                     dnnl_get_max_threads(), rtus_.reduce_src_);
             if (status != status::success) return status;
-#ifndef DISABLE_DW
             if (jcp_.with_dw_conv) {
+#ifndef DISABLE_DW
                 status = depthwise_po_init(engine);
                 if (status != status::success) return status;
-            }
+#else
+                return status::unimplemented;
 #endif
+            }
             auto scratchpad = scratchpad_registry().registrar();
             jit_aarch64_sve_512_1x1_conv_kernel::init_scratchpad(
                     scratchpad, jcp_);
