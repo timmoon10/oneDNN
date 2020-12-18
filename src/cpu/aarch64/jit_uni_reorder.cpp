@@ -212,7 +212,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                       }
 
                       for (int i = startIdx; i < startIdx + regNum; i++) {
-                          mov(ZRegS(i), P_MSB_256 / T_m, 0);
+                          xa_->mov(ZRegS(i), P_MSB_256 / T_m, 0);
                       }
                   };
         const auto cvt2odt = [=](const int startIdx, const int regNum,
@@ -258,13 +258,14 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         if (unroll * itype_sz == 32)
             for (uint32_t i = 0; i < 4; i++)
-                ld1w(ZRegS {i}, p_lsb_256 / T_z, ptr(x_tmp_vec[i]));
+                ld1w(ZRegS {i}, p_lsb_256 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * itype_sz == 16)
             for (uint32_t i = 0; i < 4; i++)
-                ldr(QReg {i}, ptr(x_tmp_vec[i]));
+                ldr(QReg {i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * itype_sz == 8)
             for (uint32_t i = 0; i < 4; i++)
-                ldr(DReg {i}, ptr(x_tmp_vec[i]));
+                ldr(DReg {i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
 
         add_imm(X_TMP_0, X_TMP_3, is(0) * itype_sz, X_DEFAULT_ADDR);
         add_imm(X_TMP_1, X_TMP_0, is(0) * itype_sz, X_DEFAULT_ADDR);
@@ -273,24 +274,25 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         if (unroll * itype_sz == 32)
             for (uint32_t i = 0; i < 4; i++)
-                ld1w(ZRegS {4 + i}, p_lsb_256 / T_z, ptr(x_tmp_vec[i]));
+                ld1w(ZRegS {4 + i}, p_lsb_256 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * itype_sz == 16)
             for (uint32_t i = 0; i < 4; i++)
-                ldr(QReg {4 + i}, ptr(x_tmp_vec[i]));
+                ldr(QReg {4 + i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * itype_sz == 8)
             for (uint32_t i = 0; i < 4; i++)
-                ldr(DReg {4 + i}, ptr(x_tmp_vec[i]));
+                ldr(DReg {4 + i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
 
         if (interim_f32) cvt2ps(0, unroll, prb_.itype);
 
 #if 0
         /* Deubg code */
         index(z0.s, 0, 1);
-        mov(z0.s, P_MSB_256/T_m, 0);
-        mov(z_tmp_vec[0].s, 16);
+        xa_->mov(z0.s, P_MSB_256/T_m, 0);
+        xa_->mov(z_tmp_vec[0].s, 16);
         for(uint32_t i=1; i<8; i++) {
           add(ZRegS{i}, ZRegS{i-1}, z_tmp_vec[0].s);
-          mov(ZRegS{i}, P_MSB_256/T_m, 0);
+          xa_->mov(ZRegS{i}, P_MSB_256/T_m, 0);
         }
 #endif
 
@@ -313,8 +315,8 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         /* 3rd turn */
         for (uint32_t i = 0; i < unroll / 2; i++) {
-            mov(ZRegD {i}, ZRegD {unroll / 2 + i});
-            mov(z_tmp_vec[unroll / 2 + i].d, z_tmp_vec[i].d);
+            xa_->mov(ZRegD {i}, ZRegD {unroll / 2 + i});
+            xa_->mov(z_tmp_vec[unroll / 2 + i].d, z_tmp_vec[i].d);
         }
 
         /* 4th turn */
@@ -350,13 +352,14 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         if (unroll * otype_sz == 32)
             for (uint32_t i = 0; i < 4; i++)
-                st1w(ZRegS {i}, p_lsb_256 / T_z, ptr(x_tmp_vec[i]));
+                st1w(ZRegS {i}, p_lsb_256 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * otype_sz == 16)
             for (uint32_t i = 0; i < 4; i++)
-                str(QReg {i}, ptr(x_tmp_vec[i]));
+                str(QReg {i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * otype_sz == 8)
             for (uint32_t i = 0; i < 4; i++)
-                str(DReg {i}, ptr(x_tmp_vec[i]));
+                str(DReg {i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
 
         add_imm(X_TMP_0, X_TMP_3, os(1) * otype_sz, X_DEFAULT_ADDR);
         add_imm(X_TMP_1, X_TMP_0, os(1) * otype_sz, X_DEFAULT_ADDR);
@@ -365,13 +368,14 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         if (unroll * otype_sz == 32)
             for (uint32_t i = 0; i < 4; i++)
-                st1w(ZRegS {4 + i}, p_lsb_256 / T_z, ptr(x_tmp_vec[i]));
+                st1w(ZRegS {4 + i}, p_lsb_256 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * otype_sz == 16)
             for (uint32_t i = 0; i < 4; i++)
-                str(QReg {4 + i}, ptr(x_tmp_vec[i]));
+                str(QReg {4 + i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
         else if (unroll * otype_sz == 8)
             for (uint32_t i = 0; i < 4; i++)
-                str(DReg {4 + i}, ptr(x_tmp_vec[i]));
+                str(DReg {4 + i}, Xbyak_aarch64::ptr(x_tmp_vec[i]));
     }
 
     bool can_do_tr8x8() {
@@ -435,13 +439,13 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
                 for (int i = 0; i < count; i++) {
                     /*                    if (vlen == 64)
-                        ldr(ZReg(tmp_ur + i), ptr(x_tmp_vec[i]));
+                        ldr(ZReg(tmp_ur + i), Xbyak_aarch64::ptr(x_tmp_vec[i]));
                         else */
                     if (vlen == 64 || vlen == 32)
-                        ld1w(ZRegS(tmp_ur + i), p_lsb_256 / T_z,
-                                ptr(x_tmp_vec[i]));
+                        ld1w(ZRegS(tmp_ur + i), p_lsb_256 / Xbyak_aarch64::T_z,
+                                Xbyak_aarch64::ptr(x_tmp_vec[i]));
                     else if (vlen == 16)
-                        ldr(QReg(tmp_ur + i), ptr(x_tmp_vec[i]));
+                        ldr(QReg(tmp_ur + i), Xbyak_aarch64::ptr(x_tmp_vec[i]));
                     else
                         assert(!"unreachable");
                 }
@@ -492,10 +496,10 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
                 for (int i = 0; i < count; i++) {
                     if (vlen == 64 || vlen == 32)
-                        st1w(ZRegS(tmp_ur + i), p_lsb_256 / T_z,
-                                ptr(x_tmp_vec[i]));
+                        st1w(ZRegS(tmp_ur + i), p_lsb_256 / Xbyak_aarch64::T_z,
+                                Xbyak_aarch64::ptr(x_tmp_vec[i]));
                     else if (vlen == 16)
-                        str(QReg(tmp_ur + i), ptr(x_tmp_vec[i]));
+                        str(QReg(tmp_ur + i), Xbyak_aarch64::ptr(x_tmp_vec[i]));
                     else
                         assert(!"unreachable");
                 }
@@ -591,11 +595,11 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
                 for (int r = 0; r < ur_step; ++r) {
                     if (itype_sz == 4)
-                        ld1(VReg4S(ur)[r], ptr(x_tmp_vec[r]));
+                        ld1(VReg4S(ur)[r], Xbyak_aarch64::ptr(x_tmp_vec[r]));
                     else if (itype_sz == 2)
-                        ld1(VReg8H(ur)[r], ptr(x_tmp_vec[r]));
+                        ld1(VReg8H(ur)[r], Xbyak_aarch64::ptr(x_tmp_vec[r]));
                     else
-                        ld1(VReg16B(ur)[r], ptr(x_tmp_vec[r]));
+                        ld1(VReg16B(ur)[r], Xbyak_aarch64::ptr(x_tmp_vec[r]));
                 }
             }
         } else {
@@ -613,11 +617,21 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                 for (int i = 0; i < count; i++) {
 
                     switch (load_step * itype_sz) {
-                        case 16: ldr(QReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                        case 8: ldr(DReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                        case 4: ldr(SReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                        case 2: ldr(HReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                        case 1: ldr(BReg(tmp_ur), ptr(x_tmp_vec[i])); break;
+                        case 16:
+                            ldr(QReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                            break;
+                        case 8:
+                            ldr(DReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                            break;
+                        case 4:
+                            ldr(SReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                            break;
+                        case 2:
+                            ldr(HReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                            break;
+                        case 1:
+                            ldr(BReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                            break;
                         default: assert(!"unreachable");
                     }
                     tmp_ur += load_step;
@@ -639,7 +653,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             if (fast_return) {
                 if (prb_.scale_type == scale_type_t::COMMON)
                     for (int ur = 0; ur < reg_unroll; ur += load_step)
-                        fmul(VReg4S(ur), VReg4S(ur), xmm_scale);
+                        xa_->fmul(VReg4S(ur), VReg4S(ur), xmm_scale);
                 if (prb_.otype != f32) {
                     init_saturate_f32(xmm_zero, xmm_saturation_ubound, reg_tmp,
                             interim_f32 ? f32 : prb_.itype, prb_.otype);
@@ -661,11 +675,14 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
                     for (int r = 0; r < load_step; ++r) {
                         if (otype_sz == 4)
-                            st1(VReg4S(ur)[r], ptr(x_tmp_vec[r]));
+                            xa_->st1(VReg4S(ur)[r],
+                                    Xbyak_aarch64::ptr(x_tmp_vec[r]));
                         else if (otype_sz == 2)
-                            st1(VReg8H(ur)[r], ptr(x_tmp_vec[r]));
+                            xa_->st1(VReg8H(ur)[r],
+                                    Xbyak_aarch64::ptr(x_tmp_vec[r]));
                         else
-                            st1(VReg16B(ur)[r], ptr(x_tmp_vec[r]));
+                            xa_->st1(VReg16B(ur)[r],
+                                    Xbyak_aarch64::ptr(x_tmp_vec[r]));
                     }
                 }
                 return;
@@ -693,7 +710,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             /* xmm <-- scale * xmm[:] */
             if (prb_.scale_type == scale_type_t::COMMON) {
                 for (int ur = 0; ur < reg_unroll; ur += ur_step)
-                    fmul(VReg4S(ur), VReg4S(ur), xmm_scale);
+                    xa_->fmul(VReg4S(ur), VReg4S(ur), xmm_scale);
             } else if (prb_.scale_type == scale_type_t::MANY) {
                 enum class scale_load_type_t { bcast, load, gather };
 
@@ -710,9 +727,9 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                         VReg4S v_dst(ur);
                         add_imm(X_TMP_0, x_ptr_scale_off, s_off[ur] * stype_sz,
                                 X_DEFAULT_ADDR);
-                        ldr(W_TMP_0, ptr(X_TMP_0));
+                        ldr(W_TMP_0, Xbyak_aarch64::ptr(X_TMP_0));
                         dup(v, W_TMP_0);
-                        fmul(v_dst, v_dst, v);
+                        xa_->fmul(v_dst, v_dst, v);
                         continue;
                     }
 
@@ -726,8 +743,8 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                         VReg4S v_dst(ur);
                         add_imm(X_TMP_0, x_ptr_scale_off, s_off[ur] * stype_sz,
                                 X_DEFAULT_ADDR);
-                        ldr(QReg {idx}, ptr(X_TMP_0));
-                        fmul(v_dst, v_dst, VReg4S {idx});
+                        ldr(QReg {idx}, Xbyak_aarch64::ptr(X_TMP_0));
+                        xa_->fmul(v_dst, v_dst, VReg4S {idx});
                         continue;
                     }
 
@@ -742,9 +759,9 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                     }
                     for (int r = ur; r < ur + ur_step; ++r) {
                         VReg4S v(xmm_scale.getIdx());
-                        ld1(v[r - ur], ptr(x_tmp_vec[r - ur]));
+                        ld1(v[r - ur], Xbyak_aarch64::ptr(x_tmp_vec[r - ur]));
                     }
-                    fmul(VReg4S(ur), VReg4S(ur), xmm_scale);
+                    xa_->fmul(VReg4S(ur), VReg4S(ur), xmm_scale);
                 }
             }
 
@@ -766,14 +783,15 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                     assert(count <= z_tmp_vec_size);
                     /* Firstly, data is loaded. */
                     for (int i = 0; i < count; i++) {
-                        ldr(QReg(tmp_vec_idx[i]), ptr(x_tmp_vec[i]));
+                        ldr(QReg(tmp_vec_idx[i]),
+                                Xbyak_aarch64::ptr(x_tmp_vec[i]));
                     }
 
                     /* Secondly, it is added. */
                     if (prb_.otype == f32) {
                         for (int i = 0; i < count; i++) {
                             VReg4S v(tmp_ur);
-                            fadd(v, v, VReg4S(tmp_vec_idx[i]));
+                            xa_->fadd(v, v, VReg4S(tmp_vec_idx[i]));
                             tmp_ur += ur_step;
                         }
                     } else {
@@ -785,7 +803,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                         }
                         for (int i = 0; i < count; i++) {
                             VReg4S v(tmp_ur);
-                            fadd(v, v, VReg4S(tmp_vec_idx[i]));
+                            xa_->fadd(v, v, VReg4S(tmp_vec_idx[i]));
                             tmp_ur += ur_step;
                         }
                     }
@@ -795,7 +813,8 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             /* xmm[0] <-- scale * xmm[0] */
             if (prb_.scale_type == scale_type_t::COMMON) {
                 for (int ur = 0; ur < reg_unroll; ur += ur_step)
-                    fmul(ZRegS(ur), p_lsb_32 / T_m, ZRegS(xmm_scale.getIdx()));
+                    xa_->fmul(ZRegS(ur), p_lsb_32 / T_m,
+                            ZRegS(xmm_scale.getIdx()));
             } else if (prb_.scale_type == scale_type_t::MANY) {
                 int ur = 0;
                 int tmp_ur = 0;
@@ -809,9 +828,10 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                     } while (ur < reg_unroll && count < x_tmp_vec_size);
 
                     for (int i = 0; i < count; i++)
-                        ldr(SReg(tmp_vec_idx[i]), ptr(x_tmp_vec[i]));
+                        ldr(SReg(tmp_vec_idx[i]),
+                                Xbyak_aarch64::ptr(x_tmp_vec[i]));
                     for (int i = 0; i < count; i++)
-                        fmul(ZRegS(tmp_ur + ur_step * i), p_lsb_32 / T_m,
+                        xa_->fmul(ZRegS(tmp_ur + ur_step * i), p_lsb_32 / T_m,
                                 ZRegS(tmp_vec_idx[i]));
 
                     tmp_ur += ur_step * count;
@@ -839,23 +859,26 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                          dset[MAXVL-1:32] (Unmodified) */
                         for (int i = 0; i < count; i++) {
                             ld1(VReg4S(z_tmp_vec[i].getIdx())[0],
-                                    ptr(x_tmp_vec[i]));
+                                    Xbyak_aarch64::ptr(x_tmp_vec[i]));
                         }
                         for (int i = 0; i < count; i++) {
                             SReg s {tmp_vec_idx[i]};
-                            fadd(s, s, SReg(tmp_ur + ur_step * i));
+                            xa_->fadd(s, s, SReg(tmp_ur + ur_step * i));
                         }
                         for (int i = 0; i < count; i++) {
-                            mov(VReg4S(tmp_ur)[0], VReg4S(tmp_vec_idx[i])[0]);
+                            xa_->mov(VReg4S(tmp_ur)[0],
+                                    VReg4S(tmp_vec_idx[i])[0]);
                             tmp_ur += ur_step;
                         }
                     } else {
                         for (int i = 0; i < count; i++) {
                             if (prb_.otype == s32) {
-                                ldr(SReg(tmp_vec_idx[i]), ptr(x_tmp_vec[i]));
+                                ldr(SReg(tmp_vec_idx[i]),
+                                        Xbyak_aarch64::ptr(x_tmp_vec[i]));
                             } else if (utils::one_of(
                                                prb_.otype, data_type::s8, u8)) {
-                                ldr(BReg(tmp_vec_idx[i]), ptr(x_tmp_vec[i]));
+                                ldr(BReg(tmp_vec_idx[i]),
+                                        Xbyak_aarch64::ptr(x_tmp_vec[i]));
                             } else {
                                 assert(!"unsupported o_type");
                             }
@@ -863,7 +886,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                         }
                         for (int i = 0; i < count; i++) {
                             VReg4S v(tmp_ur);
-                            fadd(v, v, VReg4S(tmp_vec_idx[i]));
+                            xa_->fadd(v, v, VReg4S(tmp_vec_idx[i]));
                             tmp_ur += ur_step;
                         }
                     }
@@ -899,11 +922,21 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             for (int i = 0; i < count; i++) {
 
                 switch (ur_step * otype_sz) {
-                    case 16: str(QReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                    case 8: str(DReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                    case 4: str(SReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                    case 2: str(HReg(tmp_ur), ptr(x_tmp_vec[i])); break;
-                    case 1: str(BReg(tmp_ur), ptr(x_tmp_vec[i])); break;
+                    case 16:
+                        str(QReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                        break;
+                    case 8:
+                        str(DReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                        break;
+                    case 4:
+                        str(SReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                        break;
+                    case 2:
+                        str(HReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                        break;
+                    case 1:
+                        str(BReg(tmp_ur), Xbyak_aarch64::ptr(x_tmp_vec[i]));
+                        break;
                     default: assert(!"unreachable");
                 }
                 tmp_ur += ur_step;
@@ -939,7 +972,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
     }
 
     void loop_begin(Label &l, XReg reg_cnt, int len) {
-        mov(reg_cnt, len);
+        xa_->mov(reg_cnt, len);
         L(l);
     }
 
@@ -982,11 +1015,11 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
 
         eor(reg_off_in, reg_off_in, reg_off_in);
         eor(reg_off_out, reg_off_out, reg_off_out);
-        mov(x_ptr_in_off, XReg(reg_ptr_in.getIdx()));
-        mov(x_ptr_out_off, XReg(reg_ptr_out.getIdx()));
+        xa_->mov(x_ptr_in_off, XReg(reg_ptr_in.getIdx()));
+        xa_->mov(x_ptr_out_off, XReg(reg_ptr_out.getIdx()));
         if (prb_.scale_type == scale_type_t::MANY) {
             eor(reg_off_scale, reg_off_scale, reg_off_scale);
-            mov(x_ptr_scale_off, XReg(reg_ptr_scale.getIdx()));
+            xa_->mov(x_ptr_scale_off, XReg(reg_ptr_scale.getIdx()));
         }
 
         Label l_loop[3];
@@ -1134,7 +1167,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             uzp1(z, z, z);
         }
         for (int i = startIdx; i < startIdx + regNum; i++) {
-            mov(ZRegB(i), P_MSB_384 / T_m, 0);
+            xa_->mov(ZRegB(i), P_MSB_384 / T_m, 0);
         }
     }
 
@@ -1155,22 +1188,22 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
         if (prb_.scale_type == scale_type_t::COMMON) {
             auto reg_ptr_scale_tmp = reg_ptr_in;
             add_imm(X_TMP_0, abi_param1, PARAM(scale), X_TMP_1);
-            ldr(reg_ptr_scale_tmp, ptr(X_TMP_0));
-            ldr(W_TMP_0, ptr(reg_ptr_scale_tmp));
+            ldr(reg_ptr_scale_tmp, Xbyak_aarch64::ptr(X_TMP_0));
+            ldr(W_TMP_0, Xbyak_aarch64::ptr(reg_ptr_scale_tmp));
             dup(xmm_scale, W_TMP_0);
         } else if (prb_.scale_type == scale_type_t::MANY) {
             add_imm(X_DEFAULT_ADDR, abi_param1, PARAM(scale), X_TMP_0);
-            ldr(reg_ptr_scale, ptr(X_DEFAULT_ADDR));
+            ldr(reg_ptr_scale, Xbyak_aarch64::ptr(X_DEFAULT_ADDR));
         }
         add_imm(X_TMP_0, abi_param1, PARAM(in), X_TMP_2);
         add_imm(X_TMP_1, abi_param1, PARAM(out), X_TMP_2);
-        ldr(reg_ptr_in, ptr(X_TMP_0));
-        ldr(reg_ptr_out, ptr(X_TMP_1));
+        ldr(reg_ptr_in, Xbyak_aarch64::ptr(X_TMP_0));
+        ldr(reg_ptr_out, Xbyak_aarch64::ptr(X_TMP_1));
 #undef PARAM
 
-        mov(x_ptr_in_off, XReg(reg_ptr_in.getIdx()));
-        mov(x_ptr_out_off, XReg(reg_ptr_out.getIdx()));
-        mov(x_ptr_scale_off, XReg(reg_ptr_scale.getIdx()));
+        xa_->mov(x_ptr_in_off, XReg(reg_ptr_in.getIdx()));
+        xa_->mov(x_ptr_out_off, XReg(reg_ptr_out.getIdx()));
+        xa_->mov(x_ptr_scale_off, XReg(reg_ptr_scale.getIdx()));
         ptrue(p_lsb_256.b, VL32);
         ptrue(p_lsb_32.b, VL4);
         ptrue(p_512.b);
@@ -1179,15 +1212,16 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             dup(ymm_zero, 0);
 
             if (prb_.itype == data_type::u8 && prb_.otype == data_type::s8) {
-                mov_imm(reg_tmp, 0x7f7f7f7f7f7f7f7f);
-                mov(VReg4S(ymm_8x127b.getIdx())[0], WReg(reg_tmp.getIdx()));
+                xa_->mov_imm(reg_tmp, 0x7f7f7f7f7f7f7f7f);
+                xa_->mov(
+                        VReg4S(ymm_8x127b.getIdx())[0], WReg(reg_tmp.getIdx()));
             }
         } else if (mayiuse(sve_512)) {
             movi(xmm_zero, 0);
 
             if (prb_.itype == data_type::u8 && prb_.otype == data_type::s8) {
-                mov(WReg(reg_tmp.getIdx()), 0x7f7f7f7f);
-                mov(xmm_4x127b[0], WReg(reg_tmp.getIdx()));
+                xa_->mov(WReg(reg_tmp.getIdx()), 0x7f7f7f7f);
+                xa_->mov(xmm_4x127b[0], WReg(reg_tmp.getIdx()));
             }
         }
 

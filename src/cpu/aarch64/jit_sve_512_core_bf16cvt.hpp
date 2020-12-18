@@ -28,13 +28,7 @@
 #include "common/bfloat16.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
-#ifdef DNNL_AARCH64
-#ifdef CG
-#undef CG
-#endif
-#define CG host_->Xbyak_aarch64::CodeGenerator
 #define IDX(a) static_cast<uint32_t>(a.getIdx())
-#endif //#ifdef DNNL_AARCH64
 
 namespace dnnl {
 namespace impl {
@@ -121,205 +115,205 @@ private:
     void vcvtneps2bf16(const Xmm_t &out, const Xmm_t &in, const Xmm_t &tr0,
             const Ymm_t &one, const Xmm_t &even, const Ymm_t &selector) {
         //host_->vpsrld(tr0, in, 16);
-        CG::lsr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(in)), 16);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->lsr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(in)), 16);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpandd(tr0, tr0, one);
-        CG::and_(xa::VReg(IDX(tr0)).b16, xa::VReg(IDX(tr0)).b16,
+        host_->xa_->and_(xa::VReg(IDX(tr0)).b16, xa::VReg(IDX(tr0)).b16,
                 xa::VReg(IDX(one)).b16);
 
         //host_->vpaddd(tr0, even, tr0);
-        CG::add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(even)).s4,
+        host_->xa_->add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(even)).s4,
                 xa::VReg(IDX(tr0)).s4);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpaddd(tr0, in, tr0);
-        CG::add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(in)).s4,
+        host_->xa_->add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(in)).s4,
                 xa::VReg(IDX(tr0)).s4);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
         //host_->vfixupimmps(tr0, in, selector, 0);
         xa::Label l_table, l_exec;
-        CG::b(l_exec);
+        host_->xa_->b(l_exec);
         // gen table
-        CG::L(l_table);
-        CG::dw(0xFFFFFFFF); // dummy for dest[31:0]
-        CG::dw(0xFFFFFFFF); // dummy for tsrc[31:0]
-        CG::dw(0x7FC00000); // QNAN(tsrc[31:0])
-        CG::dw(0xFFC00000); // QNAN_Indefinite
-        CG::dw(0xFF800000); // -INF
-        CG::dw(0x7F800000); // +INF
-        CG::dw(0x7F800000); // dummy for tsrc.sign? -INF:+INF
-        CG::dw(0x80000000); // -0;
-        CG::dw(0x00000000); // +0;
-        CG::dw(0xBF800000); // -1;
-        CG::dw(0x3F800000); // +1;
-        CG::dw(0x3F000000); // 1/2;
-        CG::dw(0x42B40000); // 90.0
-        CG::dw(0x3FC90FDB); // PI/2
-        CG::dw(0x7F7FFFFF); // MAX_FLOAT
-        CG::dw(0xFF7FFFFF); // -MIN_FLOAT
-        CG::L(l_exec);
-        CG::mov(z_tmp.d, xa::ZRegD(IDX(in)));
-        CG::mov(z_tmp3.d, 0);
-        CG::mov(z_tmp2.s, uint64_t(1) << 22);
-        CG::ptrue(p_tmp.b);
-        CG::adr(x_tmp_addr, l_table);
-        CG::fcmuo(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp.s);
-        CG::and_(z_tmp2.d, z_tmp.d, z_tmp2.d);
-        CG::cmpeq(P_TMP_1.s, p_tmp / xa::T_z, z_tmp2.s, 0);
-        CG::and_(P_TMP_1.b, p_tmp / xa::T_z, P_TMP_0.b, P_TMP_1.b);
-        CG::mov(z_tmp3.s, P_TMP_1 / xa::T_m, 1);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fdup(z_tmp2.s, float(1.0));
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, float(0.0));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 2);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
-        CG::dupm(z_tmp2.s, uint64_t(0xff800000));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 3);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
-        CG::dupm(z_tmp2.s, uint64_t(0x7f800000));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 4);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
-        CG::mov(z_tmp2.d, xa::ZRegD(IDX(selector)));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 5);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::cmplt(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, 0);
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 6);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::mov(z_tmp3.s, p_tmp / xa::T_m, 7);
-        CG::ptrue(p_tmp.b);
-        CG::lsl(z_tmp3.s, z_tmp3.s, 2);
-        CG::lsr(z_tmp2.s, p_tmp, z_tmp3.s);
-        CG::and_(z_tmp2.s, uint64_t(0xf));
-        CG::cmpne(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 0);
-        CG::ld1w(z_tmp3.s, p_tmp / xa::T_z,
+        host_->xa_->L(l_table);
+        host_->xa_->dw(0xFFFFFFFF); // dummy for dest[31:0]
+        host_->xa_->dw(0xFFFFFFFF); // dummy for tsrc[31:0]
+        host_->xa_->dw(0x7FC00000); // QNAN(tsrc[31:0])
+        host_->xa_->dw(0xFFC00000); // QNAN_Indefinite
+        host_->xa_->dw(0xFF800000); // -INF
+        host_->xa_->dw(0x7F800000); // +INF
+        host_->xa_->dw(0x7F800000); // dummy for tsrc.sign? -INF:+INF
+        host_->xa_->dw(0x80000000); // -0;
+        host_->xa_->dw(0x00000000); // +0;
+        host_->xa_->dw(0xBF800000); // -1;
+        host_->xa_->dw(0x3F800000); // +1;
+        host_->xa_->dw(0x3F000000); // 1/2;
+        host_->xa_->dw(0x42B40000); // 90.0
+        host_->xa_->dw(0x3FC90FDB); // PI/2
+        host_->xa_->dw(0x7F7FFFFF); // MAX_FLOAT
+        host_->xa_->dw(0xFF7FFFFF); // -MIN_FLOAT
+        host_->xa_->L(l_exec);
+        host_->xa_->mov(z_tmp.d, xa::ZRegD(IDX(in)));
+        host_->xa_->mov(z_tmp3.d, 0);
+        host_->xa_->mov(z_tmp2.s, uint64_t(1) << 22);
+        host_->xa_->ptrue(p_tmp.b);
+        host_->xa_->adr(x_tmp_addr, l_table);
+        host_->xa_->fcmuo(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp.s);
+        host_->xa_->and_(z_tmp2.d, z_tmp.d, z_tmp2.d);
+        host_->xa_->cmpeq(P_TMP_1.s, p_tmp / xa::T_z, z_tmp2.s, 0);
+        host_->xa_->and_(P_TMP_1.b, p_tmp / xa::T_z, P_TMP_0.b, P_TMP_1.b);
+        host_->xa_->mov(z_tmp3.s, P_TMP_1 / xa::T_m, 1);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fdup(z_tmp2.s, float(1.0));
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, float(0.0));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 2);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
+        host_->xa_->dupm(z_tmp2.s, uint64_t(0xff800000));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 3);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
+        host_->xa_->dupm(z_tmp2.s, uint64_t(0x7f800000));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 4);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
+        host_->xa_->mov(z_tmp2.d, xa::ZRegD(IDX(selector)));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 5);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->cmplt(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, 0);
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 6);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->mov(z_tmp3.s, p_tmp / xa::T_m, 7);
+        host_->xa_->ptrue(p_tmp.b);
+        host_->xa_->lsl(z_tmp3.s, z_tmp3.s, 2);
+        host_->xa_->lsr(z_tmp2.s, p_tmp, z_tmp3.s);
+        host_->xa_->and_(z_tmp2.s, uint64_t(0xf));
+        host_->xa_->cmpne(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 0);
+        host_->xa_->ld1w(z_tmp3.s, p_tmp / xa::T_z,
                 xa::ptr(x_tmp_addr, z_tmp2.s, xa::UXTW, 2));
-        CG::mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp3.s);
-        CG::dupm(z_tmp3.s, uint64_t(0x807fffff));
-        CG::and_(z_tmp3.d, z_tmp3.d, z_tmp.d);
-        CG::cmpeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 1);
-        CG::mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp.s);
-        CG::and_(z_tmp.s, uint64_t(0x80000000));
-        CG::cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 2);
-        CG::orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp3.s);
-        CG::cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 6);
-        CG::orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp.s);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp3.s);
+        host_->xa_->dupm(z_tmp3.s, uint64_t(0x807fffff));
+        host_->xa_->and_(z_tmp3.d, z_tmp3.d, z_tmp.d);
+        host_->xa_->cmpeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 1);
+        host_->xa_->mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp.s);
+        host_->xa_->and_(z_tmp.s, uint64_t(0x80000000));
+        host_->xa_->cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 2);
+        host_->xa_->orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp3.s);
+        host_->xa_->cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 6);
+        host_->xa_->orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp.s);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpsrad(tr0, tr0, 16);
-        CG::asr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(tr0)), 16);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->asr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(tr0)), 16);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
         //host_->vpmovdw(out, tr0);
-        CG::mov(z_tmp.d, xa::ZRegD(IDX(tr0)));
-        CG::mov(z_tmp.b, P_MSB_384 / xa::T_m, 0);
-        CG::dup(xa::ZRegS(IDX(out)), 0);
-        CG::uzp1(xa::ZRegH(IDX(out)), z_tmp.h, xa::ZRegH(IDX(out)));
+        host_->xa_->mov(z_tmp.d, xa::ZRegD(IDX(tr0)));
+        host_->xa_->mov(z_tmp.b, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->dup(xa::ZRegS(IDX(out)), 0);
+        host_->xa_->uzp1(xa::ZRegH(IDX(out)), z_tmp.h, xa::ZRegH(IDX(out)));
     }
 
     void vcvtneps2bf16(const Ymm_t &out, const Xmm_t &in, const Xmm_t &tr0,
             const Zmm_t &one, const Xmm_t &even, const Zmm_t &selector) {
         //host_->vpsrld(tr0, in, 16);
-        CG::lsr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(in)), 16);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->lsr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(in)), 16);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpandd(tr0, tr0, one);
-        CG::mov(z_tmp.d, one.d);
-        CG::and_(xa::ZReg(IDX(tr0)).d, xa::ZReg(IDX(tr0)).d, z_tmp.d);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(z_tmp.d, one.d);
+        host_->xa_->and_(xa::ZReg(IDX(tr0)).d, xa::ZReg(IDX(tr0)).d, z_tmp.d);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpaddd(tr0, even, tr0);
-        CG::add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(even)).s4,
+        host_->xa_->add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(even)).s4,
                 xa::VReg(IDX(tr0)).s4);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpaddd(tr0, in, tr0);
-        CG::add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(in)).s4,
+        host_->xa_->add(xa::VReg(IDX(tr0)).s4, xa::VReg(IDX(in)).s4,
                 xa::VReg(IDX(tr0)).s4);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
         //host_->vfixupimmps(tr0, in, selector, 0);
         xa::Label l_exec, l_table;
-        CG::b(l_exec);
+        host_->xa_->b(l_exec);
         // gen table
         //L_aarch64(l_table);
-        CG::L(l_table);
-        CG::dw(0xFFFFFFFF); // dummy for dest[31:0]
-        CG::dw(0xFFFFFFFF); // dummy for tsrc[31:0]
-        CG::dw(0x7FC00000); // QNAN(tsrc[31:0])
-        CG::dw(0xFFC00000); // QNAN_Indefinite
-        CG::dw(0xFF800000); // -INF
-        CG::dw(0x7F800000); // +INF
-        CG::dw(0x7F800000); // dummy for tsrc.sign? -INF:+INF
-        CG::dw(0x80000000); // -0;
-        CG::dw(0x00000000); // +0;
-        CG::dw(0xBF800000); // -1;
-        CG::dw(0x3F800000); // +1;
-        CG::dw(0x3F000000); // 1/2;
-        CG::dw(0x42B40000); // 90.0
-        CG::dw(0x3FC90FDB); // PI/2
-        CG::dw(0x7F7FFFFF); // MAX_FLOAT
-        CG::dw(0xFF7FFFFF); // -MIN_FLOAT
+        host_->xa_->L(l_table);
+        host_->xa_->dw(0xFFFFFFFF); // dummy for dest[31:0]
+        host_->xa_->dw(0xFFFFFFFF); // dummy for tsrc[31:0]
+        host_->xa_->dw(0x7FC00000); // QNAN(tsrc[31:0])
+        host_->xa_->dw(0xFFC00000); // QNAN_Indefinite
+        host_->xa_->dw(0xFF800000); // -INF
+        host_->xa_->dw(0x7F800000); // +INF
+        host_->xa_->dw(0x7F800000); // dummy for tsrc.sign? -INF:+INF
+        host_->xa_->dw(0x80000000); // -0;
+        host_->xa_->dw(0x00000000); // +0;
+        host_->xa_->dw(0xBF800000); // -1;
+        host_->xa_->dw(0x3F800000); // +1;
+        host_->xa_->dw(0x3F000000); // 1/2;
+        host_->xa_->dw(0x42B40000); // 90.0
+        host_->xa_->dw(0x3FC90FDB); // PI/2
+        host_->xa_->dw(0x7F7FFFFF); // MAX_FLOAT
+        host_->xa_->dw(0xFF7FFFFF); // -MIN_FLOAT
         //L_aarch64(l_exec);
-        CG::L(l_exec);
-        CG::mov(z_tmp.d, xa::ZRegD(IDX(in)));
-        CG::mov(z_tmp3.d, 0);
-        CG::mov(z_tmp2.s, uint64_t(1) << 22);
-        CG::ptrue(p_tmp.b);
-        CG::adr(x_tmp_addr, l_table);
-        CG::fcmuo(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp.s);
-        CG::and_(z_tmp2.d, z_tmp.d, z_tmp2.d);
-        CG::cmpeq(P_TMP_1.s, p_tmp / xa::T_z, z_tmp2.s, 0);
-        CG::and_(P_TMP_1.b, p_tmp / xa::T_z, P_TMP_0.b, P_TMP_1.b);
-        CG::mov(z_tmp3.s, P_TMP_1 / xa::T_m, 1);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fdup(z_tmp2.s, float(1.0));
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, float(0.0));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 2);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
-        CG::dupm(z_tmp2.s, uint64_t(0xff800000));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 3);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
-        CG::dupm(z_tmp2.s, uint64_t(0x7f800000));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 4);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
-        CG::mov(z_tmp2.d, xa::ZRegD(IDX(selector)));
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 5);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::cmplt(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, 0);
-        CG::mov(z_tmp3.s, P_TMP_0 / xa::T_m, 6);
-        CG::bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
-        CG::mov(z_tmp3.s, p_tmp / xa::T_m, 7);
-        CG::ptrue(p_tmp.b);
-        CG::lsl(z_tmp3.s, z_tmp3.s, 2);
-        CG::lsr(z_tmp2.s, p_tmp, z_tmp3.s);
-        CG::and_(z_tmp2.s, uint64_t(0xf));
-        CG::cmpne(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 0);
-        CG::ld1w(z_tmp3.s, p_tmp / xa::T_z,
+        host_->xa_->L(l_exec);
+        host_->xa_->mov(z_tmp.d, xa::ZRegD(IDX(in)));
+        host_->xa_->mov(z_tmp3.d, 0);
+        host_->xa_->mov(z_tmp2.s, uint64_t(1) << 22);
+        host_->xa_->ptrue(p_tmp.b);
+        host_->xa_->adr(x_tmp_addr, l_table);
+        host_->xa_->fcmuo(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp.s);
+        host_->xa_->and_(z_tmp2.d, z_tmp.d, z_tmp2.d);
+        host_->xa_->cmpeq(P_TMP_1.s, p_tmp / xa::T_z, z_tmp2.s, 0);
+        host_->xa_->and_(P_TMP_1.b, p_tmp / xa::T_z, P_TMP_0.b, P_TMP_1.b);
+        host_->xa_->mov(z_tmp3.s, P_TMP_1 / xa::T_m, 1);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fdup(z_tmp2.s, float(1.0));
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, float(0.0));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 2);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
+        host_->xa_->dupm(z_tmp2.s, uint64_t(0xff800000));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 3);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
+        host_->xa_->dupm(z_tmp2.s, uint64_t(0x7f800000));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 4);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->fcmeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, z_tmp2.s);
+        host_->xa_->mov(z_tmp2.d, xa::ZRegD(IDX(selector)));
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 5);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->cmplt(P_TMP_0.s, p_tmp / xa::T_z, z_tmp.s, 0);
+        host_->xa_->mov(z_tmp3.s, P_TMP_0 / xa::T_m, 6);
+        host_->xa_->bic(p_tmp.b, p_tmp / xa::T_z, p_tmp.b, P_TMP_0.b);
+        host_->xa_->mov(z_tmp3.s, p_tmp / xa::T_m, 7);
+        host_->xa_->ptrue(p_tmp.b);
+        host_->xa_->lsl(z_tmp3.s, z_tmp3.s, 2);
+        host_->xa_->lsr(z_tmp2.s, p_tmp, z_tmp3.s);
+        host_->xa_->and_(z_tmp2.s, uint64_t(0xf));
+        host_->xa_->cmpne(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 0);
+        host_->xa_->ld1w(z_tmp3.s, p_tmp / xa::T_z,
                 xa::ptr(x_tmp_addr, z_tmp2.s, xa::UXTW, 2));
-        CG::mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp3.s);
-        CG::dupm(z_tmp3.s, uint64_t(0x807fffff));
-        CG::and_(z_tmp3.d, z_tmp3.d, z_tmp.d);
-        CG::cmpeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 1);
-        CG::mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp.s);
-        CG::and_(z_tmp.s, uint64_t(0x80000000));
-        CG::cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 2);
-        CG::orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp3.s);
-        CG::cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 6);
-        CG::orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp.s);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp3.s);
+        host_->xa_->dupm(z_tmp3.s, uint64_t(0x807fffff));
+        host_->xa_->and_(z_tmp3.d, z_tmp3.d, z_tmp.d);
+        host_->xa_->cmpeq(P_TMP_0.s, p_tmp / xa::T_z, z_tmp2.s, 1);
+        host_->xa_->mov(xa::ZRegS(IDX(tr0)), P_TMP_0 / xa::T_m, z_tmp.s);
+        host_->xa_->and_(z_tmp.s, uint64_t(0x80000000));
+        host_->xa_->cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 2);
+        host_->xa_->orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp3.s);
+        host_->xa_->cmpeq(p_tmp2.s, p_tmp / xa::T_z, z_tmp2.s, 6);
+        host_->xa_->orr(xa::ZRegS(IDX(tr0)), p_tmp2 / xa::T_m, z_tmp.s);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
 
         //host_->vpsrad(tr0, tr0, 16);
-        CG::asr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(tr0)), 16);
-        CG::mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
+        host_->xa_->asr(xa::ZRegS(IDX(tr0)), xa::ZRegS(IDX(tr0)), 16);
+        host_->xa_->mov(xa::ZReg(IDX(tr0)).s, P_MSB_384 / xa::T_m, 0);
         //host_->vpmovdw(out, tr0);
-        CG::mov(z_tmp.d, xa::ZRegD(IDX(tr0)));
-        CG::dup(xa::ZRegS(IDX(out)), 0);
-        CG::uzp1(xa::ZRegH(IDX(out)), z_tmp.h, xa::ZRegH(IDX(out)));
+        host_->xa_->mov(z_tmp.d, xa::ZRegD(IDX(tr0)));
+        host_->xa_->dup(xa::ZRegS(IDX(out)), 0);
+        host_->xa_->uzp1(xa::ZRegH(IDX(out)), z_tmp.h, xa::ZRegH(IDX(out)));
     }
 
 public:
@@ -342,62 +336,62 @@ public:
                         fixup_input_code_pinf, fixup_output_code_copy_input);
 
         //host_->xor_(scratch_, scratch_);
-        CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
+        host_->xa_->eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
                 xa::XReg(IDX(scratch_)));
         //host_->mov(scratch_.cvt32(), 0x1);
-        CG::mov_imm(xa::WReg(IDX(scratch_)), 0x1);
+        host_->xa_->mov_imm(xa::WReg(IDX(scratch_)), 0x1);
         //host_->vpbroadcastd(one_, scratch_.cvt32());
-        CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+        host_->xa_->dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
         /*
 	int vlen = cpu_isa_traits<isa>::vlen;
 	if (vlen == 64) {
-	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
 	} else if (vlen == 32) {
-	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
-	  CG::mov(xa::ZRegS(IDX(one_)), P_MSB_256/xa::T_m, 0);
+	  host_->xa_->dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->mov(xa::ZRegS(IDX(one_)), P_MSB_256/xa::T_m, 0);
 	} else if (vlen == 16) {
-	  CG::dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
-	  CG::mov(xa::ZRegS(IDX(one_)), P_MSB_384/xa::T_m, 0);	  
+	  host_->xa_->dup(xa::ZRegS(IDX(one_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->mov(xa::ZRegS(IDX(one_)), P_MSB_384/xa::T_m, 0);
 	} else {
 	  assert(!"unreachable");
 	}
 	*/
         //host_->xor_(scratch_, scratch_);
-        CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
+        host_->xa_->eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
                 xa::XReg(IDX(scratch_)));
         //host_->mov(scratch_.cvt32(), 0x7fff);
-        CG::mov_imm(xa::WReg(IDX(scratch_)), 0x7fff);
+        host_->xa_->mov_imm(xa::WReg(IDX(scratch_)), 0x7fff);
         //host_->vpbroadcastd(even_, scratch_.cvt32());
-        CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+        host_->xa_->dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
         /*
 	if (vlen == 64) {
-	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
 	} else if (vlen == 32) {
-	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
-	  CG::mov(xa::ZRegS(IDX(even_)), P_MSB_256/xa::T_m, 0);
+	  host_->xa_->dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->mov(xa::ZRegS(IDX(even_)), P_MSB_256/xa::T_m, 0);
 	} else if (vlen == 16) {
-	  CG::dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
-	  CG::mov(xa::ZRegS(IDX(even_)), P_MSB_384/xa::T_m, 0);	  
+	  host_->xa_->dup(xa::ZRegS(IDX(even_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->mov(xa::ZRegS(IDX(even_)), P_MSB_384/xa::T_m, 0);
 	} else {
 	  assert(!"unreachable");
 	}
 	*/
         //host_->xor_(scratch_, scratch_);
-        CG::eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
+        host_->xa_->eor(xa::XReg(IDX(scratch_)), xa::XReg(IDX(scratch_)),
                 xa::XReg(IDX(scratch_)));
         //host_->mov(scratch_.cvt32(), selector_int32);
-        CG::mov_imm(xa::WReg(IDX(scratch_)), selector_int32);
+        host_->xa_->mov_imm(xa::WReg(IDX(scratch_)), selector_int32);
         //host_->vpbroadcastd(selector_, scratch_.cvt32());
-        CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+        host_->xa_->dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
         /*
 	if (vlen == 64) {
-	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
 	} else if (vlen == 32) {
-	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
-	  CG::mov(xa::ZRegS(IDX(selector_)), P_MSB_256/xa::T_m, 0);
+	  host_->xa_->dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->mov(xa::ZRegS(IDX(selector_)), P_MSB_256/xa::T_m, 0);
 	} else if (vlen == 16) {
-	  CG::dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
-	  CG::mov(xa::ZRegS(IDX(selector_)), P_MSB_384/xa::T_m, 0);	  
+	  host_->xa_->dup(xa::ZRegS(IDX(selector_)), xa::WReg(IDX(scratch_)));
+	  host_->xa_->mov(xa::ZRegS(IDX(selector_)), P_MSB_384/xa::T_m, 0);
 	} else {
 	  assert(!"unreachable");
 	}
@@ -512,22 +506,22 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
         //mov(reg_inp, ptr[abi_param1 + GET_OFF(inp)]);
         add_imm(x_tmp_addr, xa::XReg(IDX(abi_param1)), GET_OFF(inp), x_tmp_0);
         ldr(x_tmp_0, xa::ptr(x_tmp_addr));
-        mov(xa::XReg(IDX(reg_inp)), x_tmp_0);
+        xa_->mov(xa::XReg(IDX(reg_inp)), x_tmp_0);
         //mov(reg_out, ptr[abi_param1 + GET_OFF(out)]);
         add_imm(x_tmp_addr, xa::XReg(IDX(abi_param1)), GET_OFF(out), x_tmp_0);
         ldr(x_tmp_0, xa::ptr(x_tmp_addr));
-        mov(xa::XReg(IDX(reg_out)), x_tmp_0);
+        xa_->mov(xa::XReg(IDX(reg_out)), x_tmp_0);
         if (is_dynamic_size_) {
             //mov(reg_nelems, ptr[abi_param1 + GET_OFF(nelems)]);
             add_imm(x_tmp_addr, xa::XReg(IDX(abi_param1)), GET_OFF(nelems),
                     x_tmp_0);
             ldr(x_tmp_0, xa::ptr(x_tmp_addr));
-            mov(xa::XReg(IDX(reg_nelems)), x_tmp_0);
+            xa_->mov(xa::XReg(IDX(reg_nelems)), x_tmp_0);
         }
 
         if (use_bf16_emu) { bf16_emu_->init_vcvtneps2bf16(); }
         /*
-        mov(reg32_tail, 0xffff);
+        xa_->mov(reg32_tail, 0xffff);
         kmovw(ktail_mask, reg32_tail);
 	*/
 
@@ -563,7 +557,8 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
             }
             L(l_simd_loop[0]);
             //test(reg_nelems, reg_nelems);
-            and_(X_TMP_2, xa::XReg(IDX(reg_nelems)), xa::XReg(IDX(reg_nelems)));
+            xa_->and_(X_TMP_2, xa::XReg(IDX(reg_nelems)),
+                    xa::XReg(IDX(reg_nelems)));
             ands(X_TMP_2, xa::XReg(IDX(reg_nelems)), xa::XReg(IDX(reg_nelems)));
             lsr(X_TMP_2, X_TMP_2, 63);
             lsl(X_TMP_2, X_TMP_2, 31);
@@ -574,11 +569,11 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
             b(xa::EQ, l_simd_notail);
             // JIT of `tail_mask_ = (1 << (nelems_ % simd_w_)) - 1;`
             //mov(reg32_mask, 1);
-            mov_imm(xa::WReg(IDX(reg32_mask)), 1);
+            xa_->mov_imm(xa::WReg(IDX(reg32_mask)), 1);
             //mov(reg64_tail, reg_nelems);
-            mov(xa::XReg(IDX(reg64_tail)), xa::XReg(IDX(reg_nelems)));
+            xa_->mov(xa::XReg(IDX(reg64_tail)), xa::XReg(IDX(reg_nelems)));
             //shl(reg32_mask, reg8_mask_shift);
-            and_(W_TMP_0, xa::WReg(IDX(reg8_mask_shift)), 0x1f);
+            xa_->and_(W_TMP_0, xa::WReg(IDX(reg8_mask_shift)), 0x1f);
             lsl(xa::WReg(IDX(reg32_mask)), xa::WReg(IDX(reg32_mask)), W_TMP_0);
             //sub(reg32_mask, 1);
             sub_imm(xa::WReg(IDX(reg32_mask)), xa::WReg(IDX(reg32_mask)), 1,
@@ -620,7 +615,7 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
             }
             if (tail_mask_ != 0) {
                 /* kurihara implement later
-                mov(reg32_tail, tail_mask_);
+                xa_->mov(reg32_tail, tail_mask_);
                 kmovw(ktail_mask, reg32_tail);
                 cvt(0, ktail_mask);
 	      */
@@ -768,14 +763,14 @@ struct jit_avx512_core_add_cvt_ps_to_bf16_t : public jit_generator {
             vmovdqu16(yword[reg_out + sizeof(bfloat16_t) * (idx)] | ktail_mask,
                     bf16_out);
         };
-        mov(reg_inp, ptr[abi_param1 + GET_OFF(inp)]);
-        mov(reg_add, ptr[abi_param1 + GET_OFF(add)]);
-        mov(reg_out, ptr[abi_param1 + GET_OFF(out)]);
-        mov(reg_nelems, ptr[abi_param1 + GET_OFF(nelems)]);
+        xa_->mov(reg_inp, ptr[abi_param1 + GET_OFF(inp)]);
+        xa_->mov(reg_add, ptr[abi_param1 + GET_OFF(add)]);
+        xa_->mov(reg_out, ptr[abi_param1 + GET_OFF(out)]);
+        xa_->mov(reg_nelems, ptr[abi_param1 + GET_OFF(nelems)]);
 
         if (use_bf16_emu) bf16_emu_->init_vcvtneps2bf16();
 
-        mov(reg32_tail, 0xffff);
+        xa_->mov(reg32_tail, 0xffff);
         kmovw(ktail_mask, reg32_tail);
 
         constexpr int n_unroll = 2; // unroll by powers of 2 from 2^n to 2^0
@@ -801,8 +796,8 @@ struct jit_avx512_core_add_cvt_ps_to_bf16_t : public jit_generator {
         test(reg_nelems, reg_nelems);
         jz(l_simd_notail);
         // JIT of `tail_mask_ = (1 << (nelems_ % simd_w_)) - 1;`
-        mov(reg32_mask, 1);
-        mov(reg64_tail, reg_nelems);
+        xa_->mov(reg32_mask, 1);
+        xa_->mov(reg64_tail, reg_nelems);
         shl(reg32_mask, reg8_mask_shift);
         sub(reg32_mask, 1);
         kmovd(ktail_mask, reg32_mask);
@@ -896,10 +891,10 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
     void generate() {
         preamble();
 
-        mov(reg32_tail, ptr[abi_param1 + GET_OFF(mask)]);
-        mov(reg_inp, ptr[abi_param1 + GET_OFF(inp)]);
-        mov(reg_out, ptr[abi_param1 + GET_OFF(out)]);
-        mov(reg_nelems, ptr[abi_param1 + GET_OFF(nelems)]);
+        xa_->mov(reg32_tail, ptr[abi_param1 + GET_OFF(mask)]);
+        xa_->mov(reg_inp, ptr[abi_param1 + GET_OFF(inp)]);
+        xa_->mov(reg_out, ptr[abi_param1 + GET_OFF(out)]);
+        xa_->mov(reg_nelems, ptr[abi_param1 + GET_OFF(nelems)]);
 
         auto zmm_reg = [=](int idx) {
             assert(idx < 31);
@@ -910,7 +905,7 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
         kshiftld(ktail_mask_hi, ktail_mask_lo, 16);
 
         Xbyak::Label dst_prm_table;
-        mov(reg_prm, dst_prm_table);
+        xa_->mov(reg_prm, dst_prm_table);
         vmovups(zmm_prm, ptr[reg_prm]);
 
         constexpr int n_unroll = 2; // unroll by powers of 2 from 2^n to 2^0

@@ -213,7 +213,7 @@ struct jit_bnorm_t : public jit_generator {
             && static_cast<int32_t>(x) - static_cast<int32_t>(y) <= 256); \
     str(X_TMP_0, pre_ptr(X_TMP_4, x - y));
 
-        mov(X_DEFAULT_ADDR, reg_param);
+        xa_->mov(X_DEFAULT_ADDR, reg_param);
         ldr(reg_rbuf1, pre_ptr(X_DEFAULT_ADDR, PARAM_OFF(rbuf1)));
         if (bdesc_->is_bwd()) {
             LDR_PARAM(reg_rbuf2, rbuf2, rbuf1);
@@ -238,7 +238,7 @@ struct jit_bnorm_t : public jit_generator {
         dup(vone.s, W_TMP_2);
         dup(veps.s, W_TMP_3);
 
-        mov(X_TMP_4, X_SP);
+        xa_->mov(X_TMP_4, X_SP);
         LDR_PARAM_TMP(N_nthr, eps);
         str(X_TMP_0, pre_ptr(X_TMP_4, stack_off_N_nthr));
         LDR_PARAM_TMP(N_ithr, N_nthr);
@@ -286,14 +286,14 @@ struct jit_bnorm_t : public jit_generator {
         }
         if (bdesc_->is_fwd()) {
             ldr(X_TMP_0, pre_ptr(X_DEFAULT_ADDR, PARAM_OFF(var) - tmpSize));
-            mov(reg_var, X_TMP_0);
+            xa_->mov(reg_var, X_TMP_0);
         } else {
             ldr(X_TMP_0,
                     pre_ptr(X_DEFAULT_ADDR,
                             PARAM_OFF(diff_scale_shift) - tmpSize));
             STR_PARAM_TMP(stack_off_diff_scale_shift, tmpStack);
             LDR_PARAM_TMP(var, diff_scale_shift);
-            mov(reg_var, X_TMP_0);
+            xa_->mov(reg_var, X_TMP_0);
         }
 #undef LDR_PARAM
 #undef LDR_PARAM_TMP
@@ -318,7 +318,8 @@ struct jit_bnorm_t : public jit_generator {
             case 1: ptrue(PRegS(idx), VL1); break;
             default:
                 index(ZRegS(IDX(t_tmp0)), 1, 1);
-                cmple(PRegS(idx), p_512 / T_z, ZRegS(IDX(t_tmp0)), tail);
+                cmple(PRegS(idx), p_512 / Xbyak_aarch64::T_z,
+                        ZRegS(IDX(t_tmp0)), tail);
                 break;
         }
     }
@@ -340,23 +341,23 @@ struct jit_bnorm_t : public jit_generator {
         else
             lsr(reg_soff, reg_soff, bit_shift() % 64);
 
-        fcmlt(PRegS(IDX(kstore_mask)), p_512 / T_z, ZRegS(IDX(vzero)),
-                ZRegS(IDX(vdst)));
+        fcmlt(PRegS(IDX(kstore_mask)), p_512 / Xbyak_aarch64::T_z,
+                ZRegS(IDX(vzero)), ZRegS(IDX(vdst)));
 
         PRegB p_mask(IDX(kstore_mask));
         if (is_nspc_)
-            add(X_TMP_1, reg_ws, reg_soff_nspc);
+            xa_->add(X_TMP_1, reg_ws, reg_soff_nspc);
         else
-            add(X_TMP_1, reg_ws, reg_soff);
+            xa_->add(X_TMP_1, reg_ws, reg_soff);
         if (offt / (1 << bit_shift()))
             add_imm(X_TMP_1, X_TMP_1, offt / (1 << bit_shift()), X_TMP_0);
         uzp1(p_tmp0.b, p_mask, p_mask);
         uzp1(p_tmp0.b, p_tmp0.b, p_tmp0.b);
-        sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
-        str(p_tmp0, ptr(X_TRANSLATOR_STACK));
-        ldurh(W_TMP_0, ptr(X_TRANSLATOR_STACK));
-        add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
-        strh(W_TMP_0, ptr(X_TMP_1));
+        xa_->sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        str(p_tmp0, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK));
+        ldurh(W_TMP_0, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK));
+        xa_->add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        strh(W_TMP_0, Xbyak_aarch64::ptr(X_TMP_1));
 
         sel(ZRegS(IDX(vdst)), kstore_mask / T_m, ZRegS(IDX(vdst)),
                 ZRegS(IDX(vzero)));
@@ -371,25 +372,26 @@ struct jit_bnorm_t : public jit_generator {
         PReg p_mask(IDX(kstore_mask));
         if (is_nspc_) {
             lsr(reg_soff_nspc, reg_soff_nspc, bit_shift() % 64);
-            add(X_TMP_1, reg_ws, reg_soff_nspc);
+            xa_->add(X_TMP_1, reg_ws, reg_soff_nspc);
         } else {
             lsr(reg_soff, reg_soff, bit_shift() % 64);
-            add(X_TMP_1, reg_ws, reg_soff);
+            xa_->add(X_TMP_1, reg_ws, reg_soff);
         }
         if (offt / (1 << bit_shift()))
             add_imm(X_TMP_1, X_TMP_1, offt / (1 << bit_shift()), X_TMP_0);
 
-        sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
-        ldurh(W_TMP_0, ptr(X_TMP_1));
-        strh(W_TMP_0, ptr(X_TRANSLATOR_STACK));
-        ldr(p_mask, ptr(X_TRANSLATOR_STACK));
+        xa_->sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        ldurh(W_TMP_0, Xbyak_aarch64::ptr(X_TMP_1));
+        strh(W_TMP_0, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK));
+        ldr(p_mask, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK));
         zip1(p_mask.b, p_mask.b, p_mask.b);
         zip1(p_mask.b, p_mask.b, p_mask.b);
-        add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        xa_->add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
 
-        not_(p_tmp0.b, p_512 / T_z, PRegB(IDX(kstore_mask)));
-        mov(ZRegD(IDX(vdiff_dst)), ZRegD(IDX(vdiff_dst)));
-        mov(ZRegS(IDX(vdiff_dst)), p_tmp0 / T_m, 0);
+        xa_->not_(
+                p_tmp0.b, p_512 / Xbyak_aarch64::T_z, PRegB(IDX(kstore_mask)));
+        xa_->mov(ZRegD(IDX(vdiff_dst)), ZRegD(IDX(vdiff_dst)));
+        xa_->mov(ZRegS(IDX(vdiff_dst)), p_tmp0 / T_m, 0);
 
         if (is_nspc_)
             lsl(reg_soff_nspc, reg_soff_nspc, bit_shift() % 64);
@@ -398,26 +400,30 @@ struct jit_bnorm_t : public jit_generator {
     }
 
     void uni_load_spat_data(const VReg &v, const XReg &x) {
-        ldr(QReg(IDX(v)), ptr(x));
+        ldr(QReg(IDX(v)), Xbyak_aarch64::ptr(x));
     }
 
-    void uni_load_spat_data(const ZReg &z, const XReg &x) { ldr(z, ptr(x)); }
+    void uni_load_spat_data(const ZReg &z, const XReg &x) {
+        ldr(z, Xbyak_aarch64::ptr(x));
+    }
 
     void uni_store_spat_data(const XReg &x, const VReg &v) {
-        str(QReg(IDX(v)), ptr(x));
+        str(QReg(IDX(v)), Xbyak_aarch64::ptr(x));
     }
 
-    void uni_store_spat_data(const XReg &x, const ZReg &z) { str(z, ptr(x)); }
+    void uni_store_spat_data(const XReg &x, const ZReg &z) {
+        str(z, Xbyak_aarch64::ptr(x));
+    }
 
     void jump_check(const Label &l_no_mask) {
         add_imm(X_TMP_0, X_SP, (int)stack_off_is_cblk_tail, X_TMP_1);
-        ldr(reg_tmp, ptr(X_TMP_0));
-        cmp(reg_tmp, 0);
+        ldr(reg_tmp, Xbyak_aarch64::ptr(X_TMP_0));
+        xa_->cmp(reg_tmp, 0);
         b(EQ, l_no_mask);
 
         add_imm(X_TMP_0, reg_coff, vlen, X_TMP_1);
-        mov(reg_tmp, X_TMP_0);
-        cmp(reg_tmp, reg_coff_max);
+        xa_->mov(reg_tmp, X_TMP_0);
+        xa_->cmp(reg_tmp, reg_coff_max);
         b(LT, l_no_mask);
     }
 
@@ -426,7 +432,9 @@ struct jit_bnorm_t : public jit_generator {
 
         if (is_c_padded()) {
             jump_check(l_no_mask);
-            if (isa == sve_512) ld1w(ZRegS(IDX(t)), ktail_mask / T_z, ptr(x));
+            if (isa == sve_512)
+                ld1w(ZRegS(IDX(t)), ktail_mask / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x));
             b(l_ret);
         }
         L(l_no_mask);
@@ -439,7 +447,9 @@ struct jit_bnorm_t : public jit_generator {
 
         if (is_c_padded()) {
             jump_check(l_no_mask);
-            if (isa == sve_512) st1w(ZRegS(IDX(t)), ktail_mask / T_z, ptr(x));
+            if (isa == sve_512)
+                st1w(ZRegS(IDX(t)), ktail_mask / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x));
             b(l_ret);
         }
         L(l_no_mask);
@@ -448,7 +458,7 @@ struct jit_bnorm_t : public jit_generator {
     }
 
     void uni_fdiv(const VReg4S &dst, const VReg4S &src, const VReg4S &src2) {
-        fdiv(dst, src, src2);
+        xa_->fdiv(dst, src, src2);
     }
 
     void uni_fdiv(const ZRegS &dst, const ZRegS &src, const ZRegS &src2) {
@@ -457,21 +467,23 @@ struct jit_bnorm_t : public jit_generator {
         uint32_t src2Idx = IDX(src2);
 
         if (dstIdx == src2Idx) {
-            mov(t_tmp0.s, P_ALL_ONE / T_m, src2);
-            mov(dst, P_ALL_ONE / T_m, src);
-            fdiv(dst, p_512 / T_m, t_tmp0.s);
+            xa_->mov(t_tmp0.s, P_ALL_ONE / T_m, src2);
+            xa_->mov(dst, P_ALL_ONE / T_m, src);
+            xa_->fdiv(dst, p_512 / T_m, t_tmp0.s);
         } else if (dstIdx == srcIdx) {
-            fdiv(dst, p_512 / T_m, src2);
+            xa_->fdiv(dst, p_512 / T_m, src2);
         } else {
-            mov(dst, P_ALL_ONE / T_m, src);
-            fdiv(dst, p_512 / T_m, src2);
+            xa_->mov(dst, P_ALL_ONE / T_m, src);
+            xa_->fdiv(dst, p_512 / T_m, src2);
         }
     }
 
-    void uni_fsqrt(const VReg4S &dst, const VReg4S &src) { fsqrt(dst, src); }
+    void uni_fsqrt(const VReg4S &dst, const VReg4S &src) {
+        xa_->fsqrt(dst, src);
+    }
 
     void uni_fsqrt(const ZRegS &dst, const ZRegS &src) {
-        fsqrt(dst, p_512 / T_m, src);
+        xa_->fsqrt(dst, p_512 / T_m, src);
     }
 
     void uni_fmls(const VReg4S &dst, const VReg4S &src, const VReg4S &src2) {
@@ -498,17 +510,21 @@ struct jit_bnorm_t : public jit_generator {
 
     void uni_fmad(const VReg4S &dst, const VReg4S &src, const VReg4S &src2,
             const VReg4S &buf) {
-        fmul(buf, dst, src);
-        fadd(dst, buf, src2);
+        xa_->fmul(buf, dst, src);
+        xa_->fadd(dst, buf, src2);
     }
 
-    void uni_ldr(const VReg &v, const XReg &x) { ldr(QReg(IDX(v)), ptr(x)); }
+    void uni_ldr(const VReg &v, const XReg &x) {
+        ldr(QReg(IDX(v)), Xbyak_aarch64::ptr(x));
+    }
 
-    void uni_ldr(const ZReg &z, const XReg &x) { ldr(z, ptr(x)); }
+    void uni_ldr(const ZReg &z, const XReg &x) {
+        ldr(z, Xbyak_aarch64::ptr(x));
+    }
 
     void uni_str(const VReg &v, const XReg &base,
             const XReg &off = XReg(DUMMY_IDX), const int disp = 0) {
-        str(QReg(IDX(v)), ptr(xreg_addr(base, off, disp)));
+        str(QReg(IDX(v)), Xbyak_aarch64::ptr(xreg_addr(base, off, disp)));
     }
 
     XReg xreg_addr(const XReg &base, const XReg &off = XReg(DUMMY_IDX),
@@ -517,7 +533,7 @@ struct jit_bnorm_t : public jit_generator {
         uint32_t offIdx = off.getIdx();
 
         if (offIdx <= SP_IDX) {
-            add(X_DEFAULT_ADDR, base, off);
+            xa_->add(X_DEFAULT_ADDR, base, off);
             x_addr = X_DEFAULT_ADDR;
         }
         if (disp) {
@@ -531,12 +547,12 @@ struct jit_bnorm_t : public jit_generator {
     void uni_str(const ZReg &z, const XReg &base,
             const XReg &off = XReg(DUMMY_IDX), const int disp = 0) {
 
-        str(z, ptr(xreg_addr(base, off, disp)));
+        str(z, Xbyak_aarch64::ptr(xreg_addr(base, off, disp)));
     }
 
     void uni_stnt1w(const ZReg &z, const XReg &base,
             const XReg &off = XReg(DUMMY_IDX), const int disp = 0) {
-        stnt1w(z.s, p_512, ptr(xreg_addr(base, off, disp)));
+        stnt1w(z.s, p_512, Xbyak_aarch64::ptr(xreg_addr(base, off, disp)));
     }
 
     void uni_fmax(const VReg4S &dst, const VReg4S &src, const VReg4S &src2) {
@@ -545,17 +561,17 @@ struct jit_bnorm_t : public jit_generator {
     }
 
     void uni_fmax(const ZRegS &dst, const ZRegS &src, const ZRegS &src2) {
-        mov(t_tmp0.s, P_ALL_ONE / T_m, src2);
+        xa_->mov(t_tmp0.s, P_ALL_ONE / T_m, src2);
         fmaxnm(t_tmp0.s, p_512, src);
         fmax(t_tmp0.s, p_512, src);
-        mov(dst, P_ALL_ONE / T_m, t_tmp0.s);
+        xa_->mov(dst, P_ALL_ONE / T_m, t_tmp0.s);
     }
 
     void barrier() {
         add_imm(X_TMP_1, X_SP, (int)stack_off_N_nthr, X_TMP_0);
-        ldr(reg_nnthr, ptr(X_TMP_1));
+        ldr(reg_nnthr, Xbyak_aarch64::ptr(X_TMP_1));
         add_imm(X_TMP_1, X_SP, (int)stack_off_barrier, X_TMP_0);
-        ldr(reg_bar, ptr(X_TMP_1));
+        ldr(reg_bar, Xbyak_aarch64::ptr(X_TMP_1));
         simple_barrier::generate(*this, reg_bar, reg_nnthr);
     }
 
@@ -593,12 +609,12 @@ struct jit_bnorm_t : public jit_generator {
         if (loop_unroll) {
             if (is_spatial_thr_) {
                 add_imm(X_TMP_0, X_SP, (int)stack_off_spat_size_loc, X_TMP_1);
-                ldr(reg_ctr, ptr(X_TMP_0));
+                ldr(reg_ctr, Xbyak_aarch64::ptr(X_TMP_0));
                 add_imm(X_TMP_0, X_SP, (int)stack_off_s_s, X_TMP_1);
-                ldr(X_TMP_0, ptr(X_TMP_0));
-                add(reg_soff, reg_soff, X_TMP_0);
+                ldr(X_TMP_0, Xbyak_aarch64::ptr(X_TMP_0));
+                xa_->add(reg_soff, reg_soff, X_TMP_0);
             } else {
-                mov_imm(reg_ctr, (int)loop_unroll);
+                xa_->mov_imm(reg_ctr, (int)loop_unroll);
             }
             Label label;
             L(label);
@@ -613,8 +629,8 @@ struct jit_bnorm_t : public jit_generator {
             }
             if (is_spatial_thr_) {
                 add_imm(X_TMP_0, X_SP, (int)stack_off_s_tail, X_TMP_1);
-                ldr(X_TMP_0, ptr(X_TMP_0));
-                add(reg_soff, reg_soff, X_TMP_0);
+                ldr(X_TMP_0, Xbyak_aarch64::ptr(X_TMP_0));
+                xa_->add(reg_soff, reg_soff, X_TMP_0);
             }
         }
 
@@ -634,7 +650,7 @@ struct jit_bnorm_t : public jit_generator {
         Label ch_label;
         L(ch_label);
         {
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_ldr(TReg(0), X_TMP_0);
             spat_loop(
                     spat_size, unroll_blocks, unroll_regs,
@@ -646,31 +662,31 @@ struct jit_bnorm_t : public jit_generator {
                         TReg v0 = TReg(base_reg * 2 + 0);
                         TReg v1 = TReg(base_reg * 2 + 1);
                         size_t offt = i * vlen_spat_data_;
-                        add(X_TMP_0, reg_src, reg_soff);
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_load_spat_data(v1, X_TMP_0);
-                        fadd(v0.s, v0.s, v1.s);
-                        add(X_TMP_0, reg_src, reg_soff);
+                        xa_->fadd(v0.s, v0.s, v1.s);
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt || t0_pf_offt)
                             add_imm(X_TMP_0, X_TMP_0, offt + t0_pf_offt,
                                     X_TMP_1);
-                        prfm(PLDL1KEEP, ptr(X_TMP_0));
-                        add(X_TMP_0, reg_src, reg_soff);
+                        prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_0));
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt || t1_pf_offt)
                             add_imm(X_TMP_0, X_TMP_0, offt + t1_pf_offt,
                                     X_TMP_1);
-                        prfm(PLDL2KEEP, ptr(X_TMP_0));
+                        prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                     },
                     [=](size_t base_reg) {
                         TReg b = TReg(0);
                         TReg v = TReg(base_reg * 2);
-                        if (base_reg) fadd(b.s, b.s, v.s);
+                        if (base_reg) xa_->fadd(b.s, b.s, v.s);
                     });
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_str(TReg(0), X_TMP_0);
 
             add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
 
             b(LT, ch_label);
         }
@@ -684,11 +700,11 @@ struct jit_bnorm_t : public jit_generator {
             for (int spat_pt = 0; spat_pt < num_spat_pts; ++spat_pt) {
                 int offt = 0;
                 for (int ch_idx = 0; ch_idx < num_ch_blks; ++ch_idx) {
-                    add(X_TMP_0, reg_src, reg_soff_nspc);
+                    xa_->add(X_TMP_0, reg_src, reg_soff_nspc);
                     if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                     uni_load_spat_data(TReg(sp_idx), X_TMP_0);
 
-                    fadd(TRegS(ch_idx), TRegS(ch_idx), TRegS(sp_idx++));
+                    xa_->fadd(TRegS(ch_idx), TRegS(ch_idx), TRegS(sp_idx++));
 
                     offt += vlen_spat_data_;
                 }
@@ -703,7 +719,7 @@ struct jit_bnorm_t : public jit_generator {
                 for (int ch_idx = 0; ch_idx < num_ch_blks; ++ch_idx) {
                     uni_load_maybe_tail(vmean, mean_ptr(coff));
 
-                    add(X_TMP_0, reg_src, reg_soff_nspc);
+                    xa_->add(X_TMP_0, reg_src, reg_soff_nspc);
                     if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                     uni_load_spat_data(TReg(sp_idx), X_TMP_0);
 
@@ -718,7 +734,7 @@ struct jit_bnorm_t : public jit_generator {
         };
 
         for (int idx = 0, offt = 0; idx < num_ch_blks; ++idx, offt += vlen) {
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
             uni_ldr(TReg(idx), X_TMP_0);
         }
@@ -727,15 +743,15 @@ struct jit_bnorm_t : public jit_generator {
 
         if (is_spatial_thr_) {
             add_imm(X_TMP_0, X_SP, (int)stack_off_spat_size_loc, X_TMP_1);
-            ldr(reg_ctr, ptr(X_TMP_0));
+            ldr(reg_ctr, Xbyak_aarch64::ptr(X_TMP_0));
             add_imm(X_TMP_0, X_SP, (int)stack_off_s_s, X_TMP_1);
-            ldr(X_TMP_0, ptr(X_TMP_0));
-            add(reg_soff_nspc, reg_soff_nspc, X_TMP_0);
+            ldr(X_TMP_0, Xbyak_aarch64::ptr(X_TMP_0));
+            xa_->add(reg_soff_nspc, reg_soff_nspc, X_TMP_0);
 
             // TODO: need a better heuristic for num_spat_pts
             num_spat_pts = 1;
         } else {
-            mov_imm(reg_ctr, (int)spat_size);
+            xa_->mov_imm(reg_ctr, (int)spat_size);
             num_spat_pts = nstl::min((size_t)num_spat_pts, spat_size);
             // TODO: unroll by spatial
             if (spat_size % num_spat_pts != 0) num_spat_pts = 1;
@@ -751,7 +767,7 @@ struct jit_bnorm_t : public jit_generator {
         }
 
         for (int idx = 0, offt = 0; idx < num_ch_blks; ++idx, offt += vlen) {
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
             uni_str(TReg(idx), X_TMP_0);
         }
@@ -766,12 +782,12 @@ struct jit_bnorm_t : public jit_generator {
 
             if (is_spatial_thr_) {
                 add_imm(X_TMP_0, X_SP, (int)stack_off_spat_size_loc, X_TMP_1);
-                ldr(reg_ctr, ptr(X_TMP_0));
+                ldr(reg_ctr, Xbyak_aarch64::ptr(X_TMP_0));
                 add_imm(X_TMP_0, X_SP, (int)stack_off_s_s, X_TMP_1);
-                ldr(X_TMP_0, ptr(X_TMP_0));
-                add(reg_soff_nspc, reg_soff_nspc, X_TMP_0);
+                ldr(X_TMP_0, Xbyak_aarch64::ptr(X_TMP_0));
+                xa_->add(reg_soff_nspc, reg_soff_nspc, X_TMP_0);
             } else {
-                mov_imm(reg_ctr, spat_size);
+                xa_->mov_imm(reg_ctr, spat_size);
             }
 
             // TODO: spatial blocking
@@ -784,7 +800,7 @@ struct jit_bnorm_t : public jit_generator {
                 for (int idx = 0; idx < num_ch_blks; ++idx) {
                     uni_load_maybe_tail(vmean, mean_ptr(coff));
                     uni_load_maybe_tail(vsqrtvar, var_ptr(coff));
-                    fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
+                    xa_->fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
                     uni_fsqrt(vsqrtvar.s, vsqrtvar.s);
 
                     if (bdesc_->use_scaleshift()) {
@@ -797,7 +813,7 @@ struct jit_bnorm_t : public jit_generator {
 
                     uni_fdiv(vdiv.s, vscale.s, vsqrtvar.s);
 
-                    add(X_TMP_0, reg_src, reg_soff_nspc);
+                    xa_->add(X_TMP_0, reg_src, reg_soff_nspc);
                     if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                     uni_load_spat_data(TReg(idx), X_TMP_0);
 
@@ -806,7 +822,7 @@ struct jit_bnorm_t : public jit_generator {
                     if (bdesc_->use_scaleshift()) { // --flags=S
                         uni_fmad(TRegS(idx), vgamma.s, vbeta.s, t_tmp0.s);
                     } else {
-                        fmul(TRegS(idx), TRegS(idx), vsqrtvar.s);
+                        xa_->fmul(TRegS(idx), TRegS(idx), vsqrtvar.s);
                     }
 
                     if (with_relu_inf_only) { // --attr=post_ops='relu'
@@ -818,7 +834,7 @@ struct jit_bnorm_t : public jit_generator {
                     if (stream_store_allowed) {
                         uni_str(TReg(idx), reg_dst, reg_soff_nspc, offt);
                     } else {
-                        add(X_TMP_0, reg_dst, reg_soff_nspc);
+                        xa_->add(X_TMP_0, reg_dst, reg_soff_nspc);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_store_spat_data(X_TMP_0, TReg(idx));
                     }
@@ -836,7 +852,7 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
-            cmp(reg_dst, vlen - 1);
+            xa_->cmp(reg_dst, vlen - 1);
             cbnz(reg_dst, normal_store);
             compute(true);
             b(normal_store);
@@ -850,7 +866,7 @@ struct jit_bnorm_t : public jit_generator {
 
     void compute_mean_variance_nspc(bool compute_mean = true) {
         eor(reg_coff, reg_coff, reg_coff);
-        mov(reg_coff_max_fwd_copy, reg_coff_max);
+        xa_->mov(reg_coff_max_fwd_copy, reg_coff_max);
 
         Label ch_unroll_label[5];
         const int max_ch_unroll = 4;
@@ -862,8 +878,8 @@ struct jit_bnorm_t : public jit_generator {
             L(ch_unroll_label[ch_idx]);
             {
                 const int ch_blk_size = (1 << (ch_idx - 1)); // 8, 4, 2, 1
-                mov_imm(X_TMP_0, vlen * ch_blk_size);
-                cmp(reg_coff_max, X_TMP_0);
+                xa_->mov_imm(X_TMP_0, vlen * ch_blk_size);
+                xa_->cmp(reg_coff_max, X_TMP_0);
                 b(LT, ch_unroll_label[ch_idx - 1]);
 
                 const int spat_blk_size = (1 << sp_idx);
@@ -881,9 +897,9 @@ struct jit_bnorm_t : public jit_generator {
         L(ch_unroll_label[0]);
 
         // comeback
-        mov(reg_coff_max, reg_coff_max_fwd_copy);
+        xa_->mov(reg_coff_max, reg_coff_max_fwd_copy);
 
-        sub(reg_src, reg_src, reg_coff_max);
+        xa_->sub(reg_src, reg_src, reg_coff_max);
     }
 
     void var_channels() {
@@ -891,7 +907,7 @@ struct jit_bnorm_t : public jit_generator {
         L(ch_label);
         {
             uni_load_maybe_tail(vmean, mean_ptr());
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_ldr(TReg(0), X_TMP_0);
             spat_loop(
                     spat_size, unroll_blocks, unroll_regs,
@@ -905,32 +921,32 @@ struct jit_bnorm_t : public jit_generator {
                         TRegS vtmp1 = TRegS(3 * base_reg + 2);
                         TRegS t_mean = vmean.s;
                         size_t offt = i * vlen_spat_data_;
-                        add(X_TMP_0, reg_src, reg_soff);
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_load_spat_data(TReg(IDX(vtmp0)), X_TMP_0);
                         uni_fsub(vtmp1, t_mean, vtmp0);
                         uni_fmla(v, vtmp1, vtmp1);
-                        add(X_TMP_0, reg_src, reg_soff);
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt || t0_pf_offt)
                             add_imm(X_TMP_0, X_TMP_0, offt + t0_pf_offt,
                                     X_TMP_1);
-                        prfm(PLDL1KEEP, ptr(X_TMP_0));
+                        prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_0));
 
-                        add(X_TMP_0, reg_src, reg_soff);
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt || t1_pf_offt)
                             add_imm(X_TMP_0, X_TMP_0, offt + t1_pf_offt,
                                     X_TMP_1);
-                        prfm(PLDL2KEEP, ptr(X_TMP_0));
+                        prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                     },
                     [=](size_t base_reg) {
                         TReg b = TReg(0);
                         TReg v = TReg(base_reg * 3);
-                        if (base_reg) fadd(b.s, b.s, v.s);
+                        if (base_reg) xa_->fadd(b.s, b.s, v.s);
                     });
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_str(TReg(0), X_TMP_0);
             add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
             b(LT, ch_label);
         }
     }
@@ -946,12 +962,12 @@ struct jit_bnorm_t : public jit_generator {
                 add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
             else
                 add_imm(reg_coff, reg_coff, vlen / 2, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
             b(NE, zero_rbuf);
         }
 
         add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-        ldr(reg_src, ptr(X_TMP_0));
+        ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
 
         eor(reg_soff, reg_soff, reg_soff);
         Label mean_spatial;
@@ -959,18 +975,18 @@ struct jit_bnorm_t : public jit_generator {
         {
             eor(reg_coff, reg_coff, reg_coff);
 
-            if (isa == asimd) mov(reg_tmp_off, reg_soff);
+            if (isa == asimd) xa_->mov(reg_tmp_off, reg_soff);
 
             is_nspc_ ? compute_mean_variance_nspc() : mean_channels();
 
             if (isa == asimd) {
-                mov(reg_soff, reg_tmp_off);
-                add(reg_src, reg_src, vlen / 2);
-                mov(reg_coff, vlen / 2);
+                xa_->mov(reg_soff, reg_tmp_off);
+                xa_->add(reg_src, reg_src, vlen / 2);
+                xa_->mov(reg_coff, vlen / 2);
 
                 mean_channels();
 
-                sub(reg_src, reg_src, vlen / 2);
+                xa_->sub(reg_src, reg_src, vlen / 2);
             }
 
             // Process next image
@@ -981,52 +997,52 @@ struct jit_bnorm_t : public jit_generator {
                     add_imm(reg_soff, reg_soff, mb_offt, X_TMP_0);
                 }
             } else {
-                add(reg_soff, reg_soff, reg_mb_stride_Bc);
+                xa_->add(reg_soff, reg_soff, reg_mb_stride_Bc);
             }
 
-            cmp(reg_soff, reg_soff_max);
+            xa_->cmp(reg_soff, reg_soff_max);
             b(LT, mean_spatial);
         }
 
         if (is_nspc_) {
             add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-            ldr(reg_src, ptr(X_TMP_0)); // comeback
+            ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0)); // comeback
         }
 
         Label no_mean_reduction;
         barrier();
         {
             add_imm(X_TMP_0, X_SP, (int)stack_off_N_ithr, X_TMP_1);
-            ldr(reg_tmp, ptr(X_TMP_0));
-            cmp(reg_tmp, 0);
+            ldr(reg_tmp, Xbyak_aarch64::ptr(X_TMP_0));
+            xa_->cmp(reg_tmp, 0);
             b(NE, no_mean_reduction);
             add_imm(X_TMP_0, X_SP, (int)stack_off_N_nthr, X_TMP_1);
-            ldr(reg_nnthr, ptr(X_TMP_0));
+            ldr(reg_nnthr, Xbyak_aarch64::ptr(X_TMP_0));
             eor(reg_coff, reg_coff, reg_coff);
             Label mean_reduction_channels;
             L(mean_reduction_channels);
             {
-                mov(reg_roff, reg_coff);
+                xa_->mov(reg_roff, reg_coff);
                 uni_eor(TReg(0), TReg(0), TReg(0));
                 uni_eor(TReg(1), TReg(1), TReg(1));
-                mov(reg_ctr, reg_nnthr);
+                xa_->mov(reg_ctr, reg_nnthr);
                 Label mean_reduction_thrs;
                 L(mean_reduction_thrs);
                 {
-                    add(X_TMP_0, reg_rbuf1, reg_roff);
+                    xa_->add(X_TMP_0, reg_rbuf1, reg_roff);
                     uni_ldr(t_tmp0, X_TMP_0);
-                    fadd(TRegS(1), TRegS(1), t_tmp0.s);
+                    xa_->fadd(TRegS(1), TRegS(1), t_tmp0.s);
 
-                    add(X_TMP_0, reg_rbuf1, reg_roff);
+                    xa_->add(X_TMP_0, reg_rbuf1, reg_roff);
                     uni_str(TReg(0), X_TMP_0);
-                    add(reg_roff, reg_roff, reg_coff_max);
+                    xa_->add(reg_roff, reg_roff, reg_coff_max);
                     sub_imm(reg_ctr, reg_ctr, 1, X_TMP_0);
                     cbnz(reg_ctr, mean_reduction_thrs);
                 }
                 if (isa == sve_512)
-                    fdiv(ZRegS(1), p_512 / T_m, ZRegS(IDX(vchan_size)));
+                    xa_->fdiv(ZRegS(1), p_512 / T_m, ZRegS(IDX(vchan_size)));
                 else {
-                    fdiv(VReg4S(1), VReg4S(1), VReg4S(IDX(vchan_size)));
+                    xa_->fdiv(VReg4S(1), VReg4S(1), VReg4S(IDX(vchan_size)));
                 }
                 uni_store_maybe_tail(mean_ptr(), TReg(1));
 
@@ -1035,7 +1051,7 @@ struct jit_bnorm_t : public jit_generator {
                 else
                     add_imm(reg_coff, reg_coff, vlen / 2, X_TMP_0);
 
-                cmp(reg_coff, reg_coff_max);
+                xa_->cmp(reg_coff, reg_coff_max);
                 b(LT, mean_reduction_channels);
             }
         }
@@ -1049,18 +1065,18 @@ struct jit_bnorm_t : public jit_generator {
         {
             eor(reg_coff, reg_coff, reg_coff);
 
-            if (isa == asimd) mov(reg_tmp_off, reg_soff);
+            if (isa == asimd) xa_->mov(reg_tmp_off, reg_soff);
 
             is_nspc_ ? compute_mean_variance_nspc(false) : var_channels();
 
             if (isa == asimd) {
-                mov(reg_soff, reg_tmp_off);
-                add(reg_src, reg_src, vlen / 2);
-                mov(reg_coff, vlen / 2);
+                xa_->mov(reg_soff, reg_tmp_off);
+                xa_->add(reg_src, reg_src, vlen / 2);
+                xa_->mov(reg_coff, vlen / 2);
 
                 var_channels();
 
-                sub(reg_src, reg_src, vlen / 2);
+                xa_->sub(reg_src, reg_src, vlen / 2);
             }
 
             // Process next image
@@ -1071,49 +1087,49 @@ struct jit_bnorm_t : public jit_generator {
                     add_imm(reg_soff, reg_soff, mb_offt, X_TMP_0);
                 }
             } else {
-                add(reg_soff, reg_soff, reg_mb_stride_Bc);
+                xa_->add(reg_soff, reg_soff, reg_mb_stride_Bc);
             }
 
-            cmp(reg_soff, reg_soff_max);
+            xa_->cmp(reg_soff, reg_soff_max);
             b(LT, var_spatial);
         }
 
         if (is_nspc_) {
             add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-            ldr(reg_src, ptr(X_TMP_0));
+            ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
         }
 
         Label no_var_reduction;
         barrier();
         {
             add_imm(X_TMP_0, X_SP, (int)stack_off_N_ithr, X_TMP_1);
-            ldr(reg_tmp, ptr(X_TMP_0));
-            cmp(reg_tmp, 0);
+            ldr(reg_tmp, Xbyak_aarch64::ptr(X_TMP_0));
+            xa_->cmp(reg_tmp, 0);
             b(NE, no_var_reduction);
 
             add_imm(X_TMP_0, X_SP, (int)stack_off_N_nthr, X_TMP_1);
-            ldr(reg_nnthr, ptr(X_TMP_0));
+            ldr(reg_nnthr, Xbyak_aarch64::ptr(X_TMP_0));
             eor(reg_coff, reg_coff, reg_coff);
             Label var_reduction_channels;
             L(var_reduction_channels);
             {
-                mov(reg_roff, reg_coff);
+                xa_->mov(reg_roff, reg_coff);
                 uni_eor(TReg(1), TReg(1), TReg(1));
-                mov(reg_ctr, reg_nnthr);
+                xa_->mov(reg_ctr, reg_nnthr);
                 Label var_reduction_thrs;
                 L(var_reduction_thrs);
                 { // TODO: unroll (?)
-                    add(X_TMP_0, reg_rbuf1, reg_roff);
+                    xa_->add(X_TMP_0, reg_rbuf1, reg_roff);
                     uni_ldr(t_tmp0, X_TMP_0);
-                    fadd(TRegS(1), TRegS(1), t_tmp0.s);
-                    add(reg_roff, reg_roff, reg_coff_max);
+                    xa_->fadd(TRegS(1), TRegS(1), t_tmp0.s);
+                    xa_->add(reg_roff, reg_roff, reg_coff_max);
                     sub_imm(reg_ctr, reg_ctr, 1, X_TMP_0);
                     cbnz(reg_ctr, var_reduction_thrs);
                 }
                 if (isa == sve_512)
-                    fdiv(ZRegS(1), p_512 / T_m, ZRegS(IDX(vchan_size)));
+                    xa_->fdiv(ZRegS(1), p_512 / T_m, ZRegS(IDX(vchan_size)));
                 else {
-                    fdiv(VReg4S(1), VReg4S(1), VReg4S(IDX(vchan_size)));
+                    xa_->fdiv(VReg4S(1), VReg4S(1), VReg4S(IDX(vchan_size)));
                 }
                 uni_store_maybe_tail(var_ptr(), TReg(1));
                 if (isa == sve_512)
@@ -1121,7 +1137,7 @@ struct jit_bnorm_t : public jit_generator {
                 else
                     add_imm(reg_coff, reg_coff, vlen / 2, X_TMP_0);
 
-                cmp(reg_coff, reg_coff_max);
+                xa_->cmp(reg_coff, reg_coff_max);
                 b(NE, var_reduction_channels);
             }
         }
@@ -1135,7 +1151,7 @@ struct jit_bnorm_t : public jit_generator {
         {
             uni_load_maybe_tail(vmean, mean_ptr());
             uni_load_maybe_tail(vsqrtvar, var_ptr());
-            fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
+            xa_->fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
             uni_fsqrt(vsqrtvar.s, vsqrtvar.s);
 
             if (bdesc_->use_scaleshift()) {
@@ -1155,25 +1171,25 @@ struct jit_bnorm_t : public jit_generator {
                         [=](size_t base_reg, size_t i) {
                             TReg v = TReg(base_reg);
                             size_t offt = i * vlen_spat_data_;
-                            add(X_TMP_0, reg_src, reg_soff);
+                            xa_->add(X_TMP_0, reg_src, reg_soff);
                             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                             uni_load_spat_data(v, X_TMP_0);
-                            add(X_TMP_0, reg_src, reg_soff);
+                            xa_->add(X_TMP_0, reg_src, reg_soff);
                             if (offt || t0_pf_offt)
                                 add_imm(X_TMP_0, X_TMP_0, offt + t0_pf_offt,
                                         X_TMP_1);
-                            prfm(PLDL1KEEP, ptr(X_TMP_0));
+                            prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_0));
 
-                            add(X_TMP_0, reg_src, reg_soff);
+                            xa_->add(X_TMP_0, reg_src, reg_soff);
                             if (offt || t1_pf_offt)
                                 add_imm(X_TMP_0, X_TMP_0, offt + t1_pf_offt,
                                         X_TMP_1);
-                            prfm(PLDL2KEEP, ptr(X_TMP_0));
+                            prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                             uni_fsub(v.s, v.s, vmean.s);
                             if (bdesc_->use_scaleshift()) {
                                 uni_fmad(v.s, vgamma.s, vbeta.s, t_tmp0.s);
                             } else {
-                                fmul(v.s, v.s, vsqrtvar.s);
+                                xa_->fmul(v.s, v.s, vsqrtvar.s);
                             }
                             if (with_relu_inf_only) {
                                 uni_fmax(v.s, v.s, vzero.s);
@@ -1185,7 +1201,7 @@ struct jit_bnorm_t : public jit_generator {
                             if (stream_store_allowed) {
                                 uni_str(v, reg_dst, reg_soff, offt);
                             } else {
-                                add(X_TMP_0, reg_dst, reg_soff);
+                                xa_->add(X_TMP_0, reg_dst, reg_soff);
                                 if (offt)
                                     add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                                 uni_store_spat_data(X_TMP_0, v);
@@ -1196,7 +1212,7 @@ struct jit_bnorm_t : public jit_generator {
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
-                cmp(reg_dst, vlen - 1);
+                xa_->cmp(reg_dst, vlen - 1);
                 cbnz(reg_dst, normal_store);
                 compute(true);
                 b(end_store);
@@ -1208,14 +1224,14 @@ struct jit_bnorm_t : public jit_generator {
             }
 
             if (vlen) add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
             b(LT, ch_label);
         }
     }
 
     void forward_channels_nspc() {
         eor(reg_coff, reg_coff, reg_coff);
-        mov(reg_coff_max_fwd_copy, reg_coff_max);
+        xa_->mov(reg_coff_max_fwd_copy, reg_coff_max);
 
         Label ch_unroll_label[5];
         const int max_ch_unroll = 4;
@@ -1226,8 +1242,8 @@ struct jit_bnorm_t : public jit_generator {
             L(ch_unroll_label[ch_idx]);
             {
                 const int ch_blk_size = (1 << (ch_idx - 1)); // 8, 4, 2, 1
-                mov_imm(X_TMP_0, vlen * ch_blk_size);
-                cmp(reg_coff_max, X_TMP_0);
+                xa_->mov_imm(X_TMP_0, vlen * ch_blk_size);
+                xa_->cmp(reg_coff_max, X_TMP_0);
                 b(LT, ch_unroll_label[ch_idx - 1]);
 
                 forward_channels_nspc_compute(ch_blk_size);
@@ -1250,43 +1266,43 @@ struct jit_bnorm_t : public jit_generator {
         L(ch_unroll_label[0]);
 
         // comeback
-        mov(reg_coff_max, reg_coff_max_fwd_copy);
+        xa_->mov(reg_coff_max, reg_coff_max_fwd_copy);
 
-        sub(reg_src, reg_src, reg_coff_max);
-        sub(reg_dst, reg_dst, reg_coff_max);
+        xa_->sub(reg_src, reg_src, reg_coff_max);
+        xa_->sub(reg_dst, reg_dst, reg_coff_max);
 
         lsr(reg_coff_max, reg_coff_max, 5 % 64);
-        sub(reg_ws, reg_ws, reg_coff_max);
+        xa_->sub(reg_ws, reg_ws, reg_coff_max);
         lsl(reg_coff_max, reg_coff_max, 5 % 64);
     }
 
     void forward() {
         add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-        ldr(reg_src, ptr(X_TMP_0));
+        ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
         add_imm(X_TMP_0, X_SP, (int)stack_off_dst, X_TMP_1);
-        ldr(reg_dst, ptr(X_TMP_0));
+        ldr(reg_dst, Xbyak_aarch64::ptr(X_TMP_0));
         add_imm(X_TMP_0, X_SP, (int)stack_off_ws, X_TMP_1);
-        ldr(reg_ws, ptr(X_TMP_0));
+        ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
 
         eor(reg_soff, reg_soff, reg_soff);
         Label dst_spatial;
         L(dst_spatial);
         {
             eor(reg_coff, reg_coff, reg_coff);
-            if (isa == asimd) mov(reg_tmp_off, reg_soff);
+            if (isa == asimd) xa_->mov(reg_tmp_off, reg_soff);
 
             is_nspc_ ? forward_channels_nspc() : forward_channels();
 
             if (isa == asimd) {
-                mov(reg_soff, reg_tmp_off);
-                add(reg_src, reg_src, vlen / 2);
-                add(reg_dst, reg_dst, vlen / 2);
-                mov(reg_coff, vlen / 2);
+                xa_->mov(reg_soff, reg_tmp_off);
+                xa_->add(reg_src, reg_src, vlen / 2);
+                xa_->add(reg_dst, reg_dst, vlen / 2);
+                xa_->mov(reg_coff, vlen / 2);
 
                 forward_channels();
 
-                sub(reg_src, reg_src, vlen / 2);
-                sub(reg_dst, reg_dst, vlen / 2);
+                xa_->sub(reg_src, reg_src, vlen / 2);
+                xa_->sub(reg_dst, reg_dst, vlen / 2);
             }
 
             // Process next image
@@ -1301,21 +1317,21 @@ struct jit_bnorm_t : public jit_generator {
                     add_imm(reg_ws, reg_ws, ws_mb_offt, X_TMP_0);
                 }
             } else {
-                add(reg_soff, reg_soff, reg_mb_stride_Bc);
+                xa_->add(reg_soff, reg_soff, reg_mb_stride_Bc);
             }
 
-            cmp(reg_soff, reg_soff_max);
+            xa_->cmp(reg_soff, reg_soff_max);
             b(LT, dst_spatial);
         }
 
         if (is_nspc_) {
             // comeback
             add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-            ldr(reg_src, ptr(X_TMP_0));
+            ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
             add_imm(X_TMP_0, X_SP, (int)stack_off_dst, X_TMP_1);
-            ldr(reg_dst, ptr(X_TMP_0));
+            ldr(reg_dst, Xbyak_aarch64::ptr(X_TMP_0));
             add_imm(X_TMP_0, X_SP, (int)stack_off_ws, X_TMP_1);
-            ldr(reg_ws, ptr(X_TMP_0));
+            ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
         }
     }
 
@@ -1324,9 +1340,9 @@ struct jit_bnorm_t : public jit_generator {
         L(sh_channels);
         {
             uni_load_maybe_tail(vmean, mean_ptr());
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_ldr(TReg(0), X_TMP_0);
-            add(X_TMP_0, reg_rbuf2, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf2, reg_coff);
             uni_ldr(TReg(1), X_TMP_0);
             spat_loop(
                     spat_size, 1, 1,
@@ -1345,10 +1361,10 @@ struct jit_bnorm_t : public jit_generator {
                         TReg t2 = TReg(base_reg * 5 + 3);
                         TReg t3 = TReg(base_reg * 5 + 4);
                         size_t offt = i * vlen_spat_data_;
-                        add(X_TMP_0, reg_src, reg_soff);
+                        xa_->add(X_TMP_0, reg_src, reg_soff);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_load_spat_data(t1, X_TMP_0);
-                        add(X_TMP_0, reg_diff_dst, reg_soff);
+                        xa_->add(X_TMP_0, reg_diff_dst, reg_soff);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_load_spat_data(t2, X_TMP_0);
                         if (with_relu) {
@@ -1360,54 +1376,54 @@ struct jit_bnorm_t : public jit_generator {
                         }
                         uni_fsub(t3.s, vmean.s, t1.s);
                         if (isa == asimd) {
-                            fmul(t3.s, t3.s, t2.s);
+                            xa_->fmul(t3.s, t3.s, t2.s);
                             uni_fsub(o0.s, o0.s, t3.s);
                         } else {
                             uni_fmls(o0.s, t3.s, t2.s);
                         }
-                        fadd(o1.s, o1.s, t2.s);
-                        add(X_TMP_0, reg_diff_dst, reg_soff);
-                        add(X_TMP_1, reg_src, reg_soff);
+                        xa_->fadd(o1.s, o1.s, t2.s);
+                        xa_->add(X_TMP_0, reg_diff_dst, reg_soff);
+                        xa_->add(X_TMP_1, reg_src, reg_soff);
                         if (offt || t0_pf_offt)
-                            add(X_TMP_0, X_TMP_0, offt + t0_pf_offt);
-                        prfm(PLDL1KEEP, ptr(X_TMP_0));
+                            xa_->add(X_TMP_0, X_TMP_0, offt + t0_pf_offt);
+                        prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                         if (offt || t0_pf_offt)
-                            add(X_TMP_1, X_TMP_1, offt + t0_pf_offt);
-                        prfm(PLDL1KEEP, ptr(X_TMP_1));
+                            xa_->add(X_TMP_1, X_TMP_1, offt + t0_pf_offt);
+                        prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_1));
 
-                        add(X_TMP_0, reg_diff_dst, reg_soff);
-                        add(X_TMP_1, reg_src, reg_soff);
+                        xa_->add(X_TMP_0, reg_diff_dst, reg_soff);
+                        xa_->add(X_TMP_1, reg_src, reg_soff);
                         if (offt || t1_pf_offt)
-                            add(X_TMP_0, X_TMP_0, offt + t1_pf_offt);
-                        prfm(PLDL2KEEP, ptr(X_TMP_0));
+                            xa_->add(X_TMP_0, X_TMP_0, offt + t1_pf_offt);
+                        prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                         if (offt || t1_pf_offt)
-                            add(X_TMP_1, X_TMP_1, offt + t1_pf_offt);
-                        prfm(PLDL2KEEP, ptr(X_TMP_1));
+                            xa_->add(X_TMP_1, X_TMP_1, offt + t1_pf_offt);
+                        prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_1));
                     },
                     [=](size_t base_reg) {
                         TReg b0 = TReg(0);
                         TReg b1 = TReg(1);
                         if (base_reg) {
-                            fadd(b0.s, b0.s, TRegS(base_reg * 5 + 0));
-                            fadd(b1.s, b1.s, TRegS(base_reg * 5 + 1));
+                            xa_->fadd(b0.s, b0.s, TRegS(base_reg * 5 + 0));
+                            xa_->fadd(b1.s, b1.s, TRegS(base_reg * 5 + 1));
                         }
                     });
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_str(TReg(0), X_TMP_0);
-            add(X_TMP_0, reg_rbuf2, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf2, reg_coff);
             uni_str(TReg(1), X_TMP_0);
             if (vlen) add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
             b(LT, sh_channels);
         }
     }
 
     void backward_sh_channels_nspc_compute(const int num_ch_blks) {
         for (int idx = 0, offt = 0; idx < 2 * num_ch_blks; offt += vlen) {
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
             uni_ldr(TReg(idx++), X_TMP_0);
-            add(X_TMP_0, reg_rbuf2, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf2, reg_coff);
             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
             uni_ldr(TReg(idx++), X_TMP_0);
         }
@@ -1416,11 +1432,11 @@ struct jit_bnorm_t : public jit_generator {
 
         if (is_spatial_thr_) {
             add_imm(X_TMP_0, X_SP, (int)stack_off_spat_size_loc, X_TMP_1);
-            ldr(reg_ctr, ptr(X_TMP_0));
+            ldr(reg_ctr, Xbyak_aarch64::ptr(X_TMP_0));
             add_imm(X_TMP_0, X_SP, (int)stack_off_s_s, X_TMP_1);
-            ldr(reg_soff_nspc, ptr(X_TMP_0));
+            ldr(reg_soff_nspc, Xbyak_aarch64::ptr(X_TMP_0));
         } else {
-            mov_imm(reg_ctr, spat_size);
+            xa_->mov_imm(reg_ctr, spat_size);
         }
 
         // TODO: spatial blocking
@@ -1433,10 +1449,10 @@ struct jit_bnorm_t : public jit_generator {
             for (int ch_idx = 0; ch_idx < 2 * num_ch_blks; ch_idx += 2) {
                 uni_load_maybe_tail(vmean, mean_ptr(coff));
 
-                add(X_TMP_0, reg_src, reg_soff_nspc);
+                xa_->add(X_TMP_0, reg_src, reg_soff_nspc);
                 if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                 uni_load_spat_data(TReg(sp_idx), X_TMP_0);
-                add(X_TMP_0, reg_diff_dst, reg_soff_nspc);
+                xa_->add(X_TMP_0, reg_diff_dst, reg_soff_nspc);
                 if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                 uni_load_spat_data(TReg(sp_idx + 1), X_TMP_0);
 
@@ -1449,7 +1465,8 @@ struct jit_bnorm_t : public jit_generator {
 
                 uni_fsub(TRegS(sp_idx + 2), vmean.s, TRegS(sp_idx));
                 uni_fmls(TRegS(ch_idx), TRegS(sp_idx + 2), TRegS(sp_idx + 1));
-                fadd(TRegS(ch_idx + 1), TRegS(ch_idx + 1), TRegS(sp_idx + 1));
+                xa_->fadd(TRegS(ch_idx + 1), TRegS(ch_idx + 1),
+                        TRegS(sp_idx + 1));
 
                 coff += vlen;
                 offt += vlen_spat_data_;
@@ -1461,10 +1478,10 @@ struct jit_bnorm_t : public jit_generator {
         }
 
         for (int idx = 0, offt = 0; idx < 2 * num_ch_blks; offt += vlen) {
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
             uni_str(TReg(idx++), X_TMP_0);
-            add(X_TMP_0, reg_rbuf2, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf2, reg_coff);
             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
             uni_str(TReg(idx++), X_TMP_0);
         }
@@ -1472,7 +1489,7 @@ struct jit_bnorm_t : public jit_generator {
 
     void backward_sh_channels_nspc() {
         eor(reg_coff, reg_coff, reg_coff);
-        mov(reg_coff_max_bwd_copy, reg_coff_max);
+        xa_->mov(reg_coff_max_bwd_copy, reg_coff_max);
 
         Label ch_unroll_label[5];
         const int max_ch_unroll = 3;
@@ -1483,7 +1500,7 @@ struct jit_bnorm_t : public jit_generator {
             L(ch_unroll_label[ch_idx]);
             {
                 const int ch_blk_size = (1 << (ch_idx - 1)); // 4, 2, 1
-                cmp(reg_coff_max, vlen * ch_blk_size);
+                xa_->cmp(reg_coff_max, vlen * ch_blk_size);
                 b(LT, ch_unroll_label[ch_idx - 1]);
 
                 backward_sh_channels_nspc_compute(ch_blk_size);
@@ -1506,16 +1523,16 @@ struct jit_bnorm_t : public jit_generator {
         L(ch_unroll_label[0]);
 
         // comeback
-        mov(reg_coff_max, reg_coff_max_bwd_copy);
+        xa_->mov(reg_coff_max, reg_coff_max_bwd_copy);
         add_imm(X_TMP_0, X_SP, (int)stack_off_diff_scale_shift, X_TMP_1);
-        ldr(reg_diff_scale_shift, ptr(X_TMP_0));
+        ldr(reg_diff_scale_shift, Xbyak_aarch64::ptr(X_TMP_0));
 
-        sub(reg_src, reg_src, reg_coff_max);
-        sub(reg_diff_dst, reg_diff_dst, reg_coff_max);
+        xa_->sub(reg_src, reg_src, reg_coff_max);
+        xa_->sub(reg_diff_dst, reg_diff_dst, reg_coff_max);
 
         if (with_relu) {
             lsr(reg_coff_max, reg_coff_max, 5 % 64);
-            sub(reg_ws, reg_ws, reg_coff_max);
+            xa_->sub(reg_ws, reg_ws, reg_coff_max);
             lsl(reg_coff_max, reg_coff_max, 5 % 64);
         }
     }
@@ -1526,14 +1543,14 @@ struct jit_bnorm_t : public jit_generator {
         {
             uni_load_maybe_tail(vmean, mean_ptr());
             uni_load_maybe_tail(vsqrtvar, var_ptr());
-            fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
+            xa_->fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
             uni_fsqrt(vsqrtvar.s, vsqrtvar.s);
             uni_fdiv(vsqrtvar.s, vone.s, vsqrtvar.s);
             if (bdesc_->use_scaleshift())
                 uni_load_maybe_tail(vgamma, gamma_ptr());
             uni_load_maybe_tail(vdiff_gamma, diff_gamma_ptr());
             uni_load_maybe_tail(vdiff_beta, diff_beta_ptr());
-            fmul(vdiff_gamma.s, vdiff_gamma.s, vsqrtvar.s);
+            xa_->fmul(vdiff_gamma.s, vdiff_gamma.s, vsqrtvar.s);
             uni_fdiv(vdiff_beta.s, vdiff_beta.s, vchan_size.s);
             uni_fdiv(vdiff_gamma.s, vdiff_gamma.s, vchan_size.s);
 
@@ -1546,7 +1563,7 @@ struct jit_bnorm_t : public jit_generator {
                             TReg t(base_reg * 2 + 1);
                             TReg t1(base_reg * 2 + 2);
                             size_t offt = i * vlen_spat_data_;
-                            add(X_TMP_0, reg_diff_dst, reg_soff);
+                            xa_->add(X_TMP_0, reg_diff_dst, reg_soff);
                             if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                             uni_load_spat_data(v, X_TMP_0);
                             if (with_relu) {
@@ -1558,50 +1575,50 @@ struct jit_bnorm_t : public jit_generator {
                             }
                             if (!bdesc_->use_global_stats()) {
                                 uni_fsub(v.s, v.s, vdiff_beta.s);
-                                add(X_TMP_0, reg_src, reg_soff);
+                                xa_->add(X_TMP_0, reg_src, reg_soff);
                                 if (offt)
                                     add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                                 uni_load_spat_data(t, X_TMP_0);
                                 uni_fsub(t.s, vmean.s, t.s);
-                                fmul(t.s, t.s, vdiff_gamma.s);
-                                fadd(v.s, v.s, t.s);
+                                xa_->fmul(t.s, t.s, vdiff_gamma.s);
+                                xa_->fadd(v.s, v.s, t.s);
                             }
-                            fmul(v.s, v.s, vsqrtvar.s);
+                            xa_->fmul(v.s, v.s, vsqrtvar.s);
                             if (bdesc_->use_scaleshift()) {
-                                fmul(v.s, v.s, vgamma.s);
+                                xa_->fmul(v.s, v.s, vgamma.s);
                             }
                             if (stream_store_allowed) {
                                 uni_str(v, reg_diff_src, reg_soff, offt);
                             } else {
-                                add(X_TMP_0, reg_diff_src, reg_soff);
+                                xa_->add(X_TMP_0, reg_diff_src, reg_soff);
                                 if (offt)
                                     add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                                 uni_store_spat_data(X_TMP_0, v);
                             }
-                            add(X_TMP_0, reg_diff_dst, reg_soff);
-                            add(X_TMP_1, reg_src, reg_soff);
+                            xa_->add(X_TMP_0, reg_diff_dst, reg_soff);
+                            xa_->add(X_TMP_1, reg_src, reg_soff);
                             if (offt || t0_pf_offt)
-                                add(X_TMP_0, X_TMP_0, offt + t0_pf_offt);
-                            prfm(PLDL1KEEP, ptr(X_TMP_0));
+                                xa_->add(X_TMP_0, X_TMP_0, offt + t0_pf_offt);
+                            prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                             if (offt || t0_pf_offt)
-                                add(X_TMP_1, X_TMP_1, offt + t0_pf_offt);
-                            prfm(PLDL1KEEP, ptr(X_TMP_1));
+                                xa_->add(X_TMP_1, X_TMP_1, offt + t0_pf_offt);
+                            prfm(PLDL1KEEP, Xbyak_aarch64::ptr(X_TMP_1));
 
-                            add(X_TMP_0, reg_diff_dst, reg_soff);
-                            add(X_TMP_1, reg_src, reg_soff);
+                            xa_->add(X_TMP_0, reg_diff_dst, reg_soff);
+                            xa_->add(X_TMP_1, reg_src, reg_soff);
                             if (offt || t1_pf_offt)
-                                add(X_TMP_0, X_TMP_0, offt + t1_pf_offt);
-                            prfm(PLDL2KEEP, ptr(X_TMP_0));
+                                xa_->add(X_TMP_0, X_TMP_0, offt + t1_pf_offt);
+                            prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_0));
                             if (offt || t1_pf_offt)
-                                add(X_TMP_1, X_TMP_1, offt + t1_pf_offt);
-                            prfm(PLDL2KEEP, ptr(X_TMP_1));
+                                xa_->add(X_TMP_1, X_TMP_1, offt + t1_pf_offt);
+                            prfm(PLDL2KEEP, Xbyak_aarch64::ptr(X_TMP_1));
                         },
                         [=](size_t base_reg) { UNUSED(base_reg); });
             };
 
             if (stream_store_supported()) {
                 Label normal_store, end_store;
-                cmp(reg_diff_src, vlen - 1);
+                xa_->cmp(reg_diff_src, vlen - 1);
                 cbnz(reg_diff_src, normal_store);
                 compute(true);
                 b(end_store);
@@ -1613,7 +1630,7 @@ struct jit_bnorm_t : public jit_generator {
             }
 
             if (vlen) add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
             b(LT, diff_channels);
         }
     }
@@ -1623,11 +1640,11 @@ struct jit_bnorm_t : public jit_generator {
             eor(reg_soff_nspc, reg_soff_nspc, reg_soff_nspc);
             if (is_spatial_thr_) {
                 add_imm(X_TMP_0, X_SP, (int)stack_off_spat_size_loc, X_TMP_1);
-                ldr(reg_ctr, ptr(X_TMP_0));
+                ldr(reg_ctr, Xbyak_aarch64::ptr(X_TMP_0));
                 add_imm(X_TMP_0, X_SP, (int)stack_off_s_s, X_TMP_1);
-                ldr(reg_soff_nspc, ptr(X_TMP_0));
+                ldr(reg_soff_nspc, Xbyak_aarch64::ptr(X_TMP_0));
             } else {
-                mov_imm(reg_ctr, spat_size);
+                xa_->mov_imm(reg_ctr, spat_size);
             }
 
             // TODO: spatial blocking
@@ -1641,7 +1658,7 @@ struct jit_bnorm_t : public jit_generator {
                     uni_load_maybe_tail(vmean, mean_ptr(coff));
                     uni_load_maybe_tail(vsqrtvar, var_ptr(coff));
 
-                    fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
+                    xa_->fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
                     uni_fsqrt(vsqrtvar.s, vsqrtvar.s);
                     uni_fdiv(vsqrtvar.s, vone.s, vsqrtvar.s);
 
@@ -1649,26 +1666,26 @@ struct jit_bnorm_t : public jit_generator {
                         uni_load_maybe_tail(vgamma, gamma_ptr(coff));
 
                     add_imm(X_TMP_0, X_SP, (int)stack_off_ws_off_copy, X_TMP_1);
-                    str(reg_ws, ptr(X_TMP_0));
+                    str(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
                     add_imm(X_TMP_0, X_SP, (int)stack_off_diff_scale_shift,
                             X_TMP_1);
-                    ldr(reg_ws, ptr(X_TMP_0));
-                    add(X_TMP_0, reg_ws, reg_coff);
+                    ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
+                    xa_->add(X_TMP_0, reg_ws, reg_coff);
                     if (coff) add_imm(X_TMP_0, X_TMP_0, coff, X_TMP_1);
                     uni_load_maybe_tail(vdiff_gamma, X_TMP_0);
-                    add(X_TMP_0, reg_ws, reg_coff);
+                    xa_->add(X_TMP_0, reg_ws, reg_coff);
                     if (coff || chan_data_offt)
                         add_imm(X_TMP_0, X_TMP_0, coff + chan_data_offt,
                                 X_TMP_1);
                     uni_load_maybe_tail(vdiff_beta, X_TMP_0);
                     add_imm(X_TMP_0, X_SP, (int)stack_off_ws_off_copy, X_TMP_1);
-                    ldr(reg_ws, ptr(X_TMP_0));
+                    ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
 
-                    fmul(vdiff_gamma.s, vdiff_gamma.s, vsqrtvar.s);
+                    xa_->fmul(vdiff_gamma.s, vdiff_gamma.s, vsqrtvar.s);
                     uni_fdiv(vdiff_beta.s, vdiff_beta.s, vchan_size.s);
                     uni_fdiv(vdiff_gamma.s, vdiff_gamma.s, vchan_size.s);
 
-                    add(X_TMP_0, reg_diff_dst, reg_soff_nspc);
+                    xa_->add(X_TMP_0, reg_diff_dst, reg_soff_nspc);
                     if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                     uni_load_spat_data(TReg(idx), X_TMP_0);
 
@@ -1681,25 +1698,26 @@ struct jit_bnorm_t : public jit_generator {
 
                     if (!bdesc_->use_global_stats()) {
                         uni_fsub(TRegS(idx), TRegS(idx), vdiff_beta.s);
-                        add(X_TMP_0, reg_src, reg_soff_nspc);
+                        xa_->add(X_TMP_0, reg_src, reg_soff_nspc);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_load_spat_data(TReg(idx + 1), X_TMP_0);
                         uni_fsub(TRegS(idx + 1), vmean.s, TRegS(idx + 1));
-                        fmul(TRegS(idx + 1), TRegS(idx + 1), vdiff_gamma.s);
-                        fadd(TRegS(idx), TRegS(idx), TRegS(idx + 1));
+                        xa_->fmul(
+                                TRegS(idx + 1), TRegS(idx + 1), vdiff_gamma.s);
+                        xa_->fadd(TRegS(idx), TRegS(idx), TRegS(idx + 1));
                     }
 
-                    fmul(TRegS(idx), TRegS(idx), vsqrtvar.s);
+                    xa_->fmul(TRegS(idx), TRegS(idx), vsqrtvar.s);
 
                     if (bdesc_->use_scaleshift()) {
-                        fmul(TRegS(idx), TRegS(idx), vgamma.s);
+                        xa_->fmul(TRegS(idx), TRegS(idx), vgamma.s);
                     }
 
                     if (stream_store_allowed) {
                         uni_str(TReg(idx), reg_diff_src, reg_soff_nspc, offt);
 
                     } else {
-                        add(X_TMP_0, reg_diff_src, reg_soff_nspc);
+                        xa_->add(X_TMP_0, reg_diff_src, reg_soff_nspc);
                         if (offt) add_imm(X_TMP_0, X_TMP_0, offt, X_TMP_1);
                         uni_store_spat_data(X_TMP_0, TReg(idx));
                     }
@@ -1715,7 +1733,7 @@ struct jit_bnorm_t : public jit_generator {
 
         if (stream_store_supported()) {
             Label normal_store, end_store;
-            cmp(reg_diff_src, vlen - 1);
+            xa_->cmp(reg_diff_src, vlen - 1);
             cbnz(reg_diff_src, normal_store);
             compute(true);
             b(end_store);
@@ -1729,7 +1747,7 @@ struct jit_bnorm_t : public jit_generator {
 
     void backward_diff_channels_nspc() {
         eor(reg_coff, reg_coff, reg_coff);
-        mov(reg_coff_max_bwd_copy, reg_coff_max);
+        xa_->mov(reg_coff_max_bwd_copy, reg_coff_max);
 
         Label ch_unroll_label[5];
         const int max_ch_unroll = 3;
@@ -1740,7 +1758,7 @@ struct jit_bnorm_t : public jit_generator {
             L(ch_unroll_label[ch_idx]);
             {
                 const int ch_blk_size = (1 << (ch_idx - 1)); // 4, 2, 1
-                cmp(reg_coff_max, vlen * ch_blk_size);
+                xa_->cmp(reg_coff_max, vlen * ch_blk_size);
                 b(LT, ch_unroll_label[ch_idx - 1]);
 
                 backward_diff_channels_nspc_compute(ch_blk_size);
@@ -1766,16 +1784,17 @@ struct jit_bnorm_t : public jit_generator {
         L(ch_unroll_label[0]);
 
         // comeback
-        mov(reg_coff_max, reg_coff_max_bwd_copy);
+        xa_->mov(reg_coff_max, reg_coff_max_bwd_copy);
         add_imm(X_TMP_0, X_SP, (int)stack_off_diff_scale_shift, X_TMP_1);
-        ldr(reg_diff_scale_shift, ptr(X_TMP_0));
+        ldr(reg_diff_scale_shift, Xbyak_aarch64::ptr(X_TMP_0));
 
-        sub(reg_diff_dst, reg_diff_dst, reg_coff_max);
-        if (!bdesc_->use_global_stats()) sub(reg_src, reg_src, reg_coff_max);
-        sub(reg_diff_src, reg_diff_src, reg_coff_max);
+        xa_->sub(reg_diff_dst, reg_diff_dst, reg_coff_max);
+        if (!bdesc_->use_global_stats())
+            xa_->sub(reg_src, reg_src, reg_coff_max);
+        xa_->sub(reg_diff_src, reg_diff_src, reg_coff_max);
 
         lsr(reg_coff_max, reg_coff_max, 5 % 64);
-        sub(reg_ws, reg_ws, reg_coff_max);
+        xa_->sub(reg_ws, reg_ws, reg_coff_max);
         lsl(reg_coff_max, reg_coff_max, 5 % 64);
     }
 
@@ -1786,42 +1805,42 @@ struct jit_bnorm_t : public jit_generator {
 
         L(zero_rbuf);
         {
-            add(X_TMP_0, reg_rbuf1, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf1, reg_coff);
             uni_str(TReg(0), X_TMP_0);
-            add(X_TMP_0, reg_rbuf2, reg_coff);
+            xa_->add(X_TMP_0, reg_rbuf2, reg_coff);
             uni_str(TReg(0), X_TMP_0);
             if (isa == sve_512)
                 add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
             else
                 add_imm(reg_coff, reg_coff, vlen / 2, X_TMP_0);
-            cmp(reg_coff, reg_coff_max);
+            xa_->cmp(reg_coff, reg_coff_max);
             b(NE, zero_rbuf);
         }
 
         add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-        ldr(reg_src, ptr(X_TMP_0));
+        ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
         add_imm(X_TMP_0, X_SP, (int)stack_off_diff_dst, X_TMP_1);
-        ldr(reg_diff_dst, ptr(X_TMP_0));
+        ldr(reg_diff_dst, Xbyak_aarch64::ptr(X_TMP_0));
         if (with_relu) {
             assert(isa == sve_512);
             add_imm(X_TMP_0, X_SP, (int)stack_off_ws, X_TMP_1);
-            ldr(reg_ws, ptr(X_TMP_0));
+            ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
         }
 
         eor(reg_soff, reg_soff, reg_soff);
         L(sh_spatial);
         {
             eor(reg_coff, reg_coff, reg_coff);
-            if (isa == asimd) mov(reg_tmp_off, reg_soff);
+            if (isa == asimd) xa_->mov(reg_tmp_off, reg_soff);
             is_nspc_ ? backward_sh_channels_nspc() : backward_sh_channels();
             if (isa == asimd) {
-                mov(reg_soff, reg_tmp_off);
-                add(reg_diff_dst, reg_diff_dst, vlen / 2);
-                add(reg_src, reg_src, vlen / 2);
-                mov(reg_coff, vlen / 2);
+                xa_->mov(reg_soff, reg_tmp_off);
+                xa_->add(reg_diff_dst, reg_diff_dst, vlen / 2);
+                xa_->add(reg_src, reg_src, vlen / 2);
+                xa_->mov(reg_coff, vlen / 2);
                 backward_sh_channels();
-                sub(reg_diff_dst, reg_diff_dst, vlen / 2);
-                sub(reg_src, reg_src, vlen / 2);
+                xa_->sub(reg_diff_dst, reg_diff_dst, vlen / 2);
+                xa_->sub(reg_src, reg_src, vlen / 2);
             }
             // Process next image
             if (is_nspc_) {
@@ -1835,73 +1854,77 @@ struct jit_bnorm_t : public jit_generator {
                     add_imm(reg_ws, reg_ws, ws_mb_offt, X_TMP_0);
                 }
             } else {
-                add(reg_soff, reg_soff, reg_mb_stride_Bc);
+                xa_->add(reg_soff, reg_soff, reg_mb_stride_Bc);
             }
-            cmp(reg_soff, reg_soff_max);
+            xa_->cmp(reg_soff, reg_soff_max);
             b(LT, sh_spatial);
         }
 
         if (is_nspc_) {
             // comeback
             add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-            ldr(reg_src, ptr(X_TMP_0));
+            ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
             add_imm(X_TMP_0, X_SP, (int)stack_off_diff_dst, X_TMP_1);
-            ldr(reg_diff_dst, ptr(X_TMP_0));
+            ldr(reg_diff_dst, Xbyak_aarch64::ptr(X_TMP_0));
         }
 
         add_imm(X_TMP_0, X_SP, (int)stack_off_diff_scale_shift, X_TMP_1);
-        ldr(reg_diff_scale_shift, ptr(X_TMP_0));
+        ldr(reg_diff_scale_shift, Xbyak_aarch64::ptr(X_TMP_0));
 
         Label no_sh_reduction;
         barrier();
         {
             add_imm(X_TMP_0, X_SP, (int)stack_off_N_ithr, X_TMP_1);
-            ldr(reg_tmp, ptr(X_TMP_0));
-            cmp(reg_tmp, 0);
+            ldr(reg_tmp, Xbyak_aarch64::ptr(X_TMP_0));
+            xa_->cmp(reg_tmp, 0);
             Label sh_reduction_channels;
             b(NE, no_sh_reduction);
 
             add_imm(X_TMP_0, X_SP, (int)stack_off_N_nthr, X_TMP_1);
-            ldr(reg_nnthr, ptr(X_TMP_0));
+            ldr(reg_nnthr, Xbyak_aarch64::ptr(X_TMP_0));
             eor(reg_coff, reg_coff, reg_coff);
             L(sh_reduction_channels);
             {
-                mov(reg_roff, reg_coff);
+                xa_->mov(reg_roff, reg_coff);
                 uni_eor(TReg(0), TReg(0), TReg(0));
                 uni_eor(TReg(1), TReg(1), TReg(1));
                 uni_load_maybe_tail(vsqrtvar, var_ptr());
-                fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
+                xa_->fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
                 uni_fsqrt(vsqrtvar.s, vsqrtvar.s);
                 uni_fdiv(vsqrtvar.s, vone.s, vsqrtvar.s);
-                mov(reg_ctr, reg_nnthr);
+                xa_->mov(reg_ctr, reg_nnthr);
                 Label sh_reduction_thrs;
                 L(sh_reduction_thrs);
                 { // TODO: unroll (?)
                     XReg x_roff(IDX(reg_roff));
 
-                    add(X_TMP_0, reg_rbuf1, x_roff);
-                    add(X_TMP_1, reg_rbuf2, x_roff);
+                    xa_->add(X_TMP_0, reg_rbuf1, x_roff);
+                    xa_->add(X_TMP_1, reg_rbuf2, x_roff);
                     if (isa == sve_512) {
-                        ld1w(ZRegS(IDX(t_tmp0)), p_512 / T_z, ptr(X_TMP_0));
-                        ld1w(ZRegS(IDX(t_tmp1)), p_512 / T_z, ptr(X_TMP_1));
+                        ld1w(ZRegS(IDX(t_tmp0)), p_512 / Xbyak_aarch64::T_z,
+                                Xbyak_aarch64::ptr(X_TMP_0));
+                        ld1w(ZRegS(IDX(t_tmp1)), p_512 / Xbyak_aarch64::T_z,
+                                Xbyak_aarch64::ptr(X_TMP_1));
                     } else {
-                        ld1(VReg4S(tmp_vec_idx[0]), ptr(X_TMP_0));
-                        ld1(VReg4S(tmp_vec_idx[1]), ptr(X_TMP_1));
+                        ld1(VReg4S(tmp_vec_idx[0]),
+                                Xbyak_aarch64::ptr(X_TMP_0));
+                        ld1(VReg4S(tmp_vec_idx[1]),
+                                Xbyak_aarch64::ptr(X_TMP_1));
                     }
-                    fadd(TRegS(0), TRegS(0), TRegS(tmp_vec_idx[0]));
-                    fadd(TRegS(1), TRegS(1), TRegS(tmp_vec_idx[1]));
-                    add(reg_roff, reg_roff, reg_coff_max);
+                    xa_->fadd(TRegS(0), TRegS(0), TRegS(tmp_vec_idx[0]));
+                    xa_->fadd(TRegS(1), TRegS(1), TRegS(tmp_vec_idx[1]));
+                    xa_->add(reg_roff, reg_roff, reg_coff_max);
                     sub_imm(reg_ctr, reg_ctr, 1, X_TMP_0);
                     cbnz(reg_ctr, sh_reduction_thrs);
                 }
-                fmul(TRegS(0), TRegS(0), vsqrtvar.s);
+                xa_->fmul(TRegS(0), TRegS(0), vsqrtvar.s);
                 uni_store_maybe_tail(diff_gamma_ptr(), TReg(0));
                 uni_store_maybe_tail(diff_beta_ptr(), TReg(1));
                 if (isa == sve_512)
                     add_imm(reg_coff, reg_coff, vlen, X_TMP_0);
                 else
                     add_imm(reg_coff, reg_coff, vlen / 2, X_TMP_0);
-                cmp(reg_coff, reg_coff_max);
+                xa_->cmp(reg_coff, reg_coff_max);
                 b(NE, sh_reduction_channels);
             }
         }
@@ -1909,11 +1932,11 @@ struct jit_bnorm_t : public jit_generator {
         barrier();
 
         add_imm(X_TMP_0, X_SP, (int)stack_off_diff_src, X_TMP_1);
-        ldr(reg_diff_src, ptr(X_TMP_0));
+        ldr(reg_diff_src, Xbyak_aarch64::ptr(X_TMP_0));
         if (with_relu) {
             assert(isa == sve_512);
             add_imm(X_TMP_0, X_SP, (int)stack_off_ws, X_TMP_1);
-            ldr(reg_ws, ptr(X_TMP_0));
+            ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
         }
 
         eor(reg_soff, reg_soff, reg_soff);
@@ -1921,18 +1944,18 @@ struct jit_bnorm_t : public jit_generator {
         L(diff_spatial);
         {
             eor(reg_coff, reg_coff, reg_coff);
-            if (isa == asimd) mov(reg_tmp_off, reg_soff);
+            if (isa == asimd) xa_->mov(reg_tmp_off, reg_soff);
             is_nspc_ ? backward_diff_channels_nspc() : backward_diff_channels();
             if (isa == asimd) {
-                mov(reg_soff, reg_tmp_off);
-                add(reg_diff_dst, reg_diff_dst, vlen / 2);
-                add(reg_diff_src, reg_diff_src, vlen / 2);
-                add(reg_src, reg_src, vlen / 2);
-                mov(reg_coff, vlen / 2);
+                xa_->mov(reg_soff, reg_tmp_off);
+                xa_->add(reg_diff_dst, reg_diff_dst, vlen / 2);
+                xa_->add(reg_diff_src, reg_diff_src, vlen / 2);
+                xa_->add(reg_src, reg_src, vlen / 2);
+                xa_->mov(reg_coff, vlen / 2);
                 backward_diff_channels();
-                sub(reg_diff_dst, reg_diff_dst, vlen / 2);
-                sub(reg_diff_src, reg_diff_src, vlen / 2);
-                sub(reg_src, reg_src, vlen / 2);
+                xa_->sub(reg_diff_dst, reg_diff_dst, vlen / 2);
+                xa_->sub(reg_diff_src, reg_diff_src, vlen / 2);
+                xa_->sub(reg_src, reg_src, vlen / 2);
             }
             // Process next image
             if (is_nspc_) {
@@ -1946,24 +1969,24 @@ struct jit_bnorm_t : public jit_generator {
                 }
                 if (ws_mb_offt) add_imm(reg_ws, reg_ws, ws_mb_offt, X_TMP_0);
             } else {
-                add(reg_soff, reg_soff, reg_mb_stride_Bc);
+                xa_->add(reg_soff, reg_soff, reg_mb_stride_Bc);
             }
-            cmp(reg_soff, reg_soff_max);
+            xa_->cmp(reg_soff, reg_soff_max);
             b(LT, diff_spatial);
         }
         if (is_nspc_) {
             // comeback
             if (!bdesc_->use_global_stats()) {
                 add_imm(X_TMP_0, X_SP, (int)stack_off_src, X_TMP_1);
-                ldr(reg_src, ptr(X_TMP_0));
+                ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
             }
             add_imm(X_TMP_0, X_SP, (int)stack_off_diff_dst, X_TMP_1);
-            ldr(reg_diff_dst, ptr(X_TMP_0));
+            ldr(reg_diff_dst, Xbyak_aarch64::ptr(X_TMP_0));
             add_imm(X_TMP_0, X_SP, (int)stack_off_diff_src, X_TMP_1);
-            ldr(reg_diff_src, ptr(X_TMP_0));
+            ldr(reg_diff_src, Xbyak_aarch64::ptr(X_TMP_0));
             if (with_relu) {
                 add_imm(X_TMP_0, X_SP, (int)stack_off_ws, X_TMP_1);
-                ldr(reg_ws, ptr(X_TMP_0));
+                ldr(reg_ws, Xbyak_aarch64::ptr(X_TMP_0));
             }
         }
     }

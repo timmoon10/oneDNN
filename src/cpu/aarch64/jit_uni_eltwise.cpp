@@ -21,7 +21,6 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-//#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
 #include "cpu/aarch64/injectors/jit_uni_eltwise_injector.hpp"
@@ -82,15 +81,15 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         XReg param = param1;
 
         add_imm(X_TMP_0, param, GET_OFF(src), X_TMP_1);
-        ldr(reg_src, ptr(X_TMP_0));
+        ldr(reg_src, Xbyak_aarch64::ptr(X_TMP_0));
         add_imm(X_TMP_0, param, GET_OFF(dst), X_TMP_1);
-        ldr(reg_dst, ptr(X_TMP_0));
+        ldr(reg_dst, Xbyak_aarch64::ptr(X_TMP_0));
         if (!is_fwd) {
             add_imm(X_TMP_0, param, GET_OFF(diff_dst), X_TMP_1);
-            ldr(reg_diff_dst, ptr(X_TMP_0));
+            ldr(reg_diff_dst, Xbyak_aarch64::ptr(X_TMP_0));
         }
         add_imm(X_TMP_0, param, GET_OFF(work_amount), X_TMP_1);
-        ldr(reg_work_amount, ptr(X_TMP_0));
+        ldr(reg_work_amount, Xbyak_aarch64::ptr(X_TMP_0));
 
         eltwise_injector_->load_table_addr();
 
@@ -99,8 +98,8 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         Label reminder_loop_start, reminder_loop_end;
         Label vectorized_loop_start, vectorized_loop_end;
 
-        mov_imm(X_TMP_0, simd_w());
-        cmp(reg_work_amount, X_TMP_0);
+        xa_->mov_imm(X_TMP_0, simd_w());
+        xa_->cmp(reg_work_amount, X_TMP_0);
         b(LT, reminder_loop_start);
 
         L(vectorized_loop_start);
@@ -116,13 +115,13 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         // can be relevantly easy controlled, this will cost much from code
         // perspective and will complicate the compute logic significantly.
         if (true) {
-            ldr(ZReg(IDX(vmm_src)), ptr(reg_src));
+            ldr(ZReg(IDX(vmm_src)), Xbyak_aarch64::ptr(reg_src));
             eltwise_injector_->compute_vector(vmm_src.getIdx());
             if (!is_fwd) {
-                ldr(ZReg(IDX(vmm_diff_dst)), ptr(reg_diff_dst));
-                fmul(vmm_src, vmm_src, vmm_diff_dst);
+                ldr(ZReg(IDX(vmm_diff_dst)), Xbyak_aarch64::ptr(reg_diff_dst));
+                xa_->fmul(vmm_src, vmm_src, vmm_diff_dst);
             }
-            str(ZReg(IDX(vmm_src)), ptr(reg_dst));
+            str(ZReg(IDX(vmm_src)), Xbyak_aarch64::ptr(reg_dst));
         }
 
         const auto shift = vlen();
@@ -131,41 +130,42 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         if (!is_fwd) add_imm(reg_diff_dst, reg_diff_dst, shift, X_TMP_0);
 
         sub_imm(reg_work_amount, reg_work_amount, simd_w(), X_TMP_0);
-        mov_imm(X_TMP_0, simd_w());
-        cmp(reg_work_amount, X_TMP_0);
+        xa_->mov_imm(X_TMP_0, simd_w());
+        xa_->cmp(reg_work_amount, X_TMP_0);
         b(GE, vectorized_loop_start);
 
         L(vectorized_loop_end);
 
         L(reminder_loop_start);
 
-        mov_imm(X_TMP_0, 0);
-        cmp(reg_work_amount, X_TMP_0);
+        xa_->mov_imm(X_TMP_0, 0);
+        xa_->cmp(reg_work_amount, X_TMP_0);
         b(LE, reminder_loop_end);
 
         if (true) {
             ptrue(PRegS(IDX(p_tmp0)), VL4);
-            ldr(W_TMP_0, ptr(reg_src));
-            mov(ZRegS(IDX(xmm_src)), p_tmp0 / T_m, 0);
+            ldr(W_TMP_0, Xbyak_aarch64::ptr(reg_src));
+            xa_->mov(ZRegS(IDX(xmm_src)), p_tmp0 / T_m, 0);
             ptrue(PRegS(IDX(p_tmp0)), VL1);
-            mov(ZRegS(IDX(xmm_src)), p_tmp0 / T_m, W_TMP_0);
+            xa_->mov(ZRegS(IDX(xmm_src)), p_tmp0 / T_m, W_TMP_0);
 
             eltwise_injector_->compute_vector(xmm_src.getIdx());
 
             if (!is_fwd) {
                 ptrue(PRegS(IDX(p_tmp0)), VL4);
-                ldr(W_TMP_0, ptr(reg_diff_dst));
-                mov(ZRegS(IDX(xmm_diff_dst)), p_tmp0 / T_m, 0);
+                ldr(W_TMP_0, Xbyak_aarch64::ptr(reg_diff_dst));
+                xa_->mov(ZRegS(IDX(xmm_diff_dst)), p_tmp0 / T_m, 0);
                 ptrue(PRegS(IDX(p_tmp0)), VL1);
-                mov(ZRegS(IDX(xmm_diff_dst)), p_tmp0 / T_m, W_TMP_0);
+                xa_->mov(ZRegS(IDX(xmm_diff_dst)), p_tmp0 / T_m, W_TMP_0);
 
-                mov(ZRegD(IDX(X_TMP_0)), ZRegD(IDX(xmm_src)));
-                fmul(ZRegS(IDX(xmm_src)), ZRegS(IDX(xmm_src)),
+                xa_->mov(ZRegD(IDX(X_TMP_0)), ZRegD(IDX(xmm_src)));
+                xa_->fmul(ZRegS(IDX(xmm_src)), ZRegS(IDX(xmm_src)),
                         ZRegS(IDX(xmm_diff_dst)));
-                mov(ZRegS(IDX(xmm_src)), P_MSB_384 / T_m, ZRegS(IDX(X_TMP_0)));
+                xa_->mov(ZRegS(IDX(xmm_src)), P_MSB_384 / T_m,
+                        ZRegS(IDX(X_TMP_0)));
             }
             ptrue(PRegS(IDX(p_tmp0)), VL1);
-            st1w(ZRegS(IDX(xmm_src)), p_tmp0, ptr(reg_dst));
+            st1w(ZRegS(IDX(xmm_src)), p_tmp0, Xbyak_aarch64::ptr(reg_dst));
         }
         add_imm(reg_src, reg_src, dtype_size(), X_TMP_0);
         add_imm(reg_dst, reg_dst, dtype_size(), X_TMP_0);

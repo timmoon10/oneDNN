@@ -288,16 +288,18 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_max_op(
             pfalse(p9.b);
             zip1(p1.b, mask(0).b, p9.b);
             zip1(p1.h, p1.h, p9.h);
-            ld1w(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
-            mov(ZRegS(IDX(vreg_src(jj))), p1 / T_m, z_tmp0.s);
+            ld1w(z_tmp0.s, p1 / Xbyak_aarch64::T_z,
+                    Xbyak_aarch64::ptr(x_tmp_addr));
+            xa_->mov(ZRegS(IDX(vreg_src(jj))), p1 / T_m, z_tmp0.s);
         } else {
             add_imm(x_tmp_addr, aux_reg_src_w, offset, x_tmp_0);
-            ld1b(z_tmp0.b, mask(0) / T_z, ptr(x_tmp_addr));
-            mov(ZRegB(IDX(vreg_src(jj))), mask(0) / T_m, z_tmp0.b);
+            ld1b(z_tmp0.b, mask(0) / Xbyak_aarch64::T_z,
+                    Xbyak_aarch64::ptr(x_tmp_addr));
+            xa_->mov(ZRegB(IDX(vreg_src(jj))), mask(0) / T_m, z_tmp0.b);
         }
     } else {
         add_imm(x_tmp_addr, aux_reg_src_w, offset, x_tmp_0);
-        ldr(ZReg(IDX(vreg_src(jj))), ptr(x_tmp_addr));
+        ldr(ZReg(IDX(vreg_src(jj))), Xbyak_aarch64::ptr(x_tmp_addr));
     }
 };
 
@@ -328,10 +330,11 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
                 pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
-                ld1w(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
-                mov(ZRegS(IDX(vr_src)), p1 / T_m, z_tmp0.s);
+                ld1w(z_tmp0.s, p1 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_addr));
+                xa_->mov(ZRegS(IDX(vr_src)), p1 / T_m, z_tmp0.s);
             } else {
-                ldr(ZReg(IDX(vr_src)), ptr(x_tmp_addr));
+                ldr(ZReg(IDX(vr_src)), Xbyak_aarch64::ptr(x_tmp_addr));
             }
             break;
         case data_type::s8:
@@ -341,10 +344,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 // use p_tmp, uzp1 can be eliminate.
-                ld1b(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
+                ld1b(z_tmp0.s, p1 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_addr));
                 sxtb(ZReg(IDX(vr_src)).s, p1 / T_m, z_tmp0.s);
             } else {
-                ld1b(z_tmp0.s, p_512 / T_z, ptr(x_tmp_addr));
+                ld1b(z_tmp0.s, p_512 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_addr));
                 sxtb(ZReg(IDX(vr_src)).s, p_512 / T_m, z_tmp0.s);
             }
             break;
@@ -355,10 +360,11 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::load_src_avg_op(
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
                 // use p_tmp, uzp1 can be eliminate.
-                ld1b(z_tmp0.s, p1 / T_z, ptr(x_tmp_addr));
+                ld1b(z_tmp0.s, p1 / Xbyak_aarch64::T_z,
+                        Xbyak_aarch64::ptr(x_tmp_addr));
                 uxtb(ZReg(IDX(vr_src)).s, p1 / T_m, z_tmp0.s);
             } else {
-                ldr(QReg(z_tmp0.getIdx()), ptr(x_tmp_addr));
+                ldr(QReg(z_tmp0.getIdx()), Xbyak_aarch64::ptr(x_tmp_addr));
                 zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                 zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
                 uxtb(ZReg(IDX(vr_src)).s, p_512 / T_m, z_tmp0.s);
@@ -418,18 +424,20 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_max_op(
                 pfalse(p9.b);
                 zip1(p1.b, mask(0).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
-                st1w(ZRegS(IDX(vreg_dst(jj))), p1, ptr(x_tmp_addr));
+                st1w(ZRegS(IDX(vreg_dst(jj))), p1,
+                        Xbyak_aarch64::ptr(x_tmp_addr));
                 break;
             case data_type::s8:
             case u8:
                 add_imm(x_tmp_addr, reg_ptr_dst_i8, offset, x_tmp_0);
-                st1b(ZRegB(IDX(vreg_dst(jj))), mask(0), ptr(x_tmp_addr));
+                st1b(ZRegB(IDX(vreg_dst(jj))), mask(0),
+                        Xbyak_aarch64::ptr(x_tmp_addr));
                 break;
             default: assert(!"unsupported src data type");
         }
     } else {
         add_imm(x_tmp_addr, reg_ptr_dst_i8, offset, x_tmp_0);
-        str(ZReg(IDX(vreg_dst(jj))), ptr(x_tmp_addr));
+        str(ZReg(IDX(vreg_dst(jj))), Xbyak_aarch64::ptr(x_tmp_addr));
     }
 }
 
@@ -461,41 +469,41 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::store_dst_avg_op(
                 pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
-                st1w(ZRegS(IDX(vr_dst)), p1, ptr(x_tmp_addr));
+                st1w(ZRegS(IDX(vr_dst)), p1, Xbyak_aarch64::ptr(x_tmp_addr));
             } else {
-                str(ZReg(IDX(vr_dst)), ptr(x_tmp_addr));
+                str(ZReg(IDX(vr_dst)), Xbyak_aarch64::ptr(x_tmp_addr));
             }
             break;
         case data_type::s8:
             add_imm(x_tmp_addr, reg_ptr_dst_i8, offset, x_tmp_0);
             if (masked) {
-                mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
+                xa_->mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
                 pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
-                st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
+                st1b(z_tmp0.s, p1, Xbyak_aarch64::ptr(x_tmp_addr));
             } else {
-                mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
+                xa_->mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 smin(z_tmp0.s, 127);
                 smax(z_tmp0.s, -128);
-                st1b(z_tmp0.s, p_512, ptr(x_tmp_addr));
+                st1b(z_tmp0.s, p_512, Xbyak_aarch64::ptr(x_tmp_addr));
             }
             break;
         case u8:
             add_imm(x_tmp_addr, reg_ptr_dst_i8, offset, x_tmp_0);
             if (masked) {
-                mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
+                xa_->mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 umin(z_tmp0.s, 255);
                 pfalse(p9.b);
                 zip1(p1.b, mask(ll).b, p9.b);
                 zip1(p1.h, p1.h, p9.h);
-                st1b(z_tmp0.s, p1, ptr(x_tmp_addr));
+                st1b(z_tmp0.s, p1, Xbyak_aarch64::ptr(x_tmp_addr));
             } else {
-                mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
+                xa_->mov(z_tmp0.d, ZRegD(IDX(vr_dst)));
                 umin(z_tmp0.s, 255);
-                st1b(z_tmp0.s, p_512, ptr(x_tmp_addr));
+                st1b(z_tmp0.s, p_512, Xbyak_aarch64::ptr(x_tmp_addr));
             }
             break;
         default: assert(!"unsupported dst data_type");
@@ -548,28 +556,28 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
         case s32:
             switch (_cmp_lt_os) {
                 case 0:
-                    cmpeq(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
-                            ZRegS(IDX(vreg_src(jj))));
+                    cmpeq(k_cmp_mask.s, p_512 / Xbyak_aarch64::T_z,
+                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
                     break; //EQ
                 case 1:
-                    cmplt(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
-                            ZRegS(IDX(vreg_src(jj))));
+                    cmplt(k_cmp_mask.s, p_512 / Xbyak_aarch64::T_z,
+                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
                     break; //LT
                 case 2:
-                    cmple(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
-                            ZRegS(IDX(vreg_src(jj))));
+                    cmple(k_cmp_mask.s, p_512 / Xbyak_aarch64::T_z,
+                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
                     break; //LE
                 case 4:
-                    cmpne(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
-                            ZRegS(IDX(vreg_src(jj))));
+                    cmpne(k_cmp_mask.s, p_512 / Xbyak_aarch64::T_z,
+                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
                     break; //NEQ
                 case 5:
-                    cmpge(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
-                            ZRegS(IDX(vreg_src(jj))));
+                    cmpge(k_cmp_mask.s, p_512 / Xbyak_aarch64::T_z,
+                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
                     break; //NLT
                 case 6:
-                    cmpgt(k_cmp_mask.s, p_512 / T_z, ZRegS(IDX(vreg_dst(jj))),
-                            ZRegS(IDX(vreg_src(jj))));
+                    cmpgt(k_cmp_mask.s, p_512 / Xbyak_aarch64::T_z,
+                            ZRegS(IDX(vreg_dst(jj))), ZRegS(IDX(vreg_src(jj))));
                     break; //NLE
                 case 3:
                 case 7:
@@ -579,30 +587,30 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
         case data_type::s8:
             switch (_cmp_lt_os) {
                 case 0:
-                    cmpeq(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmpeq(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //EQ
                 case 1:
-                    cmplt(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmplt(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //LT
                 case 2:
-                    cmple(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmple(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //LE
                 case 4:
-                    cmpne(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmpne(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //NEQ
                 case 5:
-                    cmplt(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
-                    not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
+                    cmplt(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    xa_->not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLT
                 case 6:
-                    cmple(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
-                    not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
+                    cmple(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    xa_->not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLE
                 case 3:
                 case 7:
@@ -612,30 +620,30 @@ void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::compute_max_op(const int jj) {
         case u8:
             switch (_cmp_lt_os) {
                 case 0:
-                    cmpeq(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmpeq(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //EQ
                 case 1:
-                    cmpls(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmpls(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //LT
                 case 2:
-                    cmplo(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmplo(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //LE
                 case 4:
-                    cmpne(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
+                    cmpne(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
                     break; //NEQ
                 case 5:
-                    cmplo(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
-                    not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
+                    cmplo(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    xa_->not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLT
                 case 6:
-                    cmpls(k_cmp_mask.b, p_512 / T_z, ZRegB(IDX(vreg_dst(jj))),
-                            ZRegB(IDX(vreg_src(jj))));
-                    not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
+                    cmpls(k_cmp_mask.b, p_512 / Xbyak_aarch64::T_z,
+                            ZRegB(IDX(vreg_dst(jj))), ZRegB(IDX(vreg_src(jj))));
+                    xa_->not_(k_cmp_mask.b, p_512, k_cmp_mask.b);
                     break; //NLE
                 case 3:
                 case 7:
@@ -667,26 +675,26 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_max_step(
     for (int jj = 0; jj < ur_c; jj++) {
         int vlen = cpu_isa_traits<isa>::vlen;
         if (vlen == 64) {
-            mov(ZRegD(IDX(vreg_dst(jj))), ZRegD(IDX(vreg_tmp)));
+            xa_->mov(ZRegD(IDX(vreg_dst(jj))), ZRegD(IDX(vreg_tmp)));
         } else if (vlen == 32) {
-            mov(ZRegD(IDX(vreg_dst(jj))), ZRegD(IDX(vreg_tmp)));
-            mov(ZRegS(IDX(vreg_dst(jj))), P_MSB_256 / T_m, 0);
+            xa_->mov(ZRegD(IDX(vreg_dst(jj))), ZRegD(IDX(vreg_tmp)));
+            xa_->mov(ZRegS(IDX(vreg_dst(jj))), P_MSB_256 / T_m, 0);
         } else if (vlen == 16) {
-            mov(VReg16B(IDX(vreg_dst(jj))), VReg16B(IDX(vreg_tmp)));
+            xa_->mov(VReg16B(IDX(vreg_dst(jj))), VReg16B(IDX(vreg_tmp)));
         } else {
             assert(!"unreachable");
         }
     }
 
-    mov(aux_reg_src_d, reg_ptr_src_i8);
+    xa_->mov(aux_reg_src_d, reg_ptr_src_i8);
     eor(reg_kd_index, reg_kd_index, reg_kd_index);
     L(l_kd);
     {
-        mov(aux_reg_src_h, aux_reg_src_d);
+        xa_->mov(aux_reg_src_h, aux_reg_src_d);
         eor(reg_kh_index, reg_kh_index, reg_kh_index);
         L(l_kh);
         {
-            mov(aux_reg_src_w, aux_reg_src_h);
+            xa_->mov(aux_reg_src_w, aux_reg_src_h);
             eor(reg_kw_index, reg_kw_index, reg_kw_index);
             L(l_kw);
             {
@@ -694,21 +702,21 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_max_step(
                     load_src(jj, 0, c_tail);
                     compute_max_op(jj);
                 }
-                add(aux_reg_src_w, aux_reg_src_w, c * sizeof_src_dt());
+                xa_->add(aux_reg_src_w, aux_reg_src_w, c * sizeof_src_dt());
                 adds(reg_kw_index, reg_kw_index, 1);
-                cmp(reg_kw_index, reg_kw);
+                xa_->cmp(reg_kw_index, reg_kw);
                 b(LT, l_kw);
             }
             add_imm(aux_reg_src_h, aux_reg_src_h, iw * c * sizeof_src_dt(),
                     x_tmp_0);
             adds(reg_kh_index, reg_kh_index, 1);
-            cmp(reg_kh_index, reg_kh);
+            xa_->cmp(reg_kh_index, reg_kh);
             b(LT, l_kh);
         }
         add_imm(aux_reg_src_d, aux_reg_src_d, ih * iw * c * sizeof_src_dt(),
                 x_tmp_0);
         adds(reg_kd_index, reg_kd_index, 1);
-        cmp(reg_kd_index, reg_kd);
+        xa_->cmp(reg_kd_index, reg_kd);
         b(LT, l_kd);
     }
 
@@ -744,7 +752,8 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                     eor(ZRegD(IDX(vreg_dst_s32(jj, ll))),
                             ZRegD(IDX(vreg_dst_s32(jj, ll))),
                             ZRegD(IDX(vreg_dst_s32(jj, ll))));
-                    mov(ZRegS(IDX(vreg_dst_s32(jj, ll))), P_MSB_256 / T_m, 0);
+                    xa_->mov(ZRegS(IDX(vreg_dst_s32(jj, ll))), P_MSB_256 / T_m,
+                            0);
                 } else if (vlen == 16) {
                     eor(VReg16B(IDX(vreg_dst_s32(jj, ll))),
                             VReg16B(IDX(vreg_dst_s32(jj, ll))),
@@ -756,15 +765,15 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
         }
     }
 
-    mov(aux_reg_src_d, reg_ptr_src_i8);
+    xa_->mov(aux_reg_src_d, reg_ptr_src_i8);
     eor(reg_kd_index, reg_kd_index, reg_kd_index);
     L(l_kd);
     {
-        mov(aux_reg_src_h, aux_reg_src_d);
+        xa_->mov(aux_reg_src_h, aux_reg_src_d);
         eor(reg_kh_index, reg_kh_index, reg_kh_index);
         L(l_kh);
         {
-            mov(aux_reg_src_w, aux_reg_src_h);
+            xa_->mov(aux_reg_src_w, aux_reg_src_h);
             eor(reg_kw_index, reg_kw_index, reg_kw_index);
             L(l_kw);
             {
@@ -776,18 +785,18 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                             load_src(jj, ll, c_tail);
                             int vlen = cpu_isa_traits<isa>::vlen;
                             if (vlen == 64) {
-                                add(ZReg(IDX(vreg_dst_s32(jj, ll))).s,
+                                xa_->add(ZReg(IDX(vreg_dst_s32(jj, ll))).s,
                                         ZReg(IDX(vreg_dst_s32(jj, ll))).s,
                                         ZReg(IDX(vreg_src_s32(jj, ll))).s);
                             } else if (vlen == 32) {
-                                add(ZReg(IDX(vreg_dst_s32(jj, ll))).s,
+                                xa_->add(ZReg(IDX(vreg_dst_s32(jj, ll))).s,
                                         ZReg(IDX(vreg_dst_s32(jj, ll))).s,
                                         ZReg(IDX(vreg_src_s32(jj, ll))).s);
                             } else if (vlen == 16) {
-                                add(VReg(IDX(vreg_dst_s32(jj, ll))).s4,
+                                xa_->add(VReg(IDX(vreg_dst_s32(jj, ll))).s4,
                                         VReg(IDX(vreg_dst_s32(jj, ll))).s4,
                                         VReg(IDX(vreg_src_s32(jj, ll))).s4);
-                                mov(ZReg(IDX(vreg_dst_s32(jj, ll))).s,
+                                xa_->mov(ZReg(IDX(vreg_dst_s32(jj, ll))).s,
                                         P_MSB_256 / T_m, 0);
                             } else {
                                 assert(!"unreachable");
@@ -795,21 +804,21 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                         }
                     }
                 }
-                add(aux_reg_src_w, aux_reg_src_w, c * sizeof_src_dt());
+                xa_->add(aux_reg_src_w, aux_reg_src_w, c * sizeof_src_dt());
                 adds(reg_kw_index, reg_kw_index, 1);
-                cmp(reg_kw_index, reg_kw);
+                xa_->cmp(reg_kw_index, reg_kw);
                 b(LT, l_kw);
             }
             add_imm(aux_reg_src_h, aux_reg_src_h, iw * c * sizeof_src_dt(),
                     x_tmp_0);
             adds(reg_kh_index, reg_kh_index, 1);
-            cmp(reg_kh_index, reg_kh);
+            xa_->cmp(reg_kh_index, reg_kh);
             b(LT, l_kh);
         }
         add_imm(aux_reg_src_d, aux_reg_src_d, ih * iw * c * sizeof_src_dt(),
                 x_tmp_0);
         adds(reg_kd_index, reg_kd_index, 1);
-        cmp(reg_kd_index, reg_kd);
+        xa_->cmp(reg_kd_index, reg_kd);
         b(LT, l_kd);
     }
 
@@ -821,10 +830,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                             : std::initializer_list<XReg> {},
             {});
     if (jpp.with_binary) {
-        mov_imm(x_tmp_0,
+        xa_->mov_imm(x_tmp_0,
                 static_cast<int64_t>(
                         static_cast<int8_t>(ur_c * num_ll * vlen_size_elem)));
-        mul(reg_tmp_postops, c_iter, x_tmp_0);
+        xa_->mul(reg_tmp_postops, c_iter, x_tmp_0);
     }
 
     for (int jj = 0; jj < ur_c; jj++) {
@@ -845,12 +854,12 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                             ZReg(IDX(reg_dst_s32)).s);
                     fmad(ZRegS(IDX(reg_dst_f32)), p_512 / T_m,
                             ZRegS(IDX(vreg_tmp)), ZRegS(IDX(vreg_zeros)));
-                    mov(ZReg(IDX(reg_dst_f32)).s, P_MSB_256 / T_m, 0);
+                    xa_->mov(ZReg(IDX(reg_dst_f32)).s, P_MSB_256 / T_m, 0);
                 } else if (vlen == 16) {
                     scvtf(VReg(IDX(reg_dst_f32)).s4, VReg(IDX(reg_dst_s32)).s4);
                     fmad(ZRegS(IDX(reg_dst_f32)), p_512 / T_m,
                             ZRegS(IDX(vreg_tmp)), ZRegS(IDX(vreg_zeros)));
-                    mov(ZReg(IDX(reg_dst_f32)).s, P_MSB_384 / T_m, 0);
+                    xa_->mov(ZReg(IDX(reg_dst_f32)).s, P_MSB_384 / T_m, 0);
                 } else {
                     assert(!"unreachable");
                 }
@@ -886,7 +895,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                             ZRegS(IDX(reg_dst_f32)));
                     fcvtzs(ZRegS(IDX(reg_dst_s32)), p_512 / T_m,
                             ZRegS(IDX(reg_dst_s32)));
-                    mov(ZReg(IDX(reg_dst_f32)).s, P_MSB_256 / T_m, 0);
+                    xa_->mov(ZReg(IDX(reg_dst_f32)).s, P_MSB_256 / T_m, 0);
                 } else if (vlen == 16) {
                     frinti(VReg4S(IDX(reg_dst_s32)), VReg4S(IDX(reg_dst_f32)));
                     fcvtzs(VReg4S(IDX(reg_dst_s32)), VReg4S(IDX(reg_dst_s32)));
@@ -898,40 +907,42 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_avg_step(
                     if (jpp.dst_dt == u8) {
                         int vlen = cpu_isa_traits<isa>::vlen;
                         if (vlen == 64) {
-                            cmple(p_tmp0.s, p_512 / T_z,
+                            cmple(p_tmp0.s, p_512 / Xbyak_aarch64::T_z,
                                     ZReg(IDX(reg_dst_s32)).s,
                                     ZReg(IDX(vreg_zeros)).s);
-                            cmpgt(p_tmp1.s, p_512 / T_z,
+                            cmpgt(p_tmp1.s, p_512 / Xbyak_aarch64::T_z,
                                     ZReg(IDX(reg_dst_s32)).s,
                                     ZReg(IDX(vreg_zeros)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, p_tmp0 / T_m,
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, p_tmp0 / T_m,
                                     ZReg(IDX(vreg_zeros)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, p_tmp1 / T_m,
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, p_tmp1 / T_m,
                                     ZReg(IDX(reg_dst_s32)).s);
                         } else if (vlen == 32) {
-                            cmple(p_tmp0.s, p_512 / T_z,
+                            cmple(p_tmp0.s, p_512 / Xbyak_aarch64::T_z,
                                     ZReg(IDX(reg_dst_s32)).s,
                                     ZReg(IDX(vreg_zeros)).s);
-                            cmpgt(p_tmp1.s, p_512 / T_z,
+                            cmpgt(p_tmp1.s, p_512 / Xbyak_aarch64::T_z,
                                     ZReg(IDX(reg_dst_s32)).s,
                                     ZReg(IDX(vreg_zeros)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, p_tmp0 / T_m,
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, p_tmp0 / T_m,
                                     ZReg(IDX(vreg_zeros)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, p_tmp1 / T_m,
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, p_tmp1 / T_m,
                                     ZReg(IDX(reg_dst_s32)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, P_MSB_256 / T_m, 0);
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, P_MSB_256 / T_m,
+                                    0);
                         } else if (vlen == 16) {
-                            cmple(p_tmp0.s, p_512 / T_z,
+                            cmple(p_tmp0.s, p_512 / Xbyak_aarch64::T_z,
                                     ZReg(IDX(reg_dst_s32)).s,
                                     ZReg(IDX(vreg_zeros)).s);
-                            cmpgt(p_tmp1.s, p_512 / T_z,
+                            cmpgt(p_tmp1.s, p_512 / Xbyak_aarch64::T_z,
                                     ZReg(IDX(reg_dst_s32)).s,
                                     ZReg(IDX(vreg_zeros)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, p_tmp0 / T_m,
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, p_tmp0 / T_m,
                                     ZReg(IDX(vreg_zeros)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, p_tmp1 / T_m,
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, p_tmp1 / T_m,
                                     ZReg(IDX(reg_dst_s32)).s);
-                            mov(ZReg(IDX(reg_dst_s32)).s, P_MSB_384 / T_m, 0);
+                            xa_->mov(ZReg(IDX(reg_dst_s32)).s, P_MSB_384 / T_m,
+                                    0);
                         } else {
                             assert(!"unreachable");
                         }
@@ -968,13 +979,13 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::compute_c_block() {
         L(l_main_loop);
         {
             compute_step(ur_c, 0);
-            add(reg_ptr_src_i8, reg_ptr_src_i8,
+            xa_->add(reg_ptr_src_i8, reg_ptr_src_i8,
                     ur_c * c_block * sizeof_src_dt());
-            add(reg_ptr_dst_i8, reg_ptr_dst_i8,
+            xa_->add(reg_ptr_dst_i8, reg_ptr_dst_i8,
                     ur_c * c_block * sizeof_dst_dt());
             adds(c_iter, c_iter, 1);
-            mov_imm(x_tmp_0, c_steps);
-            cmp(c_iter, x_tmp_0);
+            xa_->mov_imm(x_tmp_0, c_steps);
+            xa_->cmp(c_iter, x_tmp_0);
             b(LT, l_main_loop);
         }
     }
@@ -996,15 +1007,15 @@ template <>
 void jit_uni_i8i8_pooling_fwd_ker_t<sve_512>::init_mask() {
     using namespace data_type;
 
-    sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8 * max_num_ll);
+    xa_->sub(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8 * max_num_ll);
 
     for (int ll = 0; ll < max_num_ll; ll++) {
-        mov_imm(reg_mask, jpp.tail[ll]);
-        str(reg_mask, ptr(X_TRANSLATOR_STACK, 8 * ll));
+        xa_->mov_imm(reg_mask, jpp.tail[ll]);
+        str(reg_mask, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 8 * ll));
     }
     for (int ll = 0; ll < max_num_ll; ll++) {
-        ldr(PReg(mask(ll)), ptr(X_TRANSLATOR_STACK));
-        add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
+        ldr(PReg(mask(ll)), Xbyak_aarch64::ptr(X_TRANSLATOR_STACK));
+        xa_->add(X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 8);
     }
 }
 
@@ -1018,18 +1029,18 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
         case pooling_avg_exclude_padding:
             add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, idivider),
                     x_tmp_0);
-            ldr(reg_tmp, ptr(x_tmp_addr));
+            ldr(reg_tmp, Xbyak_aarch64::ptr(x_tmp_addr));
             bic(VReg(IDX(xmm_tmp)).b16, VReg(IDX(xmm_tmp)).b16,
                     VReg(IDX(xmm_tmp)).b16);
-            mov(VReg(IDX(xmm_tmp)).d[0], reg_tmp);
+            xa_->mov(VReg(IDX(xmm_tmp)).d[0], reg_tmp);
             if (vlen == 64) {
                 dup(ZRegS(IDX(vreg_tmp)), ZRegS(IDX(xmm_tmp))[0]);
             } else if (vlen == 32) {
                 dup(ZRegS(IDX(vreg_tmp)), ZRegS(IDX(xmm_tmp))[0]);
-                mov(ZRegS(IDX(vreg_tmp)), P_MSB_256 / T_m, 0);
+                xa_->mov(ZRegS(IDX(vreg_tmp)), P_MSB_256 / T_m, 0);
             } else if (vlen == 16) {
                 dup(VReg4S(IDX(vreg_tmp)), VReg4S(IDX(xmm_tmp))[0]);
-                mov(ZRegS(IDX(vreg_tmp)), P_MSB_384 / T_m, 0);
+                xa_->mov(ZRegS(IDX(vreg_tmp)), P_MSB_384 / T_m, 0);
             } else {
                 assert(!"unreachable");
             }
@@ -1037,29 +1048,31 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
         case pooling_max:
             switch (jpp.src_dt) {
                 case s32:
-                    mov_imm(reg_tmp, nstl::numeric_limits<int32_t>::lowest());
+                    xa_->mov_imm(
+                            reg_tmp, nstl::numeric_limits<int32_t>::lowest());
                     break;
                 case data_type::s8:
-                    mov_imm(reg_tmp, nstl::numeric_limits<int8_t>::lowest());
+                    xa_->mov_imm(
+                            reg_tmp, nstl::numeric_limits<int8_t>::lowest());
                     break;
                 case u8:
-                    mov(reg_tmp, nstl::numeric_limits<uint8_t>::lowest());
+                    xa_->mov(reg_tmp, nstl::numeric_limits<uint8_t>::lowest());
                     break;
                 default: assert(!"unsupported src data_type");
             }
 
             bic(VReg(IDX(xmm_tmp)).b16, VReg(IDX(xmm_tmp)).b16,
                     VReg(IDX(xmm_tmp)).b16);
-            mov(VReg(IDX(xmm_tmp)).d[0], reg_tmp);
+            xa_->mov(VReg(IDX(xmm_tmp)).d[0], reg_tmp);
             if (jpp.src_dt == s32) {
                 if (vlen == 64) {
                     dup(ZRegS(IDX(vreg_tmp)), ZRegS(IDX(xmm_tmp))[0]);
                 } else if (vlen == 32) {
                     dup(ZRegS(IDX(vreg_tmp)), ZRegS(IDX(xmm_tmp))[0]);
-                    mov(ZRegS(IDX(vreg_tmp)), P_MSB_256 / T_m, 0);
+                    xa_->mov(ZRegS(IDX(vreg_tmp)), P_MSB_256 / T_m, 0);
                 } else if (vlen == 16) {
                     dup(VReg4S(IDX(vreg_tmp)), VReg4S(IDX(xmm_tmp))[0]);
-                    mov(ZRegS(IDX(vreg_tmp)), P_MSB_384 / T_m, 0);
+                    xa_->mov(ZRegS(IDX(vreg_tmp)), P_MSB_384 / T_m, 0);
                 } else {
                     assert(!"unreachable");
                 }
@@ -1068,10 +1081,10 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::init_tmp_reg() {
                     dup(ZRegB(IDX(vreg_tmp)), ZRegB(IDX(xmm_tmp))[0]);
                 } else if (vlen == 32) {
                     dup(ZRegB(IDX(vreg_tmp)), ZRegB(IDX(xmm_tmp))[0]);
-                    mov(ZRegS(IDX(vreg_tmp)), P_MSB_256 / T_m, 0);
+                    xa_->mov(ZRegS(IDX(vreg_tmp)), P_MSB_256 / T_m, 0);
                 } else if (vlen == 16) {
                     dup(VReg16B(IDX(vreg_tmp)), VReg16B(IDX(xmm_tmp))[0]);
-                    mov(ZRegS(IDX(vreg_tmp)), P_MSB_384 / T_m, 0);
+                    xa_->mov(ZRegS(IDX(vreg_tmp)), P_MSB_384 / T_m, 0);
                 } else {
                     assert(!"unreachable");
                 }
@@ -1100,24 +1113,24 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::generate() {
 #if !defined(_WIN32)
     // Always use rcx as abi_param1 -
     // see the note about maskmovdqu/maskmovq near reg_param.
-    mov(XReg(3), XReg(0));
+    xa_->mov(XReg(3), XReg(0));
 #endif
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, src_i8), x_tmp_0);
-    ldr(reg_ptr_src_i8, ptr(x_tmp_addr));
+    ldr(reg_ptr_src_i8, Xbyak_aarch64::ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, dst_i8), x_tmp_0);
-    ldr(reg_ptr_dst_i8, ptr(x_tmp_addr));
+    ldr(reg_ptr_dst_i8, Xbyak_aarch64::ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kd_range), x_tmp_0);
-    ldr(reg_kd, ptr(x_tmp_addr));
+    ldr(reg_kd, Xbyak_aarch64::ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kh_range), x_tmp_0);
-    ldr(reg_kh, ptr(x_tmp_addr));
+    ldr(reg_kh, Xbyak_aarch64::ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, kw_range), x_tmp_0);
-    ldr(reg_kw, ptr(x_tmp_addr));
+    ldr(reg_kw, Xbyak_aarch64::ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, src_safe_access),
             x_tmp_0);
-    ldr(reg_src_safe_access, ptr(x_tmp_addr));
+    ldr(reg_src_safe_access, Xbyak_aarch64::ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, dst_safe_access),
             x_tmp_0);
-    ldr(reg_dst_safe_access, ptr(x_tmp_addr));
+    ldr(reg_dst_safe_access, Xbyak_aarch64::ptr(x_tmp_addr));
 
     eor(VReg16B(IDX(vreg_zeros)), VReg16B(IDX(vreg_zeros)),
             VReg16B(IDX(vreg_zeros)));
