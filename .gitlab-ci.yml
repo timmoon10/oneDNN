@@ -19,10 +19,8 @@ fcc_w/_SSL2:
     - git submodule sync --recursive
     - git submodule update --init --recursive
     - source .github/automation/env/setenv-fcc
-    - cd src/cpu/aarch64/xbyak_translator_aarch64
-    - ./setup-xed-on-aarch64.sh
-    - make -j2
-    - cd ../../../../
+    - .github/automation/env/xed.sh -n
+    - .github/automation/env/xbyak_translator_aarch64.sh
     - .github/automation/build.sh --threading omp --mode Release --source-dir $(pwd) --build-dir $(pwd)/build --cmake-opt -DWITH_BLAS=ssl2
     - .github/automation/test.sh --test-kind gtest --build-dir $(pwd)/build --report-dir $(pwd)/report
     - .github/automation/test.sh --test-kind benchdnn --build-dir $(pwd)/build --report-dir $(pwd)/report

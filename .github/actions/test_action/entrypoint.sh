@@ -46,9 +46,7 @@ echo "##################################################"
 echo "# Build Xbyak_aarch64 and Xbyak_translator_aarch64"
 echo "# Wait for a few minutes"
 echo "##################################################"
-cd src/cpu/aarch64/xbyak_translator_aarch64
-make -j2
-cd ${DIR_ROOT}
+.github/automation/env/xbyak_translator_aarch64.sh
 
 # Build oneDNN
 echo "##################################################"
