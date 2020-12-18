@@ -20,10 +20,10 @@
 echo "Using clang-format version: $(clang-format --version)"
 echo "Starting format check..."
 
-tmpfile=$(mktemp)
-find "$(pwd)" -type f | grep -P ".*\.(c|cpp|h|hpp|cl)$" > ${tmpfile}
-num_line=`wc -l ${tmpfile} | cut -f 1 -d " "`
-total_i=0
+TMPFILE=$(mktemp)
+find "$(pwd)" -type f | grep -P ".*\.(c|cpp|h|hpp|cl)$" > ${TMPFILE}
+NUM_LINE=`wc -l ${TMPFILE} | cut -f 1 -d " "`
+TOTAL_I=0
 
 if [ "$(uname)" == "Linux" ]; then
     NUM_CPU="$(grep -c processor /proc/cpuinfo)"
@@ -31,23 +31,25 @@ else
     NUM_CPU="$(sysctl -n hw.physicalcpu)"
 fi
 
-while [ ${total_i} -lt ${num_line} ]
+# Run clang-format in parallel
+while [ ${TOTAL_I} -lt ${NUM_LINE} ]
 do
-    local_i=0
-    array=()
-    while [ ${local_i} -lt ${NUM_CPU} ]
+    LOCAL_I=0
+    ARRAY=()
+    while [ ${LOCAL_I} -lt ${NUM_CPU} ]
     do
-	echo "clang-format `sed -n $((${total_i}+1))p ${tmpfile}`"
-	nohup clang-format -i -style=file `sed -n $((${total_i}+1))p ${tmpfile}` &> /dev/null
-	array+=($!)
-	total_i=$((${total_i}+1))
-	local_i=$((${local_i}+1))
+# Debug
+# echo "clang-format `sed -n $((${TOTAL_I}+1))p ${TMPFILE}`"
+        nohup clang-format -i -style=file `sed -n $((${TOTAL_I}+1))p ${TMPFILE}` &> /dev/null
+        ARRAY+=($!)
+        TOTAL_I=$((${TOTAL_I}+1))
+        LOCAL_I=$((${LOCAL_I}+1))
 
-	if [ ${total_i} -ge ${num_line} ] ; then
-	    break;
-	fi
+        if [ ${TOTAL_I} -ge ${NUM_LINE} ] ; then
+            break;
+        fi
     done
-    wait ${array[@]}
+    wait ${ARRAY[@]}
 done
 
 RETURN_CODE=0
