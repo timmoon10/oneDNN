@@ -94,27 +94,46 @@ private:
             + vreg_to_preserve * vreg_len_preserve;
 
 public:
-    Xbyak_aarch64::WReg W_TMP_0 = w23;
-    Xbyak_aarch64::WReg W_TMP_1 = w24;
-    Xbyak_aarch64::WReg W_TMP_2 = w25;
-    Xbyak_aarch64::WReg W_TMP_3 = w26;
-    Xbyak_aarch64::WReg W_TMP_4 = w27;
-    Xbyak_aarch64::XReg X_TMP_0 = x23;
-    Xbyak_aarch64::XReg X_TMP_1 = x24;
-    Xbyak_aarch64::XReg X_TMP_2 = x25;
-    Xbyak_aarch64::XReg X_TMP_3 = x26;
-    Xbyak_aarch64::XReg X_TMP_4 = x27;
-    Xbyak_aarch64::XReg X_TMP_ADDR = x28;
-    const Xbyak_aarch64::XReg X_DEFAULT_ADDR = x28;
-    Xbyak_aarch64::PReg P_TMP = p0;
-    Xbyak_aarch64::PReg P_TMP_0 = p11;
-    Xbyak_aarch64::PReg P_TMP_1 = p12;
-    Xbyak_aarch64::PReg P_ALL_ZERO = p10;
-    Xbyak_aarch64::PReg P_MSB_256 = p13;
-    Xbyak_aarch64::PReg P_MSB_384 = p14;
-    Xbyak_aarch64::PReg P_ALL_ONE = p15;
+    enum {
+        _cmp_eq_oq = 0u,
+        _cmp_lt_os = 1u,
+        _cmp_le_os = 2u,
+        _cmp_neq_uq = 4u,
+        _cmp_nlt_us = 5u,
+        _cmp_nle_us = 6u,
 
-    Xbyak_aarch64::XReg param1 = abi_param1;
+        _op_floor = 1u,
+        _op_mxcsr = 4u,
+    };
+
+    const Xbyak_aarch64::WReg W_TMP_0 = w23;
+    const Xbyak_aarch64::WReg W_TMP_1 = w24;
+    const Xbyak_aarch64::WReg W_TMP_2 = w25;
+    const Xbyak_aarch64::WReg W_TMP_3 = w26;
+    const Xbyak_aarch64::WReg W_TMP_4 = w27;
+    const Xbyak_aarch64::XReg X_TMP_0 = x23;
+    const Xbyak_aarch64::XReg X_TMP_1 = x24;
+    const Xbyak_aarch64::XReg X_TMP_2 = x25;
+    const Xbyak_aarch64::XReg X_TMP_3 = x26;
+    const Xbyak_aarch64::XReg X_TMP_4 = x27;
+    const Xbyak_aarch64::XReg X_DEFAULT_ADDR = x28;
+    const Xbyak_aarch64::XReg X_SP = x21;
+    const Xbyak_aarch64::XReg X_TRANSLATOR_STACK = x22;
+    const Xbyak_aarch64::PReg P_TMP = p0;
+    const Xbyak_aarch64::PReg P_TMP_0 = p11;
+    const Xbyak_aarch64::PReg P_TMP_1 = p12;
+    const Xbyak_aarch64::PReg P_ALL_ZERO = p10;
+    const Xbyak_aarch64::PReg P_MSB_256 = p13;
+    const Xbyak_aarch64::PReg P_MSB_384 = p14;
+    const Xbyak_aarch64::PReg P_ALL_ONE = p15;
+
+    const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
+            = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
+    constexpr static int x_tmp_vec_size = 5;
+
+    const Xbyak_aarch64::XReg param1 = abi_param1;
+    constexpr static size_t translator_stack_offset = 1024 * 128;
+    constexpr static uint32_t DUMMY_IDX = 99;
 
     inline size_t get_size_of_abi_save_regs() { return size_of_abi_save_regs; }
 
@@ -137,22 +156,28 @@ public:
                     post_ptr(x9, xreg_len * 2));
         }
 
-        ptrue(P_ALL_ONE.b);
-        ptrue(P_MSB_384.b, Xbyak_aarch64::VL16);
-        ptrue(P_MSB_256.b, Xbyak_aarch64::VL32);
-        not_(P_MSB_384.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_384.b);
-        not_(P_MSB_256.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_256.b);
-        pfalse(P_ALL_ZERO.b);
+        if (mayiuse(sve_512)) {
+            ptrue(P_ALL_ONE.b);
+            ptrue(P_MSB_384.b, Xbyak_aarch64::VL16);
+            ptrue(P_MSB_256.b, Xbyak_aarch64::VL32);
+            not_(P_MSB_384.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_384.b);
+            not_(P_MSB_256.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_256.b);
+            pfalse(P_ALL_ZERO.b);
+        }
+        mov(X_SP, sp);
+        sub_imm(X_TRANSLATOR_STACK, X_SP, translator_stack_offset, X_TMP_0);
     }
 
     void postamble() {
         mov(x9, sp);
-        eor(P_ALL_ONE.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_ALL_ONE.b,
-                P_ALL_ONE.b);
-        eor(P_MSB_384.b, P_MSB_384 / Xbyak_aarch64::T_z, P_MSB_384.b,
-                P_MSB_384.b);
-        eor(P_MSB_256.b, P_MSB_256 / Xbyak_aarch64::T_z, P_MSB_256.b,
-                P_MSB_256.b);
+        if (mayiuse(sve_512)) {
+            eor(P_ALL_ONE.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_ALL_ONE.b,
+                    P_ALL_ONE.b);
+            eor(P_MSB_384.b, P_MSB_384 / Xbyak_aarch64::T_z, P_MSB_384.b,
+                    P_MSB_384.b);
+            eor(P_MSB_256.b, P_MSB_256 / Xbyak_aarch64::T_z, P_MSB_256.b,
+                    P_MSB_256.b);
+        }
 
         if (vreg_to_preserve) {
             ld4((v8.d - v11.d)[0], post_ptr(x9, vreg_len_preserve * 4));
@@ -179,6 +204,30 @@ public:
     void L_aligned(Xbyak_aarch64::Label &label, int alignment = 16) {
         align(alignment);
         L(label);
+    }
+
+    void uni_fsub(const Xbyak_aarch64::VReg4S &v1,
+            const Xbyak_aarch64::VReg4S &v2, const Xbyak_aarch64::VReg4S &v3) {
+        fsub(v1, v2, v3);
+    }
+
+    void uni_fsub(const Xbyak_aarch64::ZRegS &z1,
+            const Xbyak_aarch64::ZRegS &z2, const Xbyak_aarch64::ZRegS &z3) {
+        fsub(z1, z2, z3);
+    }
+
+    void uni_eor(const Xbyak_aarch64::VReg &v1, const Xbyak_aarch64::VReg &v2,
+            const Xbyak_aarch64::VReg &v3) {
+        eor(Xbyak_aarch64::VReg16B(v1.getIdx()),
+                Xbyak_aarch64::VReg16B(v2.getIdx()),
+                Xbyak_aarch64::VReg16B(v3.getIdx()));
+    }
+
+    void uni_eor(const Xbyak_aarch64::ZReg &z1, const Xbyak_aarch64::ZReg &z2,
+            const Xbyak_aarch64::ZReg &z3) {
+        eor(Xbyak_aarch64::ZRegD(z1.getIdx()),
+                Xbyak_aarch64::ZRegD(z2.getIdx()),
+                Xbyak_aarch64::ZRegD(z3.getIdx()));
     }
 
     /*
@@ -254,8 +303,9 @@ public:
 
 public:
     jit_generator(void *code_ptr = nullptr, size_t code_size = MAX_CODE_SIZE,
-            bool use_autogrow = true)
-        : Xbyak_aarch64::CodeGenerator(code_size, code_ptr) {}
+            bool use_autogrow = true, cpu_isa_t max_cpu_isa = isa_all)
+        : Xbyak_aarch64::CodeGenerator(code_size, code_ptr)
+        , max_cpu_isa_(max_cpu_isa) {}
     virtual ~jit_generator() {}
 
     virtual const char *name() const = 0;
@@ -281,6 +331,7 @@ public:
     }
 
 private:
+    const cpu_isa_t max_cpu_isa_;
     const uint8_t *getCode() {
         this->ready();
         if (!is_initialized()) return nullptr;
