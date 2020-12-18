@@ -10679,6 +10679,17 @@ enum class cpu_isa {
     avx512_core_amx = dnnl_cpu_isa_avx512_core_amx,
     /// @copydoc dnnl_cpu_isa_avx2_vnni
     avx2_vnni = dnnl_cpu_isa_avx2_vnni,
+
+    /// @copydoc dnnl_cpu_isa_asimd
+    asimd = dnnl_cpu_isa_asimd,
+    /// @copydoc dnnl_cpu_isa_sve_128
+    sve_128 = dnnl_cpu_isa_sve_128,
+    /// @copydoc dnnl_cpu_isa_sve_256
+    sve_256 = dnnl_cpu_isa_sve_256,
+    /// @copydoc dnnl_cpu_isa_sve_384
+    sve_384 = dnnl_cpu_isa_sve_384,
+    /// @copydoc dnnl_cpu_isa_sve_512
+    sve_512 = dnnl_cpu_isa_sve_512,
 };
 
 /// @copydoc dnnl_set_max_cpu_isa()
