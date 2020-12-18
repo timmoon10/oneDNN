@@ -15,7 +15,6 @@ before_script:
 fcc_w/_SSL2:
   stage: test
   image: bce7edfda510
-  allow_failure: true
   script:
     - git submodule sync --recursive
     - git submodule update --init --recursive
