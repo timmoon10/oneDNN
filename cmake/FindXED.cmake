@@ -68,17 +68,17 @@
 #
 
 # Use XED_ROOT_DIR environment variable to find the library and headers
-find_path(TMP_DIR
+find_path(XED_DIR
   NAMES include/xed/xed-init.h
-  PATHS ENV XED_ROOT_DIR
+  PATHS "src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/build_xed_aarch64/kits/xed"
   NO_DEFAULT_PATH
   )
 
-get_filename_component(XED_INCLUDE_DIR "${TMP_DIR}/include" ABSOLUTE)
+get_filename_component(XED_INCLUDE_DIR "${XED_DIR}/include" ABSOLUTE)
 
 find_library(XED_LIBRARY
   NAMES xed
-  PATHS ENV XED_ROOT_DIR
+  PATHS "src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/build_xed_aarch64/kits/xed"
   PATH_SUFFIXES lib
   NO_DEFAULT_PATH
   )

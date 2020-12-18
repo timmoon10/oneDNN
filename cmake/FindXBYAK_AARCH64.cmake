@@ -24,13 +24,13 @@
 #   XBYAK_AARCH64_INCLUDE_DIRS   - include directories for Xbyak_aarch64
 #   XBYAK_AARCH64_LIBRARIES      - link against this library to use Xbyak_aarch64
 
-find_path(TMP_DIR
-  NAMES xbyak_aarch64.h
-  PATHS "src/cpu/aarch64/xbyak_translator_aarch64/translator/third_party/xbyak_aarch64/xbyak_aarch64"
+find_path(XBYAK_AARCH64_DIR
+  NAMES xbyak_aarch64/xbyak_aarch64.h
+  PATHS "src/cpu/aarch64"
   NO_DEFAULT_PATH
   )
 
-get_filename_component(XBYAK_AARCH64_INCLUDE_DIR "${TMP_DIR}/include" ABSOLUTE)
+get_filename_component(XBYAK_AARCH64_INCLUDE_DIR "${XBYAK_AARCH64_DIR}" ABSOLUTE)
 
 find_library(XBYAK_AARCH64_LIBRARY
   NAMES xbyak_aarch64

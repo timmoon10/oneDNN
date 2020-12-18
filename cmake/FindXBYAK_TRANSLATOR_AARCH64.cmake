@@ -25,8 +25,8 @@
 #   XBYAK_TRANSLATOR_AARCH64_LIBRARIES      - link against this library to use xbyak_translator_aarch64
 
 find_path(XBYAK_TRANSLATOR_AARCH64_INCLUDE_DIR
-  NAMES xbyak_translator.h
-  PATHS "src/cpu/aarch64/xbyak_translator_aarch64/translator/include/xbyak_translator_aarch64"
+  NAMES xbyak_translator_aarch64/xbyak_translator.h
+  PATHS "src/cpu/aarch64/xbyak_translator_aarch64/translator/include"
   NO_DEFAULT_PATH
   )
 
