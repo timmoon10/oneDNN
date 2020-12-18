@@ -88,6 +88,9 @@ fi
 cd "${SORUCE_DIR}"
 echo "Calling CMake with otions: ${CMAKE_OPTIONS}"
 cmake . -B${BUILD_DIR} ${CMAKE_OPTIONS} && cd ${BUILD_DIR}
+RESULT=$?
+if [ ${RESULT} -ne 0 ] ; then
+    exit ${RESULT}
+fi
 make -k ${MAKE_OP}
-
 exit $?
