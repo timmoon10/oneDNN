@@ -46,6 +46,8 @@
 #ifndef XBYAK_XBYAK_UTIL_H_
 #define XBYAK_XBYAK_UTIL_H_
 
+#define XBYAK_ONLY_CLASS_CPU
+
 #ifdef XBYAK_ONLY_CLASS_CPU
 #include <stdint.h>
 #include <stdlib.h>
