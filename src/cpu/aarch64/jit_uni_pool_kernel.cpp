@@ -2987,7 +2987,9 @@ void jit_uni_pool_kernel<isa>::generate() {
         const uint16_t _idx[] = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7,
                 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15};
         for (size_t i = 0; i < sizeof(_idx) / sizeof(_idx[0]); ++i)
-            CodeArray::dw(_idx[i]);
+            Xbyak::CodeArray::dw(_idx[i]);
+
+        binCommit();
     }
 }
 
