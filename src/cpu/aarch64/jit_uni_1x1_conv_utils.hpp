@@ -229,64 +229,64 @@ struct rtus_driver_t : public jit_generator {
     void loop_is() {
         using namespace Xbyak_aarch64;
 
-        mov(reg_cur_src, reg_src);
-        mov(reg_cur_iw, reg_iw_start);
-        mov(reg_cur_os, reg_os);
+        xa_->mov(reg_cur_src, reg_src);
+        xa_->mov(reg_cur_iw, reg_iw_start);
+        xa_->mov(reg_cur_os, reg_os);
 
         Label is_loop;
         L(is_loop);
 
         if (src_to_ws_) {
-            ldr(reg_v, ptr(reg_cur_src));
-            str(reg_v, ptr(reg_ws));
+            xa_->ldr(reg_v, Xbyak_aarch64::ptr(reg_cur_src));
+            xa_->str(reg_v, Xbyak_aarch64::ptr(reg_ws));
         } else {
-            ldr(reg_v, ptr(reg_ws));
-            str(reg_v, ptr(reg_cur_src));
+            xa_->ldr(reg_v, Xbyak_aarch64::ptr(reg_ws));
+            xa_->str(reg_v, Xbyak_aarch64::ptr(reg_cur_src));
             for (int w = 1; w < stride_w_; ++w) {
-                add_imm(reg_tmp, reg_cur_src, w * vlen_, reg_tmp_imm);
-                str(reg_zero, ptr(reg_tmp));
+                xa_->add_imm(reg_tmp, reg_cur_src, w * vlen_, reg_tmp_imm);
+                xa_->str(reg_zero, Xbyak_aarch64::ptr(reg_tmp));
             }
         }
 
-        add_imm(reg_ws, reg_ws, vlen_, reg_tmp_imm);
-        add_imm(reg_cur_src, reg_cur_src, stride_w_ * vlen_, reg_tmp_imm);
+        xa_->add_imm(reg_ws, reg_ws, vlen_, reg_tmp_imm);
+        xa_->add_imm(reg_cur_src, reg_cur_src, stride_w_ * vlen_, reg_tmp_imm);
 
         // for 1d or stride_h=1 convolutions the loop over h should be skipped
         if (!(src_step_icb_ == iw_ || src_step_h_ == iw_)) {
             Label skip_h_step;
-            add_imm(reg_cur_iw, reg_cur_iw, stride_w_, reg_tmp_imm);
-            cmp(reg_cur_iw, iw_);
-            b(LT, skip_h_step); //jl(skip_h_step);
+            xa_->add_imm(reg_cur_iw, reg_cur_iw, stride_w_, reg_tmp_imm);
+            xa_->cmp(reg_cur_iw, iw_);
+            xa_->b(LT, skip_h_step); //jl(skip_h_step);
 
             if (src_to_ws_) {
-                add_imm(reg_cur_src, reg_cur_src, (src_step_h_ - iw_) * vlen_,
+                xa_->add_imm(reg_cur_src, reg_cur_src, (src_step_h_ - iw_) * vlen_,
                         reg_tmp_imm);
             } else {
-                mov(reg_cur_src_fin, reg_cur_src);
-                add_imm(reg_cur_src_fin, reg_cur_src_fin,
+                xa_->mov(reg_cur_src_fin, reg_cur_src);
+                xa_->add_imm(reg_cur_src_fin, reg_cur_src_fin,
                         (src_step_h_ - iw_) * vlen_, reg_tmp_imm);
                 Label ih_loop;
                 L(ih_loop);
 
                 for (int w = 0; w < stride_w_; ++w) {
-                    add_imm(reg_tmp, reg_cur_src, w * vlen_, reg_tmp_imm);
-                    str(reg_zero, ptr(reg_tmp));
+                    xa_->add_imm(reg_tmp, reg_cur_src, w * vlen_, reg_tmp_imm);
+                    xa_->str(reg_zero, Xbyak_aarch64::ptr(reg_tmp));
                 }
 
-                add_imm(reg_cur_src, reg_cur_src, stride_w_ * vlen_,
+                xa_->add_imm(reg_cur_src, reg_cur_src, stride_w_ * vlen_,
                         reg_tmp_imm);
-                cmp(reg_cur_src, reg_cur_src_fin);
-                b(LT, ih_loop); //jl(ih_loop);
+                xa_->cmp(reg_cur_src, reg_cur_src_fin);
+                xa_->b(LT, ih_loop); //jl(ih_loop);
             }
-            mov(reg_cur_iw, 0); //xor_(reg_cur_iw, reg_cur_iw);
+            xa_->mov(reg_cur_iw, 0); //xor_(reg_cur_iw, reg_cur_iw);
             L(skip_h_step);
         }
 
-        subs_imm(reg_cur_os, reg_cur_os, vlen_, reg_tmp_imm);
-        b(NE, is_loop); //jnz(is_loop);
+        xa_->subs_imm(reg_cur_os, reg_cur_os, vlen_, reg_tmp_imm);
+        xa_->b(NE, is_loop); //jnz(is_loop);
 
         /* restore dst */
-        sub(reg_ws, reg_ws, reg_os);
+        xa_->sub(reg_ws, reg_ws, reg_os);
     }
 
     void loop_is_nspc() {
@@ -295,15 +295,15 @@ struct rtus_driver_t : public jit_generator {
 
         assert(is_nspc_);
 
-        mov(reg_cur_src, reg_src);
-        mov(reg_cur_iw, reg_iw_start);
+        xa_->mov(reg_cur_src, reg_src);
+        xa_->mov(reg_cur_iw, reg_iw_start);
 
         if (isa == avx512_common) {
             push(rcx); // preserve rcx, used for shift
-            mov(reg_icb_remainder, reg_icb);
+            xa_->mov(reg_icb_remainder, reg_icb);
             and_(reg_icb_remainder,
                     (vlen_ / typesize_) - 1); // # of elements in tail
-            mov(reg_tail_mask, 1);
+            xa_->mov(reg_tail_mask, 1);
             shl(reg_tail_mask, reg_icb_remainder.cvt8());
             dec(reg_tail_mask);
             pop(rcx);
@@ -354,7 +354,7 @@ struct rtus_driver_t : public jit_generator {
             }
         };
 
-        mov(reg_ws_copy, reg_ws);
+        xa_->mov(reg_ws_copy, reg_ws);
         shl(reg_icb, vlen_shift_);
 
         const size_t w_step_factor = ic_ * typesize_;
@@ -367,13 +367,13 @@ struct rtus_driver_t : public jit_generator {
         Label is_loop, ic_loop, ic_loop_tail, ic_loop_finish;
         L(is_loop);
         {
-            mov(reg_cur_src, reg_src);
-            mov(reg_ws, reg_ws_copy);
-            mov(reg_cur_icb, reg_icb);
+            xa_->mov(reg_cur_src, reg_src);
+            xa_->mov(reg_ws, reg_ws_copy);
+            xa_->mov(reg_cur_icb, reg_icb);
 
             L(ic_loop);
             {
-                cmp(reg_cur_icb, load_store_size);
+                xa_->cmp(reg_cur_icb, load_store_size);
                 jl(ic_loop_tail);
 
                 if (src_to_ws_) {
@@ -386,16 +386,16 @@ struct rtus_driver_t : public jit_generator {
                         store_reg(reg_cur_src, reg_zero, w * w_step_factor,
                                 load_store_size);
                 }
-                add(reg_ws, load_store_size);
-                add(reg_cur_src, load_store_size);
+                xa_->add(reg_ws, load_store_size);
+                xa_->add(reg_cur_src, load_store_size);
 
-                sub(reg_cur_icb, load_store_size);
+                xa_->sub(reg_cur_icb, load_store_size);
                 jmp(ic_loop);
             }
 
             L(ic_loop_tail);
             {
-                cmp(reg_cur_icb, 0);
+                xa_->cmp(reg_cur_icb, 0);
                 je(ic_loop_finish);
 
                 if (src_to_ws_) {
@@ -415,42 +415,42 @@ struct rtus_driver_t : public jit_generator {
             }
             L(ic_loop_finish);
 
-            add(reg_ws_copy, w_step_factor);
-            add(reg_src, stride_w_ * w_step_factor);
+            xa_->add(reg_ws_copy, w_step_factor);
+            xa_->add(reg_src, stride_w_ * w_step_factor);
 
             // for 1d or stride_h=1 convolutions the loop over h should be skipped
             const bool skip_oh_step = src_step_h_ == iw_;
             if (!skip_oh_step) {
-                mov(reg_cur_src, reg_src);
+                xa_->mov(reg_cur_src, reg_src);
                 Label skip_h_step;
-                add(reg_cur_iw, stride_w_);
-                cmp(reg_cur_iw, iw_);
+                xa_->add(reg_cur_iw, stride_w_);
+                xa_->cmp(reg_cur_iw, iw_);
                 jl(skip_h_step, T_NEAR);
 
                 if (src_to_ws_) {
-                    add(reg_src, (src_step_h_ - iw_) * w_step_factor);
+                    xa_->add(reg_src, (src_step_h_ - iw_) * w_step_factor);
                 } else {
-                    mov(reg_cur_src_fin, reg_cur_src);
-                    add(reg_cur_src_fin, (src_step_h_ - iw_) * w_step_factor);
+                    xa_->mov(reg_cur_src_fin, reg_cur_src);
+                    xa_->add(reg_cur_src_fin, (src_step_h_ - iw_) * w_step_factor);
                     Label ih_loop_nhwc, ic_ih_loop_nhwc, ic_tail_ih_loop_nhwc,
                             ic_finish_ih_loop_nhwc;
                     L(ih_loop_nhwc);
-                    mov(reg_cur_src, reg_src);
-                    mov(reg_cur_icb, reg_icb);
+                    xa_->mov(reg_cur_src, reg_src);
+                    xa_->mov(reg_cur_icb, reg_icb);
                     L(ic_ih_loop_nhwc);
-                    cmp(reg_cur_icb, load_store_size);
+                    xa_->cmp(reg_cur_icb, load_store_size);
                     jl(ic_tail_ih_loop_nhwc);
 
                     for (int w = 0; w < stride_w_; ++w)
                         store_reg(reg_cur_src, reg_zero, w * w_step_factor,
                                 load_store_size);
 
-                    add(reg_cur_src, load_store_size);
-                    sub(reg_cur_icb, load_store_size);
+                    xa_->add(reg_cur_src, load_store_size);
+                    xa_->sub(reg_cur_icb, load_store_size);
                     jnz(ic_ih_loop_nhwc);
 
                     L(ic_tail_ih_loop_nhwc);
-                    cmp(reg_cur_icb, 0);
+                    xa_->cmp(reg_cur_icb, 0);
                     jle(ic_finish_ih_loop_nhwc);
 
                     for (int w = 0; w < stride_w_; ++w)
@@ -459,15 +459,15 @@ struct rtus_driver_t : public jit_generator {
 
                     L(ic_finish_ih_loop_nhwc);
 
-                    add(reg_src, stride_w_ * w_step_factor);
-                    cmp(reg_src, reg_cur_src_fin);
+                    xa_->add(reg_src, stride_w_ * w_step_factor);
+                    xa_->cmp(reg_src, reg_cur_src_fin);
                     jl(ih_loop_nhwc);
                 }
                 xor_(reg_cur_iw, reg_cur_iw);
                 L(skip_h_step);
             }
 
-            sub(reg_os, 1);
+            xa_->sub(reg_os, 1);
             jnz(is_loop);
         }
 #endif
@@ -480,8 +480,8 @@ struct rtus_driver_t : public jit_generator {
 
         preamble();
 #define READ_PARAM(what) \
-    ldr(reg_##what, \
-            ptr(abi_param1, \
+    xa_->ldr(reg_##what, \
+            Xbyak_aarch64::ptr(abi_param1, \
                     static_cast<int32_t>(offsetof(call_params_t, what))))
         READ_PARAM(src);
         READ_PARAM(icb);
@@ -500,7 +500,7 @@ struct rtus_driver_t : public jit_generator {
                 //}
                 case 64 /*zmm*/: {
                     Xbyak_aarch64::ZRegS zreg_s(reg_zero.getIdx());
-                    fmov(zreg_s); // zero clear
+                    xa_->fmov(zreg_s); // zero clear
                     break;
                 }
                 default: assert(!"rtus kernel failure");
@@ -517,11 +517,11 @@ struct rtus_driver_t : public jit_generator {
 
             loop_is();
 
-            add_imm(reg_ws, reg_ws, ws_step_icb_ * vlen_, reg_tmp_imm);
-            add_imm(reg_src, reg_src, src_step_icb_ * vlen_, reg_tmp_imm);
+            xa_->add_imm(reg_ws, reg_ws, ws_step_icb_ * vlen_, reg_tmp_imm);
+            xa_->add_imm(reg_src, reg_src, src_step_icb_ * vlen_, reg_tmp_imm);
 
-            subs_imm(reg_icb, reg_icb, vlen_ / typesize_, reg_tmp_imm);
-            b(NE, icb_loop); //jnz(icb_loop, T_NEAR);
+            xa_->subs_imm(reg_icb, reg_icb, vlen_ / typesize_, reg_tmp_imm);
+            xa_->b(NE, icb_loop); //jnz(icb_loop, T_NEAR);
         }
 
         //uni_vzeroupper();

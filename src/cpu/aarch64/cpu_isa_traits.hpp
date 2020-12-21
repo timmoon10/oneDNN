@@ -346,7 +346,7 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
     ((isa) == asimd ? prefix STRINGIFY(asimd) : \
     ((isa) == sve_256 ? prefix STRINGIFY(sve_256) : \
     ((isa) == sve_512 ? prefix STRINGIFY(sve_512) : \
-    prefix suffix_if_any)))
+    prefix suffix_if_any))))
 /* clang-format on */
 
 } // namespace aarch64

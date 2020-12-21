@@ -118,7 +118,7 @@ private:
     reg64_t reg_bcast_loop_work = x17;
 
     /* Temporay registers */
-    reg64_t reg_tmp_imm = x18; // tmp for add_imm
+    reg64_t reg_tmp_imm = x18; // tmp for xa_->add_imm
     reg64_t reg_tmp_ofs = x19; // tmp reg to calc bwd wei offset in out_load
 
     void prefetch(
@@ -143,10 +143,10 @@ private:
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
+                xa_->prfm(op, Xbyak_aarch64::ptr(in, static_cast<int32_t>(ofs)));
             } else {
-                add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
-                prfm(op, ptr(reg_tmp_ofs));
+                xa_->add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
+                xa_->prfm(op, Xbyak_aarch64::ptr(reg_tmp_ofs));
             }
         } else {
             PrfopSve op_sve;
@@ -165,11 +165,11 @@ private:
 
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
-                prfw(op_sve, reg_p_all_ones,
-                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                xa_->prfw(op_sve, reg_p_all_ones,
+                        Xbyak_aarch64::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
-                add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
-                prfw(op_sve, reg_p_all_ones, ptr(reg_tmp_ofs));
+                xa_->add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
+                xa_->prfw(op_sve, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_ofs));
             }
         }
     }

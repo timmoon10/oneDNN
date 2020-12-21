@@ -47,17 +47,17 @@ using namespace dnnl::impl::utils;
 
 void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
 
-    mov(aux1_reg_bcast_data, reg_bcast_data);
-    mov(aux_reg_bcast_data, reg_bcast_data);
-    mov(aux_reg_output_data, reg_output_data);
-    mov(reg_bcast_loop_iter, reg_bcast_loop_work);
+    xa_->mov(aux1_reg_bcast_data, reg_bcast_data);
+    xa_->mov(aux_reg_bcast_data, reg_bcast_data);
+    xa_->mov(aux_reg_output_data, reg_output_data);
+    xa_->mov(reg_bcast_loop_iter, reg_bcast_loop_work);
 
     Label bcast_loop;
     Label bcast_loop_tail;
     Label large_tail;
 
     cmp_imm(reg_bcast_loop_iter, jcp.bcast_block, reg_tmp_imm);
-    b(LT, bcast_loop_tail);
+    xa_->b(LT, bcast_loop_tail);
 
     L(bcast_loop);
     {
@@ -68,27 +68,27 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
             if (i + 1 == num_substeps) L(large_tail);
             reduce_loop(load_loop_blk, jcp.ur, i, false);
             if (i < num_substeps - 1) {
-                add_imm(aux1_reg_bcast_data, aux1_reg_bcast_data,
+                xa_->add_imm(aux1_reg_bcast_data, aux1_reg_bcast_data,
                         jcp.bcast_loop_bcast_substep, reg_tmp_imm);
-                add_imm(aux_reg_output_data, aux_reg_output_data,
+                xa_->add_imm(aux_reg_output_data, aux_reg_output_data,
                         jcp.bcast_loop_output_substep, reg_tmp_imm);
             } else {
-                add_imm(aux1_reg_bcast_data, aux1_reg_bcast_data,
+                xa_->add_imm(aux1_reg_bcast_data, aux1_reg_bcast_data,
                         jcp.bcast_loop_bcast_step
                                 - (num_substeps - 1)
                                         * jcp.bcast_loop_bcast_substep,
                         reg_tmp_imm);
-                add_imm(aux_reg_output_data, aux_reg_output_data,
+                xa_->add_imm(aux_reg_output_data, aux_reg_output_data,
                         jcp.bcast_loop_output_step
                                 - (num_substeps - 1)
                                         * jcp.bcast_loop_output_substep,
                         reg_tmp_imm);
             }
-            subs_imm(reg_bcast_loop_iter, reg_bcast_loop_iter, jcp.ur,
+            xa_->subs_imm(reg_bcast_loop_iter, reg_bcast_loop_iter, jcp.ur,
                     reg_tmp_imm);
         }
         cmp_imm(reg_bcast_loop_iter, jcp.bcast_block, reg_tmp_imm);
-        b(GE, bcast_loop);
+        xa_->b(GE, bcast_loop);
     }
 
     L(bcast_loop_tail);
@@ -96,11 +96,11 @@ void jit_aarch64_sve_512_1x1_conv_kernel::bcast_loop(int load_loop_blk) {
         Label bcast_loop_tail_out;
         if (jcp.ur_tail >= jcp.ur) {
             cmp_imm(reg_bcast_loop_iter, jcp.ur, reg_tmp_imm);
-            b(GE, large_tail);
+            xa_->b(GE, large_tail);
         }
         if (jcp.ur_tail % jcp.ur) {
-            cmp(reg_bcast_loop_iter, 0);
-            b(LE, bcast_loop_tail_out);
+            xa_->cmp(reg_bcast_loop_iter, 0);
+            xa_->b(LE, bcast_loop_tail_out);
             reduce_loop(load_loop_blk, jcp.ur_tail % jcp.ur, 0, true);
             L(bcast_loop_tail_out);
         }
@@ -141,11 +141,11 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
     auto bias_load = [=](int i_load, int i_ur) {
         int ofs = jcp.typesize_out * jcp.oc_block * i_load;
         if (ldr_imm_check(ofs)) {
-            ldr(vreg_accum(i_load, i_ur),
-                    ptr(reg_bias_data, static_cast<int32_t>(VL_OFS(ofs))));
+            xa_->ldr(vreg_accum(i_load, i_ur),
+                    Xbyak_aarch64::ptr(reg_bias_data, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
-            add_imm(reg_tmp_ofs, reg_bias_data, ofs, reg_tmp_imm);
-            ldr(vreg_accum(i_load, i_ur), ptr(reg_tmp_ofs));
+            xa_->add_imm(reg_tmp_ofs, reg_bias_data, ofs, reg_tmp_imm);
+            xa_->ldr(vreg_accum(i_load, i_ur), Xbyak_aarch64::ptr(reg_tmp_ofs));
         }
     };
 
@@ -169,26 +169,26 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         ofs = jcp.typesize_in * ofs;
         int tmp_ofs = ofs;
         if (ld1rw_imm_check(ofs)) {
-            ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
-                    ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
+            xa_->ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
+                    Xbyak_aarch64::ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
         } else {
             if ((prev_ofs != -1) && ld1rw_imm_check(ofs - prev_ofs)) {
-                ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr,
+                xa_->ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>((ofs - prev_ofs))));
             } else {
                 if ((prev_ofs != -1) && ((ofs - prev_ofs) >= 0)) {
                     ofs = ofs - prev_ofs;
-                    add_imm(reg_prev_bcast_addr, reg_prev_bcast_addr, ofs,
+                    xa_->add_imm(reg_prev_bcast_addr, reg_prev_bcast_addr, ofs,
                             reg_tmp_imm);
                 } else {
-                    add_imm(reg_prev_bcast_addr, aux_reg_bcast_data, ofs,
+                    xa_->add_imm(reg_prev_bcast_addr, aux_reg_bcast_data, ofs,
                             reg_tmp_imm);
                 }
                 prev_ofs = tmp_ofs;
 
-                ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr));
+                xa_->ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr));
             }
         }
         return prev_ofs;
@@ -208,11 +208,11 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         if (ldr_imm_check(ofs)) {
             ofs = VL_OFS(ofs);
-            ldr(vreg_load(i_load, i_fma),
-                    ptr(aux_reg_load_data, static_cast<int32_t>(ofs)));
+            xa_->ldr(vreg_load(i_load, i_fma),
+                    Xbyak_aarch64::ptr(aux_reg_load_data, static_cast<int32_t>(ofs)));
         } else {
-            add_imm(reg_tmp_ofs, aux_reg_load_data, ofs, reg_tmp_imm);
-            ldr(vreg_load(i_load, i_fma), ptr(reg_tmp_ofs));
+            xa_->add_imm(reg_tmp_ofs, aux_reg_load_data, ofs, reg_tmp_imm);
+            xa_->ldr(vreg_load(i_load, i_fma), Xbyak_aarch64::ptr(reg_tmp_ofs));
         }
     };
 
@@ -237,33 +237,33 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         ofs_tmp = ofs;
 
-        if (bwd_iload) mov(r, i_load);
+        if (bwd_iload) xa_->mov(r, i_load);
         if (ldr_imm_check(ofs)) {
-            if (bwd_iload) madd(r, r, reg_output_stride, aux_reg_output_data);
-            ldr(vreg_sum(), ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
+            if (bwd_iload) xa_->madd(r, r, reg_output_stride, aux_reg_output_data);
+            xa_->ldr(vreg_sum(), Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)
                     && (VL_OFS(ofs - prev_ofs) <= LDRMAX)) {
                 if (bwd_iload)
-                    madd(r, r, reg_output_stride, reg_prev_out_addr);
+                    xa_->madd(r, r, reg_output_stride, reg_prev_out_addr);
                 else
                     r = reg_prev_out_addr;
-                ldr(vreg_sum(),
-                        ptr(r, static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
+                xa_->ldr(vreg_sum(),
+                        Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
             } else {
                 if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)) {
                     ofs = ofs - prev_ofs;
-                    add_imm(reg_prev_out_addr, reg_prev_out_addr, ofs,
+                    xa_->add_imm(reg_prev_out_addr, reg_prev_out_addr, ofs,
                             reg_tmp_imm);
                 } else {
-                    add_imm(reg_prev_out_addr, aux_reg_output_data, ofs,
+                    xa_->add_imm(reg_prev_out_addr, aux_reg_output_data, ofs,
                             reg_tmp_imm);
                 }
                 if (bwd_iload)
-                    madd(r, r, reg_output_stride, reg_prev_out_addr);
+                    xa_->madd(r, r, reg_output_stride, reg_prev_out_addr);
                 else
                     r = reg_prev_out_addr;
-                ldr(vreg_sum(), ptr(r));
+                xa_->ldr(vreg_sum(), Xbyak_aarch64::ptr(r));
 
                 prev_ofs = ofs_tmp;
             }
@@ -285,33 +285,33 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         }
         ofs_tmp = ofs;
 
-        if (bwd_iload) mov(r, i_load);
+        if (bwd_iload) xa_->mov(r, i_load);
         if (str_imm_check(ofs)) {
-            if (bwd_iload) madd(r, r, reg_output_stride, aux_reg_output_data);
-            str(vreg_accum(i_load, i_ur),
-                    ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
+            if (bwd_iload) xa_->madd(r, r, reg_output_stride, aux_reg_output_data);
+            xa_->str(vreg_accum(i_load, i_ur),
+                    Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             if ((prev_ofs != -1) && str_imm_check(ofs - prev_ofs)) {
                 if (bwd_iload)
-                    madd(r, r, reg_output_stride, reg_prev_out_addr);
+                    xa_->madd(r, r, reg_output_stride, reg_prev_out_addr);
                 else
                     r = reg_prev_out_addr;
-                str(vreg_accum(i_load, i_ur),
-                        ptr(r, static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
+                xa_->str(vreg_accum(i_load, i_ur),
+                        Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
             } else {
                 if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)) {
                     ofs = ofs - prev_ofs;
-                    add_imm(reg_prev_out_addr, reg_prev_out_addr, ofs,
+                    xa_->add_imm(reg_prev_out_addr, reg_prev_out_addr, ofs,
                             reg_tmp_imm);
                 } else {
-                    add_imm(reg_prev_out_addr, aux_reg_output_data, ofs,
+                    xa_->add_imm(reg_prev_out_addr, aux_reg_output_data, ofs,
                             reg_tmp_imm);
                 }
                 if (bwd_iload)
-                    madd(r, r, reg_output_stride, reg_prev_out_addr);
+                    xa_->madd(r, r, reg_output_stride, reg_prev_out_addr);
                 else
                     r = reg_prev_out_addr;
-                str(vreg_accum(i_load, i_ur), ptr(r));
+                xa_->str(vreg_accum(i_load, i_ur), Xbyak_aarch64::ptr(r));
 
                 prev_ofs = ofs_tmp;
             }
@@ -351,7 +351,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                 && one_of(jcp.prop_kind, forward_training, forward_inference)) {
 
             tst(reg_reduce_pos_flag, FLAG_REDUCE_FIRST);
-            b(EQ, init_zero);
+            xa_->b(EQ, init_zero);
 
             for (int i_load = 0; i_load < load_loop_blk; i_load++)
                 for (int i_ur = 0; i_ur < ur; ++i_ur) {
@@ -361,14 +361,14 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 #endif
                     bias_load(i_load, i_ur);
                 }
-            b(init_done);
+            xa_->b(init_done);
         }
 
         L(init_zero);
         /* Zero clear */
         for (int i_load = 0; i_load < load_loop_blk; ++i_load)
             for (int i_ur = 0; i_ur < ur; ++i_ur) {
-                fmov(vreg_accum_s(i_load, i_ur));
+                xa_->fmov(vreg_accum_s(i_load, i_ur));
             }
         L(init_done);
     };
@@ -377,7 +377,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         Label store_noadd;
         if (!jcp.with_sum) {
             tst(reg_reduce_pos_flag, FLAG_REDUCE_FIRST);
-            b(NE, store_noadd);
+            xa_->b(NE, store_noadd);
         }
 
         int prev_ofs = -1;
@@ -389,7 +389,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                     r = r | k_load_dim_mask | T_z;
 #endif
                 prev_ofs = out_load(i_load, i_ur, prev_ofs);
-                fadd(r, r, vreg_sum_s());
+                xa_->fadd(r, r, vreg_sum_s());
             }
 
         L(store_noadd);
@@ -397,7 +397,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 #ifndef DISABLE_ELTWISE
             Label store_noeltwise;
             tst(reg_reduce_pos_flag, FLAG_REDUCE_LAST);
-            b(EQ, store_noeltwise);
+            xa_->b(EQ, store_noeltwise);
             eltwise_injector_->compute_vector_range(0, ur * load_loop_blk);
             L(store_noeltwise);
 #else
@@ -466,7 +466,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                     if (i_load + 1 == load_loop_blk && load_dim_tail)
                         vreg_acc = vreg_acc | k_load_dim_mask | T_z;
 #endif
-                    fmla(vreg_accum_s(i_load, i_ur), reg_p_all_ones,
+                    xa_->fmla(vreg_accum_s(i_load, i_ur), reg_p_all_ones,
                             vreg_load_s(i_load, 0),
                             vreg_bcast_s(bcast_reg_ofs
                                     + ((bcast_reg_startidx + i_ur)
@@ -484,27 +484,27 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
     Label reduce_loop;
     Label reduce_loop_tail;
 
-    mov(aux_reg_load_data, reg_load_data);
+    xa_->mov(aux_reg_load_data, reg_load_data);
 
-    mov(aux_reg_bcast_data, aux1_reg_bcast_data);
+    xa_->mov(aux_reg_bcast_data, aux1_reg_bcast_data);
     init();
 
-    mov(reduce_loop_iter, reg_reduce_loop_work);
-    subs_imm(reduce_loop_iter, reduce_loop_iter, jcp.reduce_loop_unroll,
+    xa_->mov(reduce_loop_iter, reg_reduce_loop_work);
+    xa_->subs_imm(reduce_loop_iter, reduce_loop_iter, jcp.reduce_loop_unroll,
             reg_tmp_imm);
-    b(LE, reduce_loop_tail);
+    xa_->b(LE, reduce_loop_tail);
 
     align(32);
     L(reduce_loop);
     {
         fma_block(false);
-        add_imm(aux_reg_bcast_data, aux_reg_bcast_data,
+        xa_->add_imm(aux_reg_bcast_data, aux_reg_bcast_data,
                 jcp.reduce_loop_bcast_step, reg_tmp_imm);
-        add_imm(aux_reg_load_data, aux_reg_load_data, jcp.reduce_loop_load_step,
+        xa_->add_imm(aux_reg_load_data, aux_reg_load_data, jcp.reduce_loop_load_step,
                 reg_tmp_imm);
-        subs_imm(reduce_loop_iter, reduce_loop_iter, jcp.reduce_loop_unroll,
+        xa_->subs_imm(reduce_loop_iter, reduce_loop_iter, jcp.reduce_loop_unroll,
                 reg_tmp_imm);
-        b(GT, reduce_loop);
+        xa_->b(GT, reduce_loop);
     }
 
     L(reduce_loop_tail);
@@ -517,29 +517,29 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
     preamble();
 
     /* All 1 predicate register */
-    ptrue(reg_p_all_ones.b);
+    xa_->ptrue(reg_p_all_ones.b);
 
     /* Pointers indicate weight, input, and output data */
-    ldr(reg_bcast_data, ptr(abi_param1, GET_OFF(bcast_data))); // Input
-    ldr(reg_load_data, ptr(abi_param1, GET_OFF(load_data))); // Weight
-    ldr(reg_output_data, ptr(abi_param1, GET_OFF(output_data))); // Output
+    xa_->ldr(reg_bcast_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bcast_data))); // Input
+    xa_->ldr(reg_load_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(load_data))); // Weight
+    xa_->ldr(reg_output_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(output_data))); // Output
 
     /* Pointer indicates bias data if the layer has bias option */
-    if (jcp.with_bias) ldr(reg_bias_data, ptr(abi_param1, GET_OFF(bias_data)));
+    if (jcp.with_bias) xa_->ldr(reg_bias_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bias_data)));
 
     /* Get workloads of each loop */
-    ldr(reg_load_loop_work, ptr(abi_param1, GET_OFF(load_dim)));
-    ldr(reg_bcast_loop_work, ptr(abi_param1, GET_OFF(bcast_dim)));
-    ldr(reg_reduce_loop_work, ptr(abi_param1, GET_OFF(reduce_dim)));
+    xa_->ldr(reg_load_loop_work, Xbyak_aarch64::ptr(abi_param1, GET_OFF(load_dim)));
+    xa_->ldr(reg_bcast_loop_work, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bcast_dim)));
+    xa_->ldr(reg_reduce_loop_work, Xbyak_aarch64::ptr(abi_param1, GET_OFF(reduce_dim)));
 
     /* A flag for controlling reduce loop */
-    ldr(reg_reduce_pos_flag, ptr(abi_param1, GET_OFF(first_last_flag)));
+    xa_->ldr(reg_reduce_pos_flag, Xbyak_aarch64::ptr(abi_param1, GET_OFF(first_last_flag)));
 
     if (one_of(jcp.prop_kind, forward_training, forward_inference))
-        mov(reg_relu_ns, reinterpret_cast<size_t>(&jcp.eltwise.alpha));
+        xa_->mov(reg_relu_ns, reinterpret_cast<size_t>(&jcp.eltwise.alpha));
 
     if (jcp.prop_kind == backward_weights)
-        ldr(reg_output_stride, ptr(abi_param1, GET_OFF(output_stride)));
+        xa_->ldr(reg_output_stride, Xbyak_aarch64::ptr(abi_param1, GET_OFF(output_stride)));
 
     const int load_dim_tail = jcp.load_dim % jcp.load_block;
 
@@ -548,7 +548,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
         assert(NULL);
 #else
         Reg32 reg_tail_32 = reg_load_dim_tail_mask.cvt32();
-        mov(reg_tail_32, (1 << load_dim_tail) - 1);
+        xa_->mov(reg_tail_32, (1 << load_dim_tail) - 1);
         kmovw(k_load_dim_tail_mask, reg_tail_32);
 #endif
     }
@@ -558,7 +558,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
         if (load_dim_tail)
             kxnorw(k_load_dim_mask, k_load_dim_mask, k_load_dim_mask);
 #endif
-        subs_imm(reg_load_loop_work, reg_load_loop_work,
+        xa_->subs_imm(reg_load_loop_work, reg_load_loop_work,
                 load_loop_blk * jcp.load_loop_iter_step, reg_tmp_imm);
 
         if (load_dim_tail) {
@@ -572,15 +572,15 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
 #endif
         }
         bcast_loop(load_loop_blk);
-        add_imm(reg_load_data, reg_load_data,
+        xa_->add_imm(reg_load_data, reg_load_data,
                 load_loop_blk * jcp.load_loop_load_step, reg_tmp_imm);
         switch (jcp.prop_kind) {
             case forward_training:
             case forward_inference:
-                add_imm(reg_bias_data, reg_bias_data,
+                xa_->add_imm(reg_bias_data, reg_bias_data,
                         load_loop_blk * jcp.load_block * jcp.typesize_out,
                         reg_tmp_imm);
-                add_imm(reg_output_data, reg_output_data,
+                xa_->add_imm(reg_output_data, reg_output_data,
                         load_loop_blk * jcp.load_block * jcp.typesize_out
                                 * (is_out_layout_nxc(jcp)
                                                 ? 1
@@ -590,14 +590,14 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
                         reg_tmp_imm);
                 break;
             case backward_data:
-                add_imm(reg_output_data, reg_output_data,
+                xa_->add_imm(reg_output_data, reg_output_data,
                         load_loop_blk * jcp.load_block * jcp.typesize_out
                                 * (is_out_layout_nxc(jcp) ? 1 : jcp.bcast_dim),
                         reg_tmp_imm);
                 break;
             case backward_weights:
                 for (int i_load = 0; i_load < load_loop_blk; i_load++)
-                    add(reg_output_data, reg_output_data, reg_output_stride);
+                    xa_->add(reg_output_data, reg_output_data, reg_output_stride);
                 break;
             default: assert(!"invalid prop_kind");
         }
@@ -619,7 +619,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
         int label_idx = num_ur_cases - ur_idx - 1;
         if (jcp.nb_load > label_idx && jcp.ur <= ur_cases[ur_idx]) {
             cmp_imm(reg_load_loop_work, simd_w * (label_idx + 1), reg_tmp_imm);
-            b(LE, load_loop_blk[label_idx]);
+            xa_->b(LE, load_loop_blk[label_idx]);
         }
     }
 
@@ -629,25 +629,25 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
             L(load_loop_blk[label_idx]);
             {
                 if (label_idx == 0) {
-                    cmp(reg_load_loop_work, 0);
-                    b(LE, load_loop_blk[num_ur_cases]);
+                    xa_->cmp(reg_load_loop_work, 0);
+                    xa_->b(LE, load_loop_blk[num_ur_cases]);
                 }
                 load_loop_body(label_idx + 1);
                 if (label_idx - 1 > 0) {
                     cmp_imm(reg_load_loop_work, 2 * label_idx * simd_w,
                             reg_tmp_imm);
-                    b(EQ, load_loop_blk[label_idx - 1]);
+                    xa_->b(EQ, load_loop_blk[label_idx - 1]);
                 }
                 cmp_imm(reg_load_loop_work, label_idx * simd_w, reg_tmp_imm);
-                b(GT, load_loop_blk[label_idx]);
+                xa_->b(GT, load_loop_blk[label_idx]);
             }
             for (int idx = label_idx - 1; idx > 0; --idx) {
                 cmp_imm(reg_load_loop_work, simd_w * (idx + 1), reg_tmp_imm);
-                b(EQ, load_loop_blk[idx]);
+                xa_->b(EQ, load_loop_blk[idx]);
             }
             if (ur_idx < num_ur_cases - 2) {
                 cmp_imm(reg_load_loop_work, simd_w, reg_tmp_imm);
-                b(LE, load_loop_blk[0]);
+                xa_->b(LE, load_loop_blk[0]);
             }
         }
     }
