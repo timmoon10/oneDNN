@@ -224,7 +224,6 @@ struct rtus_driver_t : public jit_generator {
 
         const int simd_w = vlen_ / sizeof(float);
         ic_tail_ = ic_ % simd_w;
-
     }
 
     void loop_is() {
@@ -243,7 +242,7 @@ struct rtus_driver_t : public jit_generator {
         } else {
             ldr(reg_v, ptr(reg_ws));
             str(reg_v, ptr(reg_cur_src));
-            for (int w = 1; w < stride_w_; ++w){
+            for (int w = 1; w < stride_w_; ++w) {
                 add_imm(reg_tmp, reg_cur_src, w * vlen_, reg_tmp_imm);
                 str(reg_zero, ptr(reg_tmp));
             }
@@ -260,20 +259,22 @@ struct rtus_driver_t : public jit_generator {
             b(LT, skip_h_step); //jl(skip_h_step);
 
             if (src_to_ws_) {
-                add_imm(reg_cur_src, reg_cur_src, (src_step_h_ - iw_) * vlen_, reg_tmp_imm);
+                add_imm(reg_cur_src, reg_cur_src, (src_step_h_ - iw_) * vlen_,
+                        reg_tmp_imm);
             } else {
                 mov(reg_cur_src_fin, reg_cur_src);
-                add_imm(reg_cur_src_fin, reg_cur_src_fin, 
-                  (src_step_h_ - iw_) * vlen_, reg_tmp_imm);
+                add_imm(reg_cur_src_fin, reg_cur_src_fin,
+                        (src_step_h_ - iw_) * vlen_, reg_tmp_imm);
                 Label ih_loop;
                 L(ih_loop);
 
-                for (int w = 0; w < stride_w_; ++w){
+                for (int w = 0; w < stride_w_; ++w) {
                     add_imm(reg_tmp, reg_cur_src, w * vlen_, reg_tmp_imm);
                     str(reg_zero, ptr(reg_tmp));
                 }
 
-                add_imm(reg_cur_src, reg_cur_src, stride_w_ * vlen_, reg_tmp_imm);
+                add_imm(reg_cur_src, reg_cur_src, stride_w_ * vlen_,
+                        reg_tmp_imm);
                 cmp(reg_cur_src, reg_cur_src_fin);
                 b(LT, ih_loop); //jl(ih_loop);
             }
@@ -479,7 +480,9 @@ struct rtus_driver_t : public jit_generator {
 
         preamble();
 #define READ_PARAM(what) \
-    ldr(reg_##what, ptr(abi_param1, static_cast<int32_t>(offsetof(call_params_t, what))))
+    ldr(reg_##what, \
+            ptr(abi_param1, \
+                    static_cast<int32_t>(offsetof(call_params_t, what))))
         READ_PARAM(src);
         READ_PARAM(icb);
         READ_PARAM(os);

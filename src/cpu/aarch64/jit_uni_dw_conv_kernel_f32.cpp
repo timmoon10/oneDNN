@@ -107,8 +107,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
 
                 ZReg zreg_ker = get_ker_reg(0);
                 ZRegS zregs_ker = get_ker_reg_s(0);
-                add_imm(reg_tmp_addr, aux_reg_kernel,
-                        ker_off * sizeof(float), reg_tmp_imm);
+                add_imm(reg_tmp_addr, aux_reg_kernel, ker_off * sizeof(float),
+                        reg_tmp_imm);
                 ldr(zreg_ker, ptr(reg_tmp_addr));
 
                 int ow_start = get_ow_start(kw, pad_l);
@@ -126,14 +126,13 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
 
                     ZRegS zregs_acc = get_acc_reg_s(ch * ur_w + ow);
                     //ur_ch_blocks * ur_w + ch * ur_w + ow);
-                    fmla(
-                            zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
+                    fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
                 }
             }
         }
 
-        add_imm(aux_reg_kernel, aux_reg_kernel,
-                jcp.kw * ch_blk * sizeof(float), reg_tmp_imm);
+        add_imm(aux_reg_kernel, aux_reg_kernel, jcp.kw * ch_blk * sizeof(float),
+                reg_tmp_imm);
         if (jcp.is_fused_conv) {
             // Move to next row pointer in the buffer
             add_imm(aux_reg_input_buffer_ptr, aux_reg_input_buffer_ptr,
@@ -236,8 +235,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
             add_imm(reg_output, reg_output, out_ch_stride, reg_tmp_imm);
             if (jcp.with_bias)
                 add_imm(reg_bias, reg_bias, bias_stride, reg_tmp_imm);
-            sub_imm(aux_reg_ch_blocks, aux_reg_ch_blocks,
-                    jcp.nb_ch_blocking, reg_tmp_imm);
+            sub_imm(aux_reg_ch_blocks, aux_reg_ch_blocks, jcp.nb_ch_blocking,
+                    reg_tmp_imm);
             cmp(aux_reg_ch_blocks, jcp.nb_ch_blocking);
             b(GE, ch_loop_label);
         }
@@ -301,8 +300,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
         } else {
             if (l_pad > 0) {
                 compute_loop(ur_w, ur_ch_blocks, l_pad, 0);
-                add_imm(
-                        reg_input, reg_input, inp_shift_pad, reg_tmp_imm);
+                add_imm(reg_input, reg_input, inp_shift_pad, reg_tmp_imm);
                 add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
                 add(reg_oi, reg_oi, 1);
             }
@@ -311,10 +309,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
                 L(ow_loop_label);
                 {
                     compute_loop(ur_w, ur_ch_blocks, 0, 0);
-                    add_imm(
-                            reg_input, reg_input, inp_shift, reg_tmp_imm);
-                    add_imm(
-                            reg_output, reg_output, out_shift, reg_tmp_imm);
+                    add_imm(reg_input, reg_input, inp_shift, reg_tmp_imm);
+                    add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
 
                     add(reg_oi, reg_oi, 1);
                     cmp(reg_oi, n_oi);
@@ -338,8 +334,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     this->preamble();
     ptrue(reg_p_all_ones.b);
     if (jcp.is_fused_conv) {
-        ldr(reg_input_buffer_ptr,
-                ptr(abi_param1, GET_OFF(src)));
+        ldr(reg_input_buffer_ptr, ptr(abi_param1, GET_OFF(src)));
         /* In case of fused depthwise convolution, `param.src` is not a pointer
         to input, instead it points to a buffer containing pointers to
         consecutive rows of input in format Cwc with blocking nb_ch_blocking.
@@ -360,9 +355,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     }
     ldr(reg_output, ptr(abi_param1, GET_OFF(dst)));
     ldr(reg_kernel, ptr(abi_param1, GET_OFF(filt)));
-    if (jcp.with_bias) {
-        ldr(reg_bias, ptr(abi_param1, GET_OFF(bias)));
-    }
+    if (jcp.with_bias) { ldr(reg_bias, ptr(abi_param1, GET_OFF(bias))); }
     ldr(reg_kh, ptr(abi_param1, GET_OFF(kh_padding)));
     ldr(reg_ch_blocks, ptr(abi_param1, GET_OFF(ch_blocks)));
 
@@ -401,7 +394,6 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
 }
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve_512>;
-
 
 template <cpu_isa_t isa>
 inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::load_ddst(
@@ -451,8 +443,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
                 ZReg zreg_ker = get_ker_reg(0);
                 ZRegS zregs_ker = get_ker_reg_s(0);
 
-                add_imm(reg_tmp_addr, aux1_reg_kernel,
-                        ker_off * sizeof(float), reg_tmp_imm);
+                add_imm(reg_tmp_addr, aux1_reg_kernel, ker_off * sizeof(float),
+                        reg_tmp_imm);
                 ldr(zreg_ker, ptr(reg_tmp_addr)); // filter?
 
                 for (int w = 0; w < ur_str_w; w++) { // unrolling dst width?
@@ -465,8 +457,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
                     ldr(zreg_src, ptr(reg_tmp_addr)); // src?
 
                     ZRegS zregs_acc = get_acc_reg_s(ch * ur_str_w + w);
-                    fmla(
-                            zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
+                    fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
                 }
             }
 
@@ -690,15 +681,14 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-                add_imm(reg_tmp_addr, reg_tmp_input,
-                        off_input * sizeof(float), reg_tmp_imm);
+                add_imm(reg_tmp_addr, reg_tmp_input, off_input * sizeof(float),
+                        reg_tmp_imm);
                 if (simd_w == 16) {
                     ZReg zreg_input = get_input_reg(c % jcp.kw);
                     ldr(zreg_input, ptr(reg_tmp_addr));
                 } else if (simd_w == 8) {
                     ZRegS zregs_input = get_input_reg_s(c % jcp.kw);
-                    ld1w(
-                            zregs_input, reg_p_all_ones, ptr(reg_tmp_addr));
+                    ld1w(zregs_input, reg_p_all_ones, ptr(reg_tmp_addr));
                 } else {
                     assert(!"Unsupport: simd_w != 16, 8");
                 }
@@ -714,16 +704,14 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (overlap + c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-                add_imm(reg_tmp_addr, reg_tmp_input,
-                        off_input * sizeof(float), reg_tmp_imm);
+                add_imm(reg_tmp_addr, reg_tmp_input, off_input * sizeof(float),
+                        reg_tmp_imm);
                 if (simd_w == 16) {
                     ZReg zreg_input = get_input_reg((overlap + c) % jcp.kw);
                     ldr(zreg_input, ptr(reg_tmp_addr));
                 } else if (simd_w == 8) {
-                    ZRegS zregs_input
-                            = get_input_reg_s((overlap + c) % jcp.kw);
-                    ld1w(
-                            zregs_input, reg_p_all_ones, ptr(reg_tmp_addr));
+                    ZRegS zregs_input = get_input_reg_s((overlap + c) % jcp.kw);
+                    ld1w(zregs_input, reg_p_all_ones, ptr(reg_tmp_addr));
                 } else {
                     assert(!"Unsupport: simd_w != 16, 8");
                 }
@@ -742,8 +730,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                     && (io_overlap - jcp.l_pad + jcp.r_pad > right_border);
             if (over_steps_bdry) continue;
 
-            ZRegS zregs_input
-                    = get_input_reg_s((io_overlap - l_pad) % jcp.kw);
+            ZRegS zregs_input = get_input_reg_s((io_overlap - l_pad) % jcp.kw);
             ZRegS zregs_acc = get_acc_reg_s(i_kw);
             ZRegS zregs_aux = zregs_input;
 
@@ -947,8 +934,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
     const int t_overlap_off = jcp.t_pad % jcp.stride_h == 0 ? jcp.stride_h : 1;
     const int b_overlap_off = jcp.b_pad % jcp.stride_h == 0 ? jcp.stride_h : 1;
 
-    Label tpad_loop_label, h_loop_label, skip_tpad_label,
-            skip_bpad_label;
+    Label tpad_loop_label, h_loop_label, skip_tpad_label, skip_bpad_label;
 
     ldr(reg_oh,
             ptr(abi_param1,
@@ -984,8 +970,7 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
             cmp(reg_kh_count, jcp.kh);
             b(GE, skip_tpad_label);
 
-            add_imm(
-                    reg_kh_count, reg_kh_count, t_overlap_off, reg_tmp_imm);
+            add_imm(reg_kh_count, reg_kh_count, t_overlap_off, reg_tmp_imm);
             sub_imm(reg_tmp_filter, reg_tmp_filter,
                     t_overlap_off * jcp.kw * ch_offset * sizeof(float),
                     reg_tmp_imm);

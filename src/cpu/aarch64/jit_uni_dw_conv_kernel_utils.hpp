@@ -40,8 +40,7 @@ namespace aarch64 {
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_fwd_kernel {
 
-    jit_uni_dw_conv_fwd_kernel(jit_conv_conf_t ajcp)
-        : ker_(nullptr) {
+    jit_uni_dw_conv_fwd_kernel(jit_conv_conf_t ajcp) : ker_(nullptr) {
         ker_ = new jit_uni_dw_conv_fwd_kernel_f32<isa>(ajcp);
     }
     status_t create_kernel() { return ker_->create_kernel(); }
@@ -221,7 +220,7 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
     const int eltwise_ind = p.find(primitive_kind::eltwise);
     jcp.with_eltwise = eltwise_ind != -1;
 
-    if(jcp.with_eltwise) return status::unimplemented; // TODO
+    if (jcp.with_eltwise) return status::unimplemented; // TODO
 
     if (jcp.with_eltwise) { jcp.eltwise = p.entry_[eltwise_ind].eltwise; }
     bool ok_to_pad_channels = true && jcp.oc == jcp.ngroups
@@ -262,8 +261,7 @@ template struct jit_uni_dw_conv_fwd_kernel<sve_512, data_type::f32>;
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_bwd_data_kernel {
 
-    jit_uni_dw_conv_bwd_data_kernel(jit_conv_conf_t ajcp)
-        : ker_(nullptr) {
+    jit_uni_dw_conv_bwd_data_kernel(jit_conv_conf_t ajcp) : ker_(nullptr) {
         ker_ = new jit_uni_dw_conv_bwd_data_kernel_f32<isa>(ajcp);
     }
 
@@ -392,8 +390,7 @@ template struct jit_uni_dw_conv_bwd_data_kernel<sve_512, data_type::f32>;
 template <cpu_isa_t isa, data_type_t kernel_dt>
 struct jit_uni_dw_conv_bwd_weights_kernel {
 
-    jit_uni_dw_conv_bwd_weights_kernel(jit_conv_conf_t ajcp)
-        : ker_(nullptr) {
+    jit_uni_dw_conv_bwd_weights_kernel(jit_conv_conf_t ajcp) : ker_(nullptr) {
         ker_ = new jit_uni_dw_conv_bwd_weights_kernel_f32<isa>(ajcp);
     }
 

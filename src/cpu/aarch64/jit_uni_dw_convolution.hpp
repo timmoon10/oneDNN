@@ -167,7 +167,8 @@ private:
     void execute_backward_data(const exec_ctx_t &ctx) const;
     const pd_t *pd() const { return (const pd_t *)primitive_t::pd().get(); }
 
-    std::unique_ptr<jit_uni_dw_conv_bwd_data_kernel<isa, diff_dst_type>> kernel_;
+    std::unique_ptr<jit_uni_dw_conv_bwd_data_kernel<isa, diff_dst_type>>
+            kernel_;
 };
 
 using jit_aarch64_sve_512_dw_convolution_bwd_data_t
@@ -249,7 +250,6 @@ struct jit_uni_dw_convolution_bwd_weights_t : public primitive_t {
         }
         return status::success;
     }
-
 
     status_t execute(const exec_ctx_t &ctx) const override {
         execute_backward_weights(ctx);

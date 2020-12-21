@@ -469,7 +469,6 @@ void jit_uni_dw_convolution_bwd_weights_t<sve_512,
     }
 }
 
-
 template <cpu_isa_t isa, data_type_t src_type, data_type_t diff_weights_type>
 void jit_uni_dw_convolution_bwd_weights_t<isa, src_type,
         diff_weights_type>::execute_reduction(const exec_ctx_t &ctx) const {

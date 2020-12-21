@@ -47,13 +47,13 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
             eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
                     this, jcp.eltwise);
 #else
-        {
+    {
 #endif
     }
 
-    ~jit_uni_dw_conv_fwd_kernel_f32() { 
+    ~jit_uni_dw_conv_fwd_kernel_f32() {
 #ifndef DISABLE_ELTWISE
-        delete eltwise_injector_; 
+        delete eltwise_injector_;
 #endif
     }
 
