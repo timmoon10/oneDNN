@@ -1,5 +1,6 @@
 /*******************************************************************************
-* Copyright 2016-2020 Intel Corporation
+* Copyright 2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -20,7 +21,6 @@
 #include <stdint.h>
 
 #include "common/primitive_attr.hpp"
-//#include "cpu/x64/cpu_isa_traits.hpp"
 #include "cpu/aarch64/cpu_isa_traits.hpp"
 
 namespace dnnl {
@@ -32,9 +32,6 @@ namespace aarch64 {
 enum conv_version_t {
     ver_unused,
     ver_fma,
-    ver_avx512_core,
-    ver_4fma,
-    ver_vnni
 };
 enum conv_loop_order_t {
     loop_cgn,
