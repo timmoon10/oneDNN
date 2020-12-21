@@ -285,8 +285,7 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
     void generate() override {
         assert(isa == sve_512);
 
-        this->preamble();
-
+        this->preamble(true);
         this->lsl(reg_nx, reg_nx, 2);
 
         Label ny_loop;

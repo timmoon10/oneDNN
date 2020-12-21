@@ -331,7 +331,7 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
 
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
-    this->preamble();
+    this->preamble(true);
     xa_->ptrue(reg_p_all_ones.b);
     if (jcp.is_fused_conv) {
         xa_->ldr(reg_input_buffer_ptr, Xbyak_aarch64::ptr(abi_param1, GET_OFF(src)));
@@ -562,7 +562,7 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::loop_body(
 
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::generate() {
-    preamble();
+    preamble(true);
     xa_->ptrue(reg_p_all_ones.b);
     xa_->ldr(reg_dsrc, Xbyak_aarch64::ptr(abi_param1, GET_OFF(src)));
     xa_->ldr(reg_ddst, Xbyak_aarch64::ptr(abi_param1, GET_OFF(dst)));
@@ -1125,7 +1125,7 @@ jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_block_unroll() {
 
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::generate() {
-    preamble();
+    preamble(true);
     if (simd_w == 16) {
         xa_->ptrue(reg_p_all_ones.b);
     } else if (simd_w == 8) {

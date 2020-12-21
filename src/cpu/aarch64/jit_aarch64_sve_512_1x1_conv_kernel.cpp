@@ -514,7 +514,7 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 }
 
 void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
-    preamble();
+    preamble(true);
 
     /* All 1 predicate register */
     xa_->ptrue(reg_p_all_ones.b);
