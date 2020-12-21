@@ -177,6 +177,10 @@ public:
         _op_mxcsr = 4u,
     };
 
+
+
+    constexpr static size_t translator_stack_offset = 1024 * 128;
+
     xa::XReg param1_aarch64 = abi_param1_aarch64;
     class XRegValue : public xa::XReg {
     public:

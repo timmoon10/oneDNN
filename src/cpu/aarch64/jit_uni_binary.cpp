@@ -164,9 +164,16 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t, public jit_generator {
         if (elt_idx != -1) {
             const auto &e = po.entry_[elt_idx].eltwise;
             eltwise_injector_.reset(
+#ifdef DNNL_X64_IMPLEMENTATION
                     new jit_uni_eltwise_injector_f32<inject_isa>(this, e.alg,
                             e.alpha, e.beta, 1.f, true, reg_elt_inj_table,
                             elt_inj_opmask));
+#else /* DNNL_X64_IMPLEMENTATION */
+                    new jit_uni_eltwise_injector_f32<inject_isa>(this, e.alg,
+								 e.alpha, e.beta, 1.f, true, Xbyak_aarch64::XReg(reg_elt_inj_table.getIdx()),
+								 Xbyak_aarch64::PReg(elt_inj_opmask.getIdx())));
+
+#endif /* DNNL_X64_IMPLEMENTATION */
         }
     }
 

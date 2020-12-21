@@ -134,9 +134,16 @@ struct jit_uni_i8i8_binary_kernel_t : public i8i8_binary_kernel_t,
         int elt_idx = po.find(primitive_kind::eltwise);
         if (elt_idx != -1) {
             const auto &e = po.entry_[elt_idx].eltwise;
+#ifdef DNNL_X64_IMPLEMENTATION
             eltwise_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
                     e.alg, e.alpha, e.beta, e.scale, true, reg_elt_inj_table,
                     elt_inj_opmask));
+#else /* DNNL_X64_IMPLEMENTATION */
+        eltwise_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
+ 	            e.alg, e.alpha, e.beta, e.scale, true, Xbyak_aarch64::XReg(reg_elt_inj_table.getIdx()),
+		    Xbyak_aarch64::PReg(elt_inj_opmask.getIdx())));
+#endif /* DNNL_X64_IMPLEMENTATION */
+
         }
     }
 

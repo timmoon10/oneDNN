@@ -80,7 +80,11 @@ struct jit_uni_softmax_fwd_t : public primitive_t {
                             // the avx512_common version may reject a
                             // problem because it is blocked by 8
                             // instead of 16.
+#ifdef DNNL_X64_IMPLEMENTATION
                             isa >= avx512_common && mayiuse(avx512_core))
+#else /* DNNL_X64_IMPLEMENTATION */
+                            isa >= sve && mayiuse(sve))
+#endif
                     && is_dense() // not dense impl can be easily done
                     && attr()->has_default_values();
             if (!ok) return status::unimplemented;
@@ -91,7 +95,11 @@ struct jit_uni_softmax_fwd_t : public primitive_t {
 
     jit_uni_softmax_fwd_t(const pd_t *apd);
     ~jit_uni_softmax_fwd_t();
-
+  /*
+#ifndef DNNL_X64_IMPLEMENTATION
+    status_t init(engine_t *engine) override;
+#endif
+  */
     status_t execute(const exec_ctx_t &ctx) const override;
 
 private:
@@ -142,7 +150,11 @@ struct jit_uni_softmax_bwd_t : public primitive_t {
                             // the avx512_common version may reject a
                             // problem because it is blocked by 8
                             // instead of 16.
+#ifdef DNNL_X64_IMPLEMENTATION
                             isa >= avx512_common && mayiuse(avx512_core))
+#else /* DNNL_X64_IMPLEMENTATION */
+                            isa >= sve && mayiuse(sve))
+#endif
                     && set_default_formats_common()
                     && is_dense() // not dense impl can be easily done
                     && attr()->has_default_values();
@@ -154,7 +166,11 @@ struct jit_uni_softmax_bwd_t : public primitive_t {
 
     jit_uni_softmax_bwd_t(const pd_t *apd);
     ~jit_uni_softmax_bwd_t();
-
+  /*
+#ifndef DNNL_X64_IMPLEMENTATION
+    status_t init(engine_t *engine) override;
+#endif
+  */
     status_t execute(const exec_ctx_t &ctx) const override;
 
 private:

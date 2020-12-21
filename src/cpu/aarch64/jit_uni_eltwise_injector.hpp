@@ -19,6 +19,7 @@
 #define CPU_AARCH64_JIT_UNI_ELTWISE_INJECTOR_HPP
 
 #include <assert.h>
+#include <set>
 
 #include "common/c_types_map.hpp"
 #include "common/primitive_attr.hpp"
@@ -27,14 +28,50 @@
 
 #include "cpu/aarch64/jit_generator.hpp"
 
+#ifndef DNNL_X64_IMPLEMENTATION
+#ifdef CG
+#undef CG
+#endif
+#define CG h->CodeGeneratorAArch64
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
 
+#ifndef DNNL_X64_IMPLEMENTATION
+namespace eltwise_injector {
+struct static_params_t {
+
+    static_params_t(bool save_state = true,
+            xa::XReg x_table = xa::XReg(0),
+            xa::PReg p_mask = xa::PReg(1),
+            bool is_fwd = true, bool use_dst = false)
+        : save_state(save_state)
+        , x_table(x_table)
+        , p_mask(p_mask)
+        , is_fwd(is_fwd)
+        , use_dst(use_dst) {}
+
+    bool save_state;
+    xa::XReg x_table;
+    xa::PReg p_mask;
+    bool is_fwd;
+    bool use_dst;
+};
+} // namespace eltwise_injector
+#endif
+
 template <cpu_isa_t isa>
 struct jit_uni_eltwise_injector_f32 {
+#ifdef DNNL_X64_IMPLEMENTATION
     using Vmm = typename cpu_isa_traits<isa>::Vmm;
+#else /* DNNL_X64_IMPLEMENTATION */
+  using Vmm = xa::ZReg;
+  using vmm_index_set_t = typename std::set<size_t>;
+  using vmm_index_set_iterator_t = typename std::set<size_t>::iterator;
+#endif /* DNNL_X64_IMPLEMENTATION */
 
     // Arguments description:
     // host - jit generator which is filled with instructions
@@ -48,6 +85,7 @@ struct jit_uni_eltwise_injector_f32 {
     //   - algorithm derivative.
     // use_dst - defines whether source or destination point is passed to alg
     //   code. Depends on algorithm. See `_use_dst_for_bwd` algs definition.
+#ifdef DNNL_X64_IMPLEMENTATION
     jit_uni_eltwise_injector_f32(jit_generator *host, alg_kind_t alg,
             float alpha, float beta, float scale, bool save_state = true,
             Xbyak::Reg64 p_table = Xbyak::util::rax,
@@ -63,12 +101,30 @@ struct jit_uni_eltwise_injector_f32 {
         , k_mask(k_mask)
         , is_fwd_(is_fwd)
         , use_dst_(use_dst)
+#else /* DNNL_X64_IMPLEMENTATION */
+    jit_uni_eltwise_injector_f32(jit_generator *host, alg_kind_t alg,
+            float alpha, float beta, float scale, bool save_state = true,
+            xa::XReg x_table = xa::XReg(0),
+            xa::PReg p_mask = xa::PReg(1),
+            bool is_fwd = true, bool use_dst = false)
+        : alg_(alg)
+        , alpha_(alpha)
+        , beta_(beta)
+        , scale_(scale)
+        , h(host)
+        , save_state_(save_state)
+        , x_table(x_table)
+        , p_mask(p_mask)
+        , is_fwd_(is_fwd)
+        , use_dst_(use_dst)
+#endif /* DNNL_X64_IMPLEMENTATION */
 #ifndef DNNL_X64_IMPLEMENTATION
 
 #endif // #ifndef DNNL_X64_IMPLEMENTATION
 
     {
         using namespace alg_kind;
+#ifdef DNNL_X64_IMPLEMENTATION
         assert(utils::one_of(isa, sse41, avx2, avx512_common, avx512_core));
         assert(utils::one_of(alg_, eltwise_relu, eltwise_tanh, eltwise_elu,
                 eltwise_square, eltwise_abs, eltwise_sqrt, eltwise_linear,
@@ -91,9 +147,41 @@ struct jit_uni_eltwise_injector_f32 {
                 is_fwd, use_dst) {}
 
     void compute_vector_range(size_t start_idx, size_t end_idx);
+#else /* DNNL_X64_IMPLEMENTATION */
+        assert(utils::one_of(isa, sve));
+        assert(utils::one_of(alg_, eltwise_relu, eltwise_tanh, eltwise_elu,
+                eltwise_square, eltwise_abs, eltwise_sqrt, eltwise_linear,
+                eltwise_bounded_relu, eltwise_soft_relu, eltwise_logistic,
+                eltwise_logsigmoid, eltwise_exp, eltwise_gelu_tanh,
+                eltwise_swish, eltwise_log, eltwise_clip, eltwise_clip_v2,
+                eltwise_pow, eltwise_gelu_erf, eltwise_round,
+                eltwise_relu_use_dst_for_bwd, eltwise_tanh_use_dst_for_bwd,
+                eltwise_elu_use_dst_for_bwd, eltwise_sqrt_use_dst_for_bwd,
+                eltwise_logistic_use_dst_for_bwd, eltwise_exp_use_dst_for_bwd,
+                eltwise_clip_v2_use_dst_for_bwd));
+        register_table_entries();
+    }
+
+    jit_uni_eltwise_injector_f32(jit_generator *host,
+            const post_ops_t::entry_t::eltwise_t &eltwise,
+            bool save_state = true,
+            xa::XReg x_table = xa::XReg(0),
+            xa::PReg p_mask = xa::PReg(1),
+            bool is_fwd = true, bool use_dst = false)
+        : jit_uni_eltwise_injector_f32(host, eltwise.alg, eltwise.alpha,
+                eltwise.beta, eltwise.scale, save_state, x_table, p_mask,
+                is_fwd, use_dst) {}
+
+    void compute_vector_range(size_t start_idx, size_t end_idx);
+    void compute_vector_range(const vmm_index_set_t &vmm_idxs);
+#endif /* DNNL_X64_IMPLEMENTATION */
     void compute_vector(size_t idx) { compute_vector_range(idx, idx + 1); }
     void prepare_table(bool gen_table = true);
+#ifdef DNNL_X64_IMPLEMENTATION
     void load_table_addr() { h->mov(p_table, l_table); }
+#else /* DNNL_X64_IMPLEMENTATION */
+  void load_table_addr() { CG::adr(x_table, l_table); }
+#endif /* DNNL_X64_IMPLEMENTATION */
 
 private:
     const alg_kind_t alg_;
@@ -104,8 +192,13 @@ private:
     jit_generator *const h;
 
     const bool save_state_;
+#ifdef DNNL_X64_IMPLEMENTATION
     const Xbyak::Reg64 p_table;
     const Xbyak::Opmask k_mask;
+#else /* DNNL_X64_IMPLEMENTATION */
+    const xa::XReg x_table;
+    const xa::PReg p_mask;
+#endif /* DNNL_X64_IMPLEMENTATION */
     const bool is_fwd_;
     const bool use_dst_;
 
@@ -122,19 +215,26 @@ private:
         _op_mxcsr = jit_generator::_op_mxcsr
     };
 
+#ifdef DNNL_X64_IMPLEMENTATION
     static constexpr bool has_avx512() {
         return utils::one_of(isa, avx512_common, avx512_core);
     }
-
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
+  
     static constexpr size_t vlen = cpu_isa_traits<isa>::vlen;
 #ifdef DNNL_X64_IMPLEMENTATION
     static constexpr size_t preserved_vecs_max = 5;
 #else //#ifdef DNNL_X64_IMPLEMENTATION
     /* For AArch64, +1 because of memory operand */
-    static constexpr size_t preserved_vecs_max = 6;
+    //static constexpr size_t preserved_vecs_max = 6;
+    static constexpr size_t preserved_vecs_max = 9;
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
     static constexpr size_t preserved_gprs_max = 4;
+#ifdef DNNL_X64_IMPLEMENTATION
     static constexpr size_t vecs_count = has_avx512() ? 32 : 16;
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+      static constexpr size_t vecs_count = 32;
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
     static constexpr int n_mantissa_bits = 23;
     static constexpr int k_mask_size = 8;
 
@@ -142,9 +242,18 @@ private:
     size_t preserved_vecs_count = 0;
     size_t preserved_vec_idxs[preserved_vecs_max] = {0};
     size_t preserved_gpr_idxs[preserved_gprs_max] = {0};
+#ifdef DNNL_X64_IMPLEMENTATION
     size_t start_idx_tail = 0;
 
     Vmm vmm_mask, vmm_aux0, vmm_aux1, vmm_aux2, vmm_aux3, vmm_aux4;
+#else //#ifdef DNNL_X64_IMPLEMENTATION
+    vmm_index_set_iterator_t start_idx_tail;
+
+    /* These vector register must be assigned proper index. */
+  xa::ZRegS vmm_mask {0}, vmm_aux0 {0}, vmm_aux1 {0}, vmm_aux2 {0}, vmm_aux3 {0},
+            vmm_aux4 {0}, vmm_aux5 {0}, vmm_aux6 {0}, vmm_aux7 {0}, vmm_tmp {0};
+
+#endif //#ifdef DNNL_X64_IMPLEMENTATION
 
 #ifndef DNNL_X64_IMPLEMENTATION
     /* Caution: Chose predicate registers not used by x64's implementation,
@@ -167,11 +276,32 @@ private:
             = {x_tmp_0, x_tmp_1, x_tmp_2, x_tmp_3, x_tmp_4};
     constexpr static int x_tmp_vec_size = 5;
 
+  xa::WReg W_TMP_0 = xa::WReg(23);
+  xa::WReg W_TMP_1 = xa::WReg(24);
+  xa::WReg W_TMP_2 = xa::WReg(25);
+  xa::WReg W_TMP_3 = xa::WReg(26);
+  xa::WReg W_TMP_4 = xa::WReg(27);
+  xa::XReg X_TMP_0 = xa::XReg(23);
+  xa::XReg X_TMP_1 = xa::XReg(24);
+  xa::XReg X_TMP_2 = xa::XReg(25);
+  xa::XReg X_TMP_3 = xa::XReg(26);
+  xa::XReg X_TMP_4 = xa::XReg(27);
+  xa::XReg X_DEFAULT_ADDR = xa::XReg(28);
+  xa::XReg X_SP = xa::XReg(21);
+  xa::XReg X_TRANSLATOR_STACK = xa::XReg(22);
+  xa::PReg P_TMP = xa::PReg(0);
+  xa::PReg P_TMP_0 = xa::PReg(11);
+  xa::PReg P_TMP_1 = xa::PReg(12);
+  xa::PReg P_ALL_ZERO = xa::PReg(10);
+  xa::PReg P_MSB_256 = xa::PReg(13);
+  xa::PReg P_MSB_384 = xa::PReg(14);
+  xa::PReg P_ALL_ONE = xa::PReg(15);
+
     /* Default tempooral index. Chose a SVE register
      not to be same as jit_uni_eltwise.(cpp|hpp).
      This index is changed by assign_regs() in case of eltwise injection.
   */
-    xa::ZReg z_tmp {31};
+    xa::ZRegS z_tmp {31};
 
     //  const std::vector<xa::ZReg> z_tmp_vec = {
     //    z_tmp0, z_tmp1, z_tmp2, z_tmp3, z_tmp4, z_tmp5, z_tmp6, z_tmp7};
@@ -181,11 +311,21 @@ private:
     size_t aux_vecs_count();
     size_t aux_gprs_count();
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void compute_body(size_t start_idx, size_t end_idx);
     void injector_preamble(size_t start_idx, size_t end_idx);
     void injector_preamble_tail(size_t start_idx);
+#else /* DNNL_X64_IMPLEMENTATION */
+    void compute_body(
+            const vmm_index_set_iterator_t &start_idx_it,
+            const vmm_index_set_iterator_t &end_idx_it);
+    void injector_preamble(const vmm_index_set_t &vmm_idxs);
+    void injector_preamble_tail(
+            const vmm_index_set_iterator_t start_idx_it);
+#endif /* DNNL_X64_IMPLEMENTATION */
     void injector_postamble();
     void assign_regs();
+#ifdef DNNL_X64_IMPLEMENTATION
     void compute_cmp_mask(const Vmm &vmm_src,
             const Xbyak::Operand &compare_operand, int cmp_predicate);
     void blend_with_mask(const Vmm &vmm_dst, const Xbyak::Operand &src);
@@ -228,6 +368,50 @@ private:
     void clip_compute_vector_bwd(const Vmm &vmm_src);
     void pow_compute_vector_bwd(const Vmm &vmm_src);
     void gelu_erf_compute_vector_bwd(const Vmm &vmm_src);
+#else /* DNNL_X64_IMPLEMENTATION */
+    void compute_cmp_mask(
+            const xa::ZRegS &vmm_src, const xa::ZRegS &vmm_cmpare, int cmp_predicate);
+    void blend_with_mask(const xa::ZRegS &vmm_dst, const xa::ZRegS &src);
+    void test_mask();
+
+    void exp_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void relu_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void relu_zero_ns_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void elu_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void tanh_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void square_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void abs_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void sqrt_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void linear_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void bounded_relu_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void soft_relu_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void logistic_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void gelu_tanh_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void swish_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void log_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void clip_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void pow_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void gelu_erf_compute_vector_fwd(const xa::ZRegS &vmm_src);
+    void round_compute_vector_fwd(const xa::ZRegS &vmm_src);
+
+    void exp_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void relu_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void elu_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void tanh_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void square_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void abs_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void sqrt_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void linear_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void bounded_relu_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void soft_relu_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void logistic_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void gelu_tanh_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void swish_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void log_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void clip_compute_vector_bwd(const xa::ZRegS &vmm_src);
+    void pow_compute_vector_bwd(const xa::ZRegS &vmm_src);
+  void gelu_erf_compute_vector_bwd(const xa::ZRegS &vmm_src);
+#endif /* DNNL_X64_IMPLEMENTATION */
 
 #ifndef DNNL_X64_IMPLEMENTATION
     void uni_ldr(const Vmm &vmm_dst, const Xbyak::Operand &addr);
@@ -293,6 +477,7 @@ private:
         return h->ptr[p_table + off];
     }
 #else //#ifdef DNNL_X64_IMPLEMENTATION
+  /*
     Vmm table_val(key_t key, size_t key_off_val_shift = 0) {
         xa::XReg x_addr {h->xtDefaultAddrIdx};
         uint32_t tableIdx = static_cast<uint32_t>(p_table.getIdx());
@@ -308,6 +493,20 @@ private:
         h->CodeGeneratorAArch64::ld1w(
                 z_tmp.s, p_lsb / xa::T_z, xa::ptr(x_addr));
         return Vmm(z_tmp.getIdx());
+    }
+  */
+  xa::ZRegS table_val(key_t key, size_t key_off_val_shift = 0) {
+        xa::XReg x_addr(X_DEFAULT_ADDR);
+        auto off = table_off(key, key_off_val_shift);
+
+        if (off) {
+	  CG::add_imm(x_addr, x_table, off, X_TMP_0);
+        } else {
+            x_addr = x_table;
+        }
+
+	CG::ldr(xa::ZReg(z_tmp.getIdx()), ptr(x_addr));
+        return z_tmp;
     }
 #endif //#ifdef DNNL_X64_IMPLEMENTATION
 

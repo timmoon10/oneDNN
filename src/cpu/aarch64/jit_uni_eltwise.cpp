@@ -155,9 +155,16 @@ struct jit_uni_kernel : public jit_uni_eltwise_kernel, public jit_generator {
         // there's no auxiliary vregs on fwd path
         const bool is_fwd = pd_->is_fwd();
         const bool save_state = is_fwd ? false : true;
+#ifdef DNNL_X64_IMPLEMENTATION
         eltwise_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
                 desc.alg_kind, desc.alpha, desc.beta, 1.f, save_state,
                 reg_injector_table, injector_mask, is_fwd, pd_->use_dst()));
+#else /* DNNL_X64_IMPLEMENTATION */
+        eltwise_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
+                desc.alg_kind, desc.alpha, desc.beta, 1.f, save_state,
+								      Xbyak_aarch64::XReg(reg_injector_table.getIdx()), Xbyak_aarch64::PReg(injector_mask.getIdx()), is_fwd, pd_->use_dst()));
+#endif /* DNNL_X64_IMPLEMENTATION */
+
 
         preamble();
 
@@ -208,17 +215,34 @@ struct jit_uni_kernel : public jit_uni_eltwise_kernel, public jit_generator {
             if (!is_fwd) {
                 bf16_injector_->load_bf16_cvt_to_f32(
                         vmm_diff_dst.getIdx(), reg_diff_dst);
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vmulps(vmm_src, vmm_src, vmm_diff_dst);
+#else /* DNNL_X64_IMPLEMENTATION */
+		CG::fmul(xa::ZRegS(vmm_src.getIdx()), xa::ZRegS(vmm_src.getIdx()), xa::ZRegS(vmm_diff_dst.getIdx()));
+#endif /* DNNL_X64_IMPLEMENTATION */
             }
             bf16_injector_->cvt_f32_to_bf16_store(1, vmm_src.getIdx(), reg_dst);
         } else {
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(vmm_src, ptr[reg_src]);
+#else /* DNNL_X64_IMPLEMENTATION */
+	    CG::ldr(xa::ZReg(vmm_src.getIdx()), xa::ptr(xa::XReg(reg_src.getIdx())));
+#endif /* DNNL_X64_IMPLEMENTATION */
             eltwise_injector_->compute_vector(vmm_src.getIdx());
             if (!is_fwd) {
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vmovups(vmm_diff_dst, ptr[reg_diff_dst]);
                 uni_vmulps(vmm_src, vmm_src, vmm_diff_dst);
+#else /* DNNL_X64_IMPLEMENTATION */
+		CG::ldr(xa::ZReg(vmm_diff_dst.getIdx()), xa::ptr(xa::XReg(reg_diff_dst.getIdx())));
+		CG::fmul(xa::ZRegS(vmm_src.getIdx()), xa::ZRegS(vmm_src.getIdx()), xa::ZRegS(vmm_diff_dst.getIdx()));
+#endif /* DNNL_X64_IMPLEMENTATION */
             }
+#ifdef DNNL_X64_IMPLEMENTATION
             uni_vmovups(ptr[reg_dst], vmm_src);
+#else /* DNNL_X64_IMPLEMENTATION */
+	    CG::str(xa::ZReg(vmm_src.getIdx()), xa::ptr(xa::XReg(reg_dst.getIdx())));
+#endif /* DNNL_X64_IMPLEMENTATION */
         }
 
         const auto shift = vlen();
@@ -243,7 +267,11 @@ struct jit_uni_kernel : public jit_uni_eltwise_kernel, public jit_generator {
             if (!is_fwd) {
                 bf16_injector_->load_bf16_cvt_to_f32(
                         vmm_diff_dst.getIdx(), reg_diff_dst, true);
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vmulps(vmm_src, vmm_src, vmm_diff_dst);
+#else /* DNNL_X64_IMPLEMENTATION */
+		CG::fmul(xa::ZRegS(vmm_src.getIdx()), xa::ZRegS(vmm_src.getIdx()), xa::ZRegS(vmm_diff_dst.getIdx()));
+#endif /* DNNL_X64_IMPLEMENTATION */
             }
             bf16_injector_->cvt_f32_to_bf16_store(
                     1, vmm_src.getIdx(), reg_dst, true);
@@ -252,7 +280,11 @@ struct jit_uni_kernel : public jit_uni_eltwise_kernel, public jit_generator {
             eltwise_injector_->compute_vector(xmm_src.getIdx());
             if (!is_fwd) {
                 uni_vmovss(xmm_diff_dst, ptr[reg_diff_dst]);
+#ifdef DNNL_X64_IMPLEMENTATION
                 uni_vmulps(xmm_src, xmm_src, xmm_diff_dst);
+#else /* DNNL_X64_IMPLEMENTATION */
+		CG::fmul(xa::VReg4S(xmm_src.getIdx()), xa::VReg4S(xmm_src.getIdx()), xa::VReg4S(xmm_diff_dst.getIdx()));
+#endif /* DNNL_X64_IMPLEMENTATION */
             }
             uni_vmovss(ptr[reg_dst], xmm_src);
         }
@@ -463,16 +495,24 @@ status_t jit_uni_eltwise_bwd_t<isa, d_type>::execute(
 
     return status::success;
 }
-
+#ifdef DNNL_X64_IMPLEMENTATION
 template struct jit_uni_eltwise_fwd_t<sse41, data_type::f32>;
 template struct jit_uni_eltwise_fwd_t<avx2, data_type::f32>;
 template struct jit_uni_eltwise_fwd_t<avx512_common, data_type::f32>;
-template struct jit_uni_eltwise_fwd_t<avx512_core, data_type::bf16>;
+  //template struct jit_uni_eltwise_fwd_t<avx512_core, data_type::bf16>;
+  template struct jit_uni_eltwise_fwd_t<avx512_core, data_type::f32>;
 
 template struct jit_uni_eltwise_bwd_t<sse41, data_type::f32>;
 template struct jit_uni_eltwise_bwd_t<avx2, data_type::f32>;
 template struct jit_uni_eltwise_bwd_t<avx512_common, data_type::f32>;
-template struct jit_uni_eltwise_bwd_t<avx512_core, data_type::bf16>;
+  //template struct jit_uni_eltwise_bwd_t<avx512_core, data_type::bf16>;
+template struct jit_uni_eltwise_bwd_t<avx512_core, data_type::f32>;
+#else /* DNNL_X64_IMPLEMENTATION */
+template struct jit_uni_eltwise_fwd_t<sve, data_type::f32>;
+  
+template struct jit_uni_eltwise_bwd_t<sve, data_type::f32>;
+#endif /* DNNL_X64_IMPLEMENTATION */
+
 
 } // namespace aarch64
 } // namespace cpu

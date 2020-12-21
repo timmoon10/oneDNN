@@ -28,6 +28,12 @@
 #include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
 #include "cpu/aarch64/jit_uni_softmax.hpp"
 
+#define CG CodeGeneratorAArch64
+#define IDX(a) static_cast<uint32_t>(a.getIdx())
+#ifndef DNNL_X64_IMPLEMENTATION
+namespace xa = Xbyak::Xbyak_aarch64;
+#endif
+
 #if __INTEL_COMPILER && __INTEL_COMPILER < 1900
 // Intel Compilers 17.x and 18.x do not like that diff_src_ptr() is only used
 // in a single descendant class and marks it as unused. This breaks builds
@@ -54,6 +60,7 @@ struct jit_softmax_base_t : public jit_generator {
     };
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_softmax_t)
 
+#ifdef DNNL_X64_IMPLEMENTATION    
     // cpu specific part
     using Vmm = typename cpu_isa_traits<isa>::Vmm;
     const AddressFrame &vmmword
@@ -106,6 +113,65 @@ struct jit_softmax_base_t : public jit_generator {
     size_t n_loops_;
     size_t loop_tail_;
     size_t axis_stride_;
+#else /* #ifdef DNNL_X64_IMPLEMENTATION */
+      const int vlen = cpu_isa_traits<isa>::vlen;
+
+    const softmax_pd_t *pd_;
+    const memory_desc_wrapper data_d_;
+
+  constexpr static uint32_t DUMMY_IDX = 99;
+  /*
+    virtual void operator()(const call_params_t *p) = 0;
+    std::unique_ptr<jit_uni_eltwise_injector_f32<isa>> exp_injector_;
+    std::unique_ptr<jit_uni_eltwise_injector_f32<isa>> log_injector_;
+  */
+
+      void (*ker)(const call_params_t *);
+    void operator()(const call_params_t *p) { (*ker)(p); }
+    std::unique_ptr<jit_uni_eltwise_injector_f32<isa>> exp_injector_;
+    std::unique_ptr<jit_uni_eltwise_injector_f32<isa>> log_injector_;
+
+  xa::XReg reg_param = xa::XReg(7);
+
+  xa::XReg reg_exp_injector_table = xa::XReg(0);
+  xa::XReg reg_log_injector_table = xa::XReg(3);
+  xa::XReg reg_src = xa::XReg(8);
+  xa::XReg reg_diff_src = reg_src;
+  xa::XReg reg_dst = xa::XReg(9);
+  xa::XReg reg_diff_dst = xa::XReg(14);
+  xa::XReg reg_spat_offt = xa::XReg(10);
+  xa::XReg reg_spat_offt_count = xa::XReg(11);
+  xa::XReg reg_reverse_spat_offt = xa::XReg(12);
+  xa::XReg reg_tmp = xa::XReg(13);
+
+  xa::PReg injector_mask = xa::PReg(1);
+
+  xa::ZReg vtmp = xa::ZReg(27); // assigned at placed where used
+    xa::ZReg tail_vmask = xa::ZReg(0);
+    xa::ZReg vneg_flt_max = xa::ZReg(28);
+    xa::ZReg vone = xa::ZReg(29);
+    xa::ZReg vsum = xa::ZReg(30);
+    xa::ZReg vmax = xa::ZReg(31);
+    xa::ZReg vsbr = vsum; // must be not equal to vmax
+
+    bool is_bf16_ = false;
+    bool is_softmax_ = pd_->is_softmax();
+    bool is_logsoftmax_ = pd_->is_logsoftmax();
+
+    size_t data_type_size_ = 0;
+    size_t simd_w_ = 0;
+    size_t unroll_regs_ = 4;
+
+    size_t axis_simd_full_;
+    size_t axis_simd_tail_;
+    size_t n_loops_;
+    size_t loop_tail_;
+    size_t axis_stride_;
+
+    /* Caution: Chose predicate registers not used by x64's implementation. */
+    xa::PReg p_512 {3};
+    xa::ZReg z_tmp0 = z23;
+#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
 
     void compute_predefined_variables() {
         axis_simd_full_ = pd_->axis_size() / simd_w_;
@@ -123,13 +189,21 @@ struct jit_softmax_base_t : public jit_generator {
     }
 
     void load_common_params() {
+#ifdef DNNL_X64_IMPLEMENTATION
         mov(reg_tmp, float2int(1.0f));
         uni_vmovq(xone, reg_tmp);
         uni_vbroadcastss(vone, xone);
         mov(reg_tmp, float2int(-FLT_MAX));
         uni_vmovq(xneg_flt_max, reg_tmp);
         uni_vbroadcastss(vneg_flt_max, xneg_flt_max);
+#else /* #ifdef DNNL_X64_IMPLEMENTATION */
+	CG::mov(xa::WReg(IDX(reg_tmp)), float2int(1.0f));
+        CG::dup(xa::ZRegS(IDX(vone)), xa::WReg(IDX(reg_tmp)));
+        CG::mov(reg_tmp, float2int(-FLT_MAX));
+        CG::dup(xa::ZRegS(IDX(vneg_flt_max)), xa::WReg(IDX(reg_tmp)));
+#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
 
+#ifdef DNNL_X64_IMPLEMENTATION
 #define PARAM_OFF(x) offsetof(call_params_t, x)
         mov(reg_spat_offt_count, ptr[reg_param + PARAM_OFF(spat_offt_count)]);
         mov(reg_dst, ptr[reg_param + PARAM_OFF(dst)]);
@@ -140,13 +214,96 @@ struct jit_softmax_base_t : public jit_generator {
             mov(reg_diff_dst, ptr[reg_param + PARAM_OFF(diff_dst)]);
         }
 #undef PARAM_OFF
+#else /* #ifdef DNNL_X64_IMPLEMENTATION */
+#define PARAM_OFF(x) offsetof(call_params_t, x)
+#define PARAM_OFF_DIFF(x, y) \
+    (static_cast<int32_t>(PARAM_OFF(x)) - static_cast<int32_t>(PARAM_OFF(y)))
+#define LDR_PARAM(r, x, y) \
+    assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
+    CG::ldr(xa::XReg(IDX(r)), xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(x, y)))
+#define LDR_PARAM_TMP(x, y) \
+    assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
+    CG::ldr(X_TMP_0, pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(x, y)));
+#define STR_PARAM_TMP(x, y) \
+    assert(-256 <= static_cast<int32_t>(x) - static_cast<int32_t>(y) \
+            && static_cast<int32_t>(x) - static_cast<int32_t>(y) <= 256); \
+    CG::str(X_TMP_0, xa::pre_ptr(x_tmp_sp, x - y));
+
+	CG::mov(X_DEFAULT_ADDR, xa::XReg(IDX(reg_param)));
+	CG::ldr(xa::XReg(IDX(reg_spat_offt_count)),
+                xa::pre_ptr(X_DEFAULT_ADDR, PARAM_OFF(spat_offt_count)));
+        LDR_PARAM(reg_dst, dst, spat_offt_count);
+        if (pd_->is_fwd()) {
+            LDR_PARAM(reg_src, src, dst);
+        } else {
+            LDR_PARAM(reg_diff_src, src, dst); // src is reused
+            LDR_PARAM(reg_diff_dst, diff_dst, src);
+        }
+#undef LDR_PARAM
+#undef LDR_PARAM_TMP
+#undef STR_PARAM_TMP
+#undef PARAM_OFF
+#endif /* #ifdef DNNL_X64_IMPLEMENTATION */
     }
 
+#ifndef DNNL_X64_IMPLEMENTATION
+
+  void uni_fmax(const xa::ZReg &dst, const xa::ZReg &src, const xa::ZReg &src2,
+		const xa::PReg &mask) {
+      CG::mov(z_tmp0.s, P_ALL_ONE, xa::ZRegS(IDX(src2)));
+        CG::fmaxnm(z_tmp0.s, p_512, xa::ZRegS(IDX(src)));
+        CG::fmax(z_tmp0.s, p_512, xa::ZRegS(IDX(src)));
+        CG::mov(xa::ZRegS(IDX(dst)), xa::PReg(IDX(mask)) / xa::T_m, z_tmp0.s);
+    }
+
+#if 1
+  xa::XReg xreg_addr(const xa::XReg &base, const xa::XReg &off = xa::XReg(DUMMY_IDX),
+            const int disp = 0) {
+    xa::XReg x_addr = base;
+        uint32_t offIdx = off.getIdx();
+
+        if (offIdx <= xa::SP_IDX) {
+            CG::add(X_DEFAULT_ADDR, base, off);
+            x_addr = X_DEFAULT_ADDR;
+        }
+        if (disp) {
+            CG::add_imm(X_DEFAULT_ADDR, x_addr, disp, X_TMP_0);
+            x_addr = X_DEFAULT_ADDR;
+        }
+
+        return x_addr;
+    }
+#else
+  xa::XReg xreg_addr(const xa::XReg &base, const xa::XReg &off = xa::XReg(DUMMY_IDX),
+            const int disp = 0) {
+    xa::XReg x_addr = base;
+
+    if (off.getIdx() >= xa::SP_IDX && disp == 0) {
+            x_addr = base;
+    } else if (off.getIdx() < xa::SP_IDX && disp == 0) {
+            CG::add(X_DEFAULT_ADDR, base, off);
+            x_addr = X_DEFAULT_ADDR;
+    } else if (off.getIdx() >= xa::SP_IDX && disp) {
+            CG::add_imm(X_DEFAULT_ADDR, x_addr, disp, X_TMP_0);
+            x_addr = X_DEFAULT_ADDR;
+        } else {
+            CG::add(X_DEFAULT_ADDR, base, off);
+            CG::add_imm(X_DEFAULT_ADDR, X_DEFAULT_ADDR, disp, X_TMP_0);
+            x_addr = X_DEFAULT_ADDR;
+        }
+
+        return x_addr;
+    }
+#endif
+#endif /* #ifndef DNNL_X64_IMPLEMENTATION */
+
+#ifdef DNNL_X64_IMPLEMENTATION
     Address diff_src_ptr(size_t offt = 0) {
         return vmmword[reg_diff_src + reg_spat_offt + offt];
     }
 
     Address src_ptr(size_t offt = 0) {
+
         return vmmword[reg_src + reg_spat_offt + offt];
     }
 
@@ -157,20 +314,48 @@ struct jit_softmax_base_t : public jit_generator {
     Address diff_dst_ptr(size_t offt = 0) {
         return vmmword[reg_diff_dst + reg_spat_offt + offt];
     }
+#else /* DNNL_X64_IMPLEMENTATION */
+  xa::XReg diff_src_ptr(size_t offt = 0) {
+        return xreg_addr(reg_diff_src, reg_spat_offt, offt);
+    }
+
+  xa::XReg src_ptr(size_t offt = 0) {
+        return xreg_addr(reg_src, reg_spat_offt, offt);
+    }
+
+  xa::XReg dst_ptr(size_t offt = 0) {
+        return xreg_addr(reg_dst, reg_spat_offt, offt);
+    }
+
+  xa::XReg diff_dst_ptr(size_t offt = 0) {
+        return xreg_addr(reg_diff_dst, reg_spat_offt, offt);
+    }
+#endif /* DNNL_X64_IMPLEMENTATION */
 
     enum class op_t : unsigned { max, sum };
 
+#ifdef DNNL_X64_IMPLEMENTATION
     void perform_op(Vmm v, Vmm vtmp, op_t op) {
         if (op == op_t::max)
             uni_vmaxps(v, v, vtmp);
         else if (op == op_t::sum)
             uni_vaddps(v, v, vtmp);
     }
+#else /* DNNL_X64_IMPLEMENTATION */
+  void perform_op(xa::ZReg v, xa::ZReg vtmp, op_t op) {
+        printf("perform_op\n");
+        if (op == op_t::max)
+            uni_fmax(v, v, vtmp, P_ALL_ONE);
+        else if (op == op_t::sum)
+	  CG::fadd(xa::ZRegS(IDX(v)), xa::ZRegS(IDX(v)), xa::ZRegS(IDX(vtmp)));
+    }
+#endif /* DNNL_X64_IMPLEMENTATION */
 
     template <typename body_t>
     void axis_loop(body_t body) {
         Label main_loop, tail_loop, tail_axis;
 
+#ifdef DNNL_X64_IMPLEMENTATION
         // reverse_spat_offt to dispatch between labels
         mov(reg_reverse_spat_offt, reg_spat_offt_count);
         xor_(reg_spat_offt, reg_spat_offt); // spat_offt to get addr of src/dst
@@ -194,7 +379,34 @@ struct jit_softmax_base_t : public jit_generator {
                 add(reg_spat_offt, loop_tail_ * axis_stride_);
             }
         }
+#else /* DNNL_X64_IMPLEMENTATION */
+        // reverse_spat_offt to dispatch between labels
+	CG::mov(reg_reverse_spat_offt, reg_spat_offt_count);
+        CG::eor(reg_spat_offt, reg_spat_offt,
+                reg_spat_offt); // spat_offt to get addr of src/dst
+        L(main_loop);
+        {
+            if (n_loops_) {
+                CG::cmp(reg_reverse_spat_offt, unroll_regs_ * axis_stride_);
+                CG::b(xa::LT, tail_loop);
 
+                body(unroll_regs_, false);
+                CG::sub(reg_reverse_spat_offt, reg_reverse_spat_offt,
+                        unroll_regs_ * axis_stride_);
+                CG::add(reg_spat_offt, reg_spat_offt, unroll_regs_ * axis_stride_);
+                CG::b(main_loop);
+            }
+        }
+
+        L(tail_loop);
+        {
+            if (loop_tail_) {
+                body(loop_tail_, false);
+                CG::add(reg_spat_offt, reg_spat_offt, loop_tail_ * axis_stride_);
+            }
+        }
+#endif /* DNNL_X64_IMPLEMENTATION */
+	
         L(tail_axis);
         {
             if (axis_simd_tail_) { body(1, true); }
@@ -202,7 +414,12 @@ struct jit_softmax_base_t : public jit_generator {
     }
 
     virtual void prepare_tail_mask() = 0;
+#ifdef DNNL_X64_IMPLEMENTATION
     virtual void get_horizontal_op(const Vmm &v, const Vmm &vtmp, op_t op) = 0;
+#else /* DNNL_X64_IMPLEMENTATION */
+  virtual void get_horizontal_op(const xa::ZReg &v, const xa::ZReg &vtmp, op_t op)
+            = 0;
+#endif /* DNNL_X64_IMPLEMENTATION */
     virtual void accumulate_vmax() = 0;
     virtual void accumulate_vsum() = 0;
     virtual void compute_dst() = 0;
@@ -238,6 +455,11 @@ struct jit_softmax_base_t : public jit_generator {
         compute_predefined_variables();
         preamble();
         initialization_hook();
+
+#ifndef DNNL_X64_IMPLEMENTATION
+	if (isa == sve) CG::ptrue(p_512.b);
+#endif
+	
         if (exp_injector_) exp_injector_->load_table_addr();
         if (log_injector_) log_injector_->load_table_addr();
         if (axis_simd_tail_) prepare_tail_mask();
@@ -259,7 +481,9 @@ struct jit_softmax_base_t : public jit_generator {
             binCommit();
 #endif
         }
+	//#ifdef DNNL_X64_IMPLEMENTATION
         ker = reinterpret_cast<decltype(ker)>(const_cast<uint8_t *>(getCode()));
+	//#endif
     }
 
     jit_softmax_base_t(const softmax_pd_t *pd)
@@ -273,6 +497,7 @@ struct jit_softmax_base_t : public jit_generator {
 template <cpu_isa_t isa>
 struct jit_softmax_t;
 
+#ifdef DNNL_X64_IMPLEMENTATION
 template <>
 struct jit_softmax_t<avx512_common> : public jit_softmax_base_t<avx512_common> {
     std::unique_ptr<bf16_emulation_t> bf16_emu_ = nullptr;
@@ -439,8 +664,208 @@ struct jit_softmax_t<avx512_common> : public jit_softmax_base_t<avx512_common> {
                     bf16_emu_zmm_4, bf16_emu_zmm_5));
         get_code();
     }
+#else /* DNNL_X64_IMPLEMENTATION */
+template <>
+struct jit_softmax_t<sve> : public jit_softmax_base_t<sve> {
+  xa::PReg tail_opmask = xa::PReg(2);
+
+  void store(const xa::XReg &addr, const xa::ZReg &vmm, bool tail = false) {
+        if (tail)
+	  CG::st1w(xa::ZRegS(IDX(vmm)), xa::PReg(IDX(tail_opmask)) / xa::T_m,
+                    xa::ptr(xa::XReg(IDX(addr))));
+        else
+	  CG::str(xa::ZReg(IDX(vmm)), xa::ptr(xa::XReg(IDX(addr))));
+    };
+
+    void load(const xa::ZReg &vmm, const xa::XReg &addr, bool tail = false) {
+        if (tail)
+	  CG::ld1w(xa::ZRegS(IDX(vmm)), xa::PReg(IDX(tail_opmask)) / xa::T_z,
+                    xa::ptr(xa::XReg(IDX(addr))));
+        else
+            CG::ldr(xa::ZReg(IDX(vmm)), xa::ptr(xa::XReg(IDX(addr))));
+    };
+
+    void prepare_tail_mask() override {
+        printf("prepare_tail_mask\n");
+        const int sw_tail = pd_->C() % simd_w_;
+        uint32_t idx = IDX(tail_opmask);
+        switch (sw_tail) {
+	case 16: CG::ptrue(xa::PRegS(idx), xa::VL16); break;
+	case 8: CG::ptrue(xa::PRegS(idx), xa::VL8); break;
+	case 7: CG::ptrue(xa::PRegS(idx), xa::VL7); break;
+	case 6: CG::ptrue(xa::PRegS(idx), xa::VL6); break;
+	case 5: CG::ptrue(xa::PRegS(idx), xa::VL5); break;
+	case 4: CG::ptrue(xa::PRegS(idx), xa::VL4); break;
+	case 3: CG::ptrue(xa::PRegS(idx), xa::VL3); break;
+	case 2: CG::ptrue(xa::PRegS(idx), xa::VL2); break;
+	case 1: CG::ptrue(xa::PRegS(idx), xa::VL1); break;
+            default:
+                index(xa::ZRegS(IDX(vtmp)), 1, 1);
+                cmple(xa::PRegS(idx), p_512 / xa::T_z, xa::ZRegS(IDX(vtmp)), sw_tail);
+                break;
+        }
+    }
+
+    void get_horizontal_op(const xa::ZReg &v, const xa::ZReg &vtmp, op_t op) override {
+        printf("get_horizontal_op\n");
+        CG::mov(xa::ZRegS(IDX(vtmp)), P_ALL_ONE, xa::ZRegS(IDX(v)));
+        CG::ext(xa::ZRegB(IDX(vtmp)), xa::ZRegB(IDX(v)), 32);
+        perform_op(v, vtmp, op);
+        CG::not_(P_TMP_1.b, P_ALL_ONE, P_ALL_ONE.b);
+        CG::trn1(P_TMP_0.d, P_ALL_ONE.d, P_TMP_1.d);
+        CG::trn1(P_TMP_0.d, P_TMP_0.d, P_TMP_0.d);
+        CG::mov(xa::ZRegS(IDX(vtmp)), P_ALL_ONE, xa::ZRegS(IDX(v)));
+        CG::mov(z_tmp0.s, P_ALL_ONE, xa::ZRegS(IDX(v)));
+        CG::ext(z_tmp0.b, xa::ZRegB(IDX(v)), 48);
+        CG::ext(xa::ZRegB(IDX(vtmp)), xa::ZRegB(IDX(v)), 16);
+        CG::mov(xa::ZRegD(IDX(vtmp)), P_TMP_0 / xa::T_m, z_tmp0.d);
+        perform_op(v, vtmp, op);
+        CG::uzp2(z_tmp0.d, xa::ZRegD(IDX(v)), xa::ZRegD(IDX(v)));
+        CG::trn1(xa::ZRegD(IDX(vtmp)), z_tmp0.d, xa::ZRegD(IDX(v)));
+        perform_op(v, vtmp, op);
+        CG::trn1(P_TMP_0.s, P_ALL_ONE.s, P_TMP_1.s);
+        CG::trn1(xa::ZRegS(IDX(vtmp)), xa::ZRegS(IDX(v)), xa::ZRegS(IDX(v)));
+        CG::trn2(z_tmp0.s, xa::ZRegS(IDX(v)), xa::ZRegS(IDX(v)));
+        CG::mov(xa::ZRegS(IDX(vtmp)), P_TMP_0 / xa::T_m, z_tmp0.s);
+        perform_op(v, vtmp, op);
+    }
+
+    void accumulate_vmax() override {
+        printf("accumulate_vmax\n");
+        // flush to -FLT_MAX before accumulation
+        CG::mov(xa::ZRegB(IDX(vmax)), P_ALL_ONE, xa::ZRegB(IDX(vneg_flt_max)));
+
+        axis_loop([&](int unroll, bool tail = false) {
+            for (int i = 0; i < unroll; i++) {
+                xa::ZReg vreg_tmp_src = xa::ZReg(i + 1);
+                load(vreg_tmp_src, src_ptr(axis_stride_ * i), tail); // SEGV
+                if (tail)
+                    uni_fmax(vmax, vmax, vreg_tmp_src, tail_opmask);
+                else
+                    uni_fmax(vmax, vmax, vreg_tmp_src, P_ALL_ONE);
+            }
+        });
+
+        get_horizontal_op(vmax, vtmp = vsum, op_t::max);
+    }
+
+    void accumulate_vsum() override {
+        printf("accumulate_vsum\n");
+        CG::eor(vsum.d, vsum.d, vsum.d); // flush to zero before accumulation
+
+        axis_loop([&](int unroll, bool tail = false) {
+            for (int i = 0; i < unroll; i++) {
+                xa::ZReg vreg_tmp_src = xa::ZReg(i + 1);
+                load(vreg_tmp_src, src_ptr(axis_stride_ * i), tail);
+                CG::fsub(vreg_tmp_src.s, vreg_tmp_src.s, vmax.s);
+                if (is_logsoftmax_) // store before applying exp
+                    store(dst_ptr(axis_stride_ * i), vreg_tmp_src, tail);
+                exp_injector_->compute_vector(vreg_tmp_src.getIdx());
+                if (tail)
+		  CG::fadd(xa::ZRegS(IDX(vsum)), xa::PReg(IDX(tail_opmask)) / xa::T_m,
+                            xa::ZRegS(IDX(vreg_tmp_src)));
+                else
+                    CG::fadd(xa::ZRegS(IDX(vsum)), xa::ZRegS(IDX(vsum)),
+                            xa::ZRegS(IDX(vreg_tmp_src)));
+                if (is_softmax_) // store after applying exp
+                    store(dst_ptr(axis_stride_ * i), vreg_tmp_src, tail);
+            }
+        });
+
+        get_horizontal_op(vsum, vtmp = vmax, op_t::sum);
+        if (is_softmax_) {
+            CG::mov(z_tmp0.d, xa::ZRegD(IDX(vsum)));
+            CG::mov(xa::ZRegD(IDX(vsum)), P_ALL_ONE, xa::ZRegD(IDX(vone)));
+            CG::fdiv(xa::ZRegS(IDX(vsum)), p_512 / xa::T_m, z_tmp0.s);
+        }
+        if (is_logsoftmax_) log_injector_->compute_vector(vsum.getIdx());
+    }
+
+    void compute_dst() override {
+        printf("compute_dst\n");
+        axis_loop([&](int unroll, bool tail = false) {
+            for (int i = 0; i < unroll; i++) {
+                xa::ZReg vreg_tmp_src = xa::ZReg(i + 1);
+                if (is_softmax_) {
+                    load(vreg_tmp_src, dst_ptr(axis_stride_ * i), tail);
+                    CG::fmul(xa::ZRegS(IDX(vreg_tmp_src)), xa::ZRegS(IDX(vreg_tmp_src)),
+                            xa::ZRegS(IDX(vsum)));
+                }
+                if (is_logsoftmax_) {
+                    load(vreg_tmp_src, dst_ptr(axis_stride_ * i), tail);
+                    CG::fsub(vreg_tmp_src.s, vreg_tmp_src.s, vsum.s);
+                }
+                store(dst_ptr(axis_stride_ * i), vreg_tmp_src, tail);
+            }
+        });
+    }
+
+    void accumulate_vsbr() override {
+        printf("accumulate_vsbr\n");
+        CG::eor(vsbr.d, vsbr.d, vsbr.d); // flush to zero before accumulation
+
+        axis_loop([&](int unroll, bool tail = false) {
+            for (int i = 0; i < unroll; i++) {
+                xa::ZReg vreg_tmp_dst = xa::ZReg(i * 2 + 1);
+                xa::ZReg vreg_tmp_diff_dst = xa::ZReg(i * 2 + 2);
+                load(vreg_tmp_diff_dst, diff_dst_ptr(axis_stride_ * i), tail);
+                if (is_softmax_) {
+                    load(vreg_tmp_dst, dst_ptr(axis_stride_ * i), tail);
+                    CG::fmul(xa::ZRegS(IDX(vreg_tmp_diff_dst)),
+                            xa::ZRegS(IDX(vreg_tmp_diff_dst)),
+                            xa::ZRegS(IDX(vreg_tmp_dst)));
+                }
+                CG::fadd(xa::ZRegS(IDX(vsbr)), xa::ZRegS(IDX(vsbr)),
+                        xa::ZRegS(IDX(vreg_tmp_diff_dst)));
+            }
+        });
+
+        get_horizontal_op(vsbr, vtmp = vmax, op_t::sum);
+    }
+
+    void compute_diff_src() override {
+        printf("compute_diff_src\n");
+        axis_loop([&](int unroll, bool tail = false) {
+            for (int i = 0; i < unroll; i++) {
+	      xa::ZReg vreg_tmp_dst = xa::ZReg(i * 2 + 1);
+	      xa::ZReg vreg_tmp_diff_dst = xa::ZReg(i * 2 + 2);
+                load(vreg_tmp_dst, dst_ptr(axis_stride_ * i), tail);
+                load(vreg_tmp_diff_dst, diff_dst_ptr(axis_stride_ * i), tail);
+                if (is_softmax_) {
+                   CG:: fsub(vreg_tmp_diff_dst.s, vreg_tmp_diff_dst.s, vsbr.s);
+                    CG::fmul(xa::ZRegS(IDX(vreg_tmp_diff_dst)),
+                            xa::ZRegS(IDX(vreg_tmp_dst)),
+                            xa::ZRegS(IDX(vreg_tmp_diff_dst)));
+                }
+                if (is_logsoftmax_) {
+                    exp_injector_->compute_vector(vreg_tmp_dst.getIdx());
+                    CG::fmls(xa::ZRegS(IDX(vreg_tmp_diff_dst)), p_512 / xa::T_m,
+                            xa::ZRegS(IDX(vreg_tmp_dst)), xa::ZRegS(IDX(vsbr)));
+                }
+                store(diff_src_ptr(axis_stride_ * i), vreg_tmp_diff_dst, tail);
+            }
+        });
+    }
+
+    void initialization_hook() override {
+        //if (bf16_emu_) bf16_emu_->init_vcvtneps2bf16();
+    }
+
+    jit_softmax_t(const softmax_pd_t *pd) : jit_softmax_base_t(pd) {
+        /*        if (is_bf16_ && !mayiuse(avx512_core_bf16))
+            bf16_emu_.reset(new bf16_emulation_t(this, bf16_emu_zmm_1,
+                    bf16_emu_zmm_2, bf16_emu_zmm_3, bf16_emu_gpr,
+                    bf16_emu_zmm_4, bf16_emu_zmm_5)); */
+    }
+  /*
+    void operator()(const call_params_t *p) override {
+        return jit_generator::operator()(p);
+    }
+  */
+#endif /* DNNL_X64_IMPLEMENTATION */
 };
 
+#ifdef DNNL_X64_IMPLEMENTATION
 template <>
 struct jit_softmax_t<avx2> : public jit_softmax_base_t<avx2> {
     Vmm tail_vmask = Vmm(0);
@@ -681,7 +1106,8 @@ struct jit_softmax_t<sse41> : public jit_softmax_base_t<sse41> {
         get_code();
     }
 };
-
+#endif /* DNNL_X64_IMPLEMENTATION */
+  
 } // namespace
 
 template <cpu_isa_t isa>
@@ -796,10 +1222,15 @@ private:
 } // namespace softmax_impl
 
 /* struct instantiation */
+#ifdef DNNL_X64_IMPLEMENTATION
 template struct jit_uni_softmax_fwd_t<sse41>;
 template struct jit_uni_softmax_fwd_t<avx2>;
 template struct jit_uni_softmax_fwd_t<avx512_common>;
 template struct jit_uni_softmax_bwd_t<avx512_common>;
+#else /* DNNL_X64_IMPLEMENTATION */
+template struct jit_uni_softmax_fwd_t<sve>;
+template struct jit_uni_softmax_bwd_t<sve>;
+#endif /* DNNL_X64_IMPLEMENTATION */
 
 } // namespace aarch64
 } // namespace cpu
