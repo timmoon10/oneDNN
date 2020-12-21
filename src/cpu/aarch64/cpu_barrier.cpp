@@ -1,9 +1,5 @@
 /*******************************************************************************
-<<<<<<< HEAD
-* Copyright 2017-2020 Intel Corporation
-=======
 * Copyright 2020 Intel Corporation
->>>>>>> tmp_fj_main
 * Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +27,7 @@ namespace aarch64 {
 namespace simple_barrier {
 
 void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
-        Xbyak_aarch64::XReg reg_nthr, bool usedAsFunc = false) {
+        Xbyak_aarch64::XReg reg_nthr, bool usedAsFunc) {
 #define BAR_CTR_OFF offsetof(ctx_t, ctr)
 #define BAR_SENSE_OFF offsetof(ctx_t, sense)
     using namespace Xbyak_aarch64;
