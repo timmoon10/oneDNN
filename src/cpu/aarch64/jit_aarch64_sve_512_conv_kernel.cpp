@@ -630,7 +630,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
     int out_shift = jcp.typesize_out * ur_w
             * (is_dst_layout_nxc() ? jcp.ngroups * jcp.oc : jcp.oc_block);
 
-    preamble();
+    preamble(true);
     ldr(reg_inp, Xbyak_aarch64::ptr(abi_param1, GET_OFF(src)));
     ldr(reg_out, Xbyak_aarch64::ptr(abi_param1, GET_OFF(dst)));
     ldr(reg_ker, Xbyak_aarch64::ptr(abi_param1, GET_OFF(filt)));
@@ -1902,7 +1902,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
     int src_shift = jcp.typesize_out * ur_w
             * (is_dsrc_layout_nxc() ? jcp.ngroups * jcp.ic : ic_block);
 
-    preamble();
+    preamble(true);
     ptrue(reg_p_all_ones.b);
 
     ldr(reg_src, Xbyak_aarch64::ptr(param, GET_OFF(src)));
@@ -3967,7 +3967,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_loop() {
 }
 
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::generate_kernel() {
-    preamble();
+    preamble(true);
     ptrue(reg_p_all_ones.b);
 
     ldr(reg_input, Xbyak_aarch64::ptr(param, GET_OFF(src)));
