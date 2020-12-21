@@ -108,8 +108,8 @@ struct cpu_isa_traits<sve_256> {
     static constexpr int vlen = 32;
     static constexpr int n_vregs = 32;
     static constexpr dnnl_cpu_isa_t user_option_val
-            = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_512);
-    static constexpr const char *user_option_env = "SVE_512";
+            = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_256);
+    static constexpr const char *user_option_env = "SVE_256";
 };
 
 
