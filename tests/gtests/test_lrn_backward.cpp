@@ -19,7 +19,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -208,21 +208,37 @@ protected:
     void SetUp() override {
         data_type = data_traits<data_t>::data_type;
 
-        SKIP_IF(data_type == memory::data_type::bf16
-                        && get_test_engine_kind() == engine::kind::gpu,
-                "GPU does not support bf16 data type.");
         SKIP_IF(unsupported_data_type(data_type),
                 "Engine does not support this data type.");
 
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
-
+        SKIP_IF_CUDA(!cuda_check_format_tags(p.data_format, p.diff_data_format),
+                "Unsupported format tag");
+        SKIP_IF_CUDA(p.aalgorithm != algorithm::lrn_across_channels,
+                "Unsupported algorithm");
         ASSERT_TRUE(p.aalgorithm == algorithm::lrn_across_channels
                 || p.aalgorithm == algorithm::lrn_within_channel);
 
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
+    bool cuda_check_format_tags(memory::format_tag data_format,
+            memory::format_tag diff_data_format) {
+        bool data_ok = data_format == memory::format_tag::ncdhw
+                || data_format == memory::format_tag::nchw
+                || data_format == memory::format_tag::nhwc
+                || data_format == memory::format_tag::ncw
+                || data_format == memory::format_tag::nwc
+                || data_format == memory::format_tag::any;
+        bool diff_data_ok = diff_data_format == memory::format_tag::ncdhw
+                || diff_data_format == memory::format_tag::nchw
+                || diff_data_format == memory::format_tag::nhwc
+                || diff_data_format == memory::format_tag::ncw
+                || diff_data_format == memory::format_tag::nwc
+                || diff_data_format == memory::format_tag::any;
 
+        return data_ok && diff_data_ok;
+    }
     void Test() {
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
 
@@ -267,7 +283,7 @@ protected:
         std::unordered_map<int, memory> args
                 = {{DNNL_ARG_SRC, src->get()}, {DNNL_ARG_DST, dst->get()}};
         auto workspace_md = lrn_fwd_prim_desc.workspace_desc();
-        workspace = memory(workspace_md, eng);
+        workspace = test::make_memory(workspace_md, eng);
         args.insert({DNNL_ARG_WORKSPACE, workspace});
         l.execute(strm, args);
         strm.wait();

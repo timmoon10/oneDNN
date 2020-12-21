@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "tests/test_thread.hpp"
 
@@ -199,10 +199,10 @@ int fill_src(
             [&](int mb, int ic, int id, int ih, int iw) {
                 const int gen
                         = 101 * id + 103 * ih + 107 * iw + 109 * mb + 113 * ic;
-                const bool non_base = flip_coin(gen, c.f_sparsity);
+                const float sparsity = prb->ic < 5 ? 1.f : c.f_sparsity;
+                const bool non_base = flip_coin(gen, sparsity);
                 const float value
                         = non_base ? c.f_min + gen * 1 % range : c.f_base;
-
                 ((float *)mem_00)[src_off_f(prb, mb, ic, id, ih, iw)] = value;
             });
 
@@ -231,9 +231,10 @@ int fill_wei(
 
     dnnl::impl::parallel_nd(prb->oc, prb->ic, prb->id, prb->ih, prb->iw,
             [&](int oc, int ic, int kd, int kh, int kw) {
-                const int gen
-                        = 127 * kd + 131 * kh + 137 * kw + 139 * oc + 149 * ic;
-                const bool non_base = flip_coin(gen, c.f_sparsity);
+                const int gen = 127 * kd + 131 * kh + 137 * kw + 139 * oc
+                        + 149 * ic + 7;
+                const float sparsity = prb->ic < 5 ? 1.f : c.f_sparsity;
+                const bool non_base = flip_coin(gen, sparsity);
                 const float value
                         = non_base ? c.f_min + gen * 1 % range : c.f_base;
                 ((float *)mem_00)[wei_off_f(prb, oc, ic, kd, kh, kw)] = value;
@@ -260,10 +261,9 @@ int fill_bia(
     const int range = c.f_max - c.f_min + 1;
 
     for (size_t i = 0; i < nelems; ++i) {
-        const int gen = (int)(151 * i);
+        const int gen = (int)(151 * i + 11);
         const bool non_base = flip_coin(gen, c.f_sparsity);
         const float value = non_base ? c.f_min + gen * 1 % range : c.f_base;
-
         ((float *)mem_00)[i] = value;
     }
 
@@ -304,6 +304,29 @@ void check_known_skipped_case(const prb_t *prb, res_t *res) {
             {prb->cfg[SRC].dt, prb->cfg[WEI].dt, prb->cfg[DST].dt}, prb->dir,
             res);
     if (res->state == SKIPPED) return;
+
+    if (is_nvidia_gpu()) {
+        const auto &po = prb->attr.post_ops;
+        bool post_ops_ok = true;
+        for (int i = 0; i < po.len(); ++i) {
+            const auto &e = po.entry[i];
+            if (e.is_sum_kind())
+                continue;
+            else if (e.is_eltwise_kind())
+                post_ops_ok = post_ops_ok && is_nvidia_eltwise_ok(prb->dir, e);
+            else if (e.is_binary_kind() || e.is_convolution_kind())
+                post_ops_ok = false;
+            else
+                assert(!"unknown post-op type");
+        }
+
+        const bool oscale_ok = prb->attr.oscale.policy == policy_t::COMMON;
+
+        if (!post_ops_ok || !oscale_ok) {
+            res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
+            return;
+        }
+    }
 }
 
 int doit(const prb_t *prb, res_t *res) {

@@ -14,7 +14,7 @@
 * limitations under the License.
 *******************************************************************************/
 
-#include "dnnl_types.h"
+#include "oneapi/dnnl/dnnl_types.h"
 
 #include "common/c_types_map.hpp"
 #include "common/dnnl_thread.hpp"
@@ -50,8 +50,7 @@ void jit_sse41_1x1_convolution_fwd_t::execute_forward(
                 dst, scratchpad);
     });
 
-    if (pd()->wants_zero_pad_dst())
-        ctx.memory(DNNL_ARG_DST)->zero_pad(ctx.stream());
+    if (pd()->wants_zero_pad_dst()) ctx.memory(DNNL_ARG_DST)->zero_pad(ctx);
 }
 
 void jit_sse41_1x1_convolution_fwd_t::execute_forward_thr(const int ithr,

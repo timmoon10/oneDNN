@@ -18,7 +18,7 @@
 #define COMMON_SUM_PD_HPP
 
 #include <assert.h>
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "c_types_map.hpp"
 #include "primitive_desc.hpp"
@@ -159,7 +159,8 @@ protected:
         _pd->init_scratchpad_md(); \
         return safe_ptr_assign(*sum_pd, _pd); \
     } \
-    status_t create_primitive(std::shared_ptr<primitive_t> &primitive, \
+    status_t create_primitive( \
+            std::pair<std::shared_ptr<primitive_t>, bool> &primitive, \
             engine_t *engine) const override { \
         return primitive_t::create_primitive_common<__VA_ARGS__, pd_t>( \
                 primitive, this, engine, false); \

@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 #include "src/common/dnnl_thread.hpp"
 
 #if DNNL_X64
@@ -62,6 +62,13 @@ protected:
                 && isa != cpu_isa::avx2_vnni;
         input_f32.backward_supported = is_cpu && impl::dnnl_thr_syncable();
 #endif // DNNL_X64
+#if DNNL_AARCH64 && DNNL_AARCH64_USE_ACL
+        input_f32.wino_supported
+                = (get_test_engine_kind() == engine::kind::cpu);
+        input_f32.backward_supported = false;
+        input_f16.wino_supported = false;
+        input_int8.wino_supported = false;
+#endif // DNNL_AARCH64 && DNNL_AARCH64_USE_ACL
     }
 };
 
@@ -115,9 +122,7 @@ TEST_F(wino_conv_test_t, TestLargePadding) {
                 algorithm::convolution_winograd, src_md, wei_md, dst_md, {1, 1},
                 {2, 2}, {2, 2});
 
-        // oneDNN backend does not support pad != 1 for Wino conv, which may
-        // not be the case for other backends.
-        bool large_pad_is_supported = false;
+        bool large_pad_is_supported = is_nvidia_gpu(eng) ? true : false;
         if (input.wino_supported && large_pad_is_supported) {
             EXPECT_NO_THROW(
                     convolution_forward::primitive_desc(fwd_op_desc, eng));

@@ -24,7 +24,11 @@
 
 #include <sstream>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
+
+#if DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_THREADPOOL
+#include "oneapi/dnnl/dnnl_threadpool.h"
+#endif
 
 #include "common.hpp"
 #include "dnn_types.hpp"
@@ -297,6 +301,9 @@ static po_table_entry_t kind_table[] = {
         {pk_t::BRELU, "bounded_relu", dnnl_eltwise_bounded_relu},
         {pk_t::BRELU, "brelu", dnnl_eltwise_bounded_relu},
         {pk_t::CLIP, "clip", dnnl_eltwise_clip},
+        {pk_t::CLIP_V2, "clip_v2", dnnl_eltwise_clip_v2},
+        {pk_t::CLIP_V2_DST, "clip_v2_dst",
+                dnnl_eltwise_clip_v2_use_dst_for_bwd},
         {pk_t::ELU, "elu", dnnl_eltwise_elu},
         {pk_t::ELU_DST, "elu_dst", dnnl_eltwise_elu_use_dst_for_bwd},
         {pk_t::EXP, "exp", dnnl_eltwise_exp},
@@ -1091,9 +1098,10 @@ void maybe_oscale(const attr_t &attr, float &d, float *scales, int64_t oc) {
 
 void maybe_zero_point(const attr_t &attr, float &d, const int32_t *zero_points,
         int64_t c, int arg, bool opposite_zero_point) {
-    const auto &e = attr.zero_points.get(arg);
+    if (attr.zero_points.is_def()) return;
 
-    if (!attr.zero_points.is_def(arg)) {
+    const auto &e = attr.zero_points.get(arg);
+    if (!e.is_def()) {
         const int idx = e.policy == policy_t::COMMON ? 0 : c;
         const int zp_sign = opposite_zero_point ? -1 : 1;
         d -= zp_sign * zero_points[idx];
@@ -1124,6 +1132,7 @@ float compute_eltwise_fwd(
         case pk_t::SWISH: return scale * swish_fwd(src, alpha);
         case pk_t::LOG: return scale * log_fwd(src);
         case pk_t::CLIP: return scale * clip_fwd(src, alpha, beta);
+        case pk_t::CLIP_V2: return scale * clip_v2_fwd(src, alpha, beta);
         case pk_t::POW: return scale * pow_fwd(src, alpha, beta);
         case pk_t::GELU_ERF: return scale * gelu_erf_fwd(src);
         case pk_t::ROUND: return scale * round_fwd(src);
@@ -1133,6 +1142,7 @@ float compute_eltwise_fwd(
         case pk_t::SQRT_DST: return scale * sqrt_fwd(src);
         case pk_t::LOGISTIC_DST: return scale * logistic_fwd(src);
         case pk_t::EXP_DST: return scale * exp_fwd(src);
+        case pk_t::CLIP_V2_DST: return scale * clip_v2_fwd(src, alpha, beta);
 
         default: assert(!"unknown attr::post_ops::kind");
     };
@@ -1160,6 +1170,7 @@ float compute_eltwise_bwd(
         case pk_t::SWISH: return swish_bwd(d_dst, src, alpha);
         case pk_t::LOG: return log_bwd(d_dst, src);
         case pk_t::CLIP: return clip_bwd(d_dst, src, alpha, beta);
+        case pk_t::CLIP_V2: return clip_v2_bwd(d_dst, src, alpha, beta);
         case pk_t::POW: return pow_bwd(d_dst, src, alpha, beta);
         case pk_t::GELU_ERF: return gelu_erf_bwd(d_dst, src);
 
@@ -1169,6 +1180,8 @@ float compute_eltwise_bwd(
         case pk_t::SQRT_DST: return sqrt_bwd_use_dst(d_dst, src);
         case pk_t::LOGISTIC_DST: return logistic_bwd_use_dst(d_dst, src);
         case pk_t::EXP_DST: return exp_bwd_use_dst(d_dst, src);
+        case pk_t::CLIP_V2_DST:
+            return clip_v2_bwd_use_dst(d_dst, src, alpha, beta);
 
         default: assert(!"unknown attr::post_ops::kind");
     }
@@ -1223,29 +1236,42 @@ void maybe_post_ops(const attr_t &attr, float &val, float sum_val,
 }
 
 engine_t::engine_t(dnnl_engine_kind_t engine_kind) {
+#ifdef DNNL_SYCL_DPCPP
+    if (engine_kind == dnnl_cpu) {
+        static dnnl_engine_t inst = nullptr;
+        if (!inst) DNN_SAFE_V(dnnl_engine_create(&inst, engine_kind, 0));
+        engine_ = inst;
+    } else if (engine_kind == dnnl_gpu) {
+        static dnnl_engine_t inst = nullptr;
+        if (!inst) DNN_SAFE_V(dnnl_engine_create(&inst, engine_kind, 0));
+        engine_ = inst;
+    } else
+        assert(!"unsupported engine_kind");
+#else
     DNN_SAFE_V(dnnl_engine_create(&engine_, engine_kind, 0));
+#endif
 }
 
 engine_t::~engine_t() {
+#ifdef DNNL_SYCL_DPCPP
+    engine_ = NULL;
+#else
     DNN_SAFE_V(dnnl_engine_destroy(engine_));
+#endif
 }
 
 stream_t::stream_t(dnnl_engine_t engine) {
     dnnl_engine_kind_t engine_kind;
     DNN_SAFE_V(dnnl_engine_get_kind(engine, &engine_kind));
 
-    dnnl_stream_attr_t stream_attr;
-    DNN_SAFE_V(dnnl_stream_attr_create(&stream_attr, engine_kind));
 #if DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_THREADPOOL
     if (engine_kind == dnnl_cpu) {
-        SAFE_V(dnnl_stream_attr_set_threadpool(
-                stream_attr, dnnl::testing::get_threadpool()));
+        SAFE_V(dnnl_threadpool_interop_stream_create(
+                &stream_, engine, dnnl::testing::get_threadpool()));
+        return;
     }
 #endif
-
-    DNN_SAFE_V(dnnl_stream_create_v2(
-            &stream_, engine, dnnl_stream_default_flags, stream_attr));
-    dnnl_stream_attr_destroy(stream_attr);
+    DNN_SAFE_V(dnnl_stream_create(&stream_, engine, dnnl_stream_default_flags));
 }
 
 stream_t::~stream_t() {

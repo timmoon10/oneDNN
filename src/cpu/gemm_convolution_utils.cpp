@@ -14,7 +14,7 @@
 * limitations under the License.
 *******************************************************************************/
 
-#include "dnnl_types.h"
+#include "oneapi/dnnl/dnnl_types.h"
 
 #include "common/c_types_map.hpp"
 #include "common/dnnl_thread.hpp"
@@ -1495,9 +1495,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
             // There is some heuristics in the definition of
             // inner/outer threading cross point due to the nature of the
             // gemm implementation which we cannot control
-            bool is_blocking_applicable = true
-                    && DNNL_X64 // FIXME: workaround to avoid exhaustive search
-                    && !is_3d
+            bool is_blocking_applicable = true && !is_3d
                     && (!jcp.im2col_sz
                             // spatial is small
                             || spatial >= max_threads * simd_w
@@ -1568,38 +1566,79 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                     return max_icb;
                 };
 
-                auto est_eff = [=](int nthr_oc, int ocb, int osb, int &icb,
-                                       int max_oc_per_thr, int max_os_per_thr) {
+                int best_ocb {1}, best_osb {1};
+                int best_nthr_oc {1};
+                int best_icb {jcp.ic};
+                float best_thr_eff = 0;
+
+                auto try_cfg = [&](int nthr_oc, int ocb, int osb) {
                     // for given nthr_oc, oc block:
                     // 1. find ic block to fit into cache
                     // 2. estimate efficiency basing on rules and heuristic:
                     // - Minimize im2col cost
                     // - ratio of FMA number to data size
                     // - gemm works better if M divided by 48 and N divided by 8
-                    if (osb > max_os_per_thr || ocb > max_oc_per_thr)
-                        return 0.f;
 
-                    int sp_start {0}, sp_end {0}, oc_start {0}, oc_end {0};
-                    int max_y {0}, max_oc {0};
-                    size_t max_thr_size {0};
-                    size_t min_thr_size {(size_t)spatial * jcp.oc + 1};
+                    const int max_oc = div_up(jcp.oc, nthr_oc);
+                    const int min_oc = nstl::max(1, jcp.oc / nthr_oc);
+                    const int max_os
+                            = div_up(spatial, (int)(max_threads / nthr_oc));
+                    ocb = utils::saturate(min_oc_block, max_oc, ocb);
+                    osb = utils::saturate(min_os_block, max_os, osb);
 
-                    for (int i = 0; i < max_threads; i++) {
-                        balance2D(max_threads, i, spatial, sp_start, sp_end,
-                                jcp.oc, oc_start, oc_end, nthr_oc);
-                        const size_t thr_size = (size_t)(sp_end - sp_start)
-                                * (oc_end - oc_start);
-                        if (thr_size > max_thr_size) {
-                            max_y = (sp_end - sp_start);
-                            max_oc = (oc_end - oc_start);
-                            max_thr_size = thr_size;
+                    // The computation of max_thr_size and min_thr_size is
+                    // based on work balance using:
+                    // balance2D(max_threads, i, spatial, sp_start, sp_end,
+                    //            jcp.oc, oc_start, oc_end, nthr_oc);
+                    size_t max_thr_size = 1;
+                    {
+                        const int min_os = div_up(
+                                spatial, (int)div_up(max_threads, nthr_oc));
+                        /* --- compute max_thr_size ------------
+                         may not necessarily be (max_oc * max_os)
+                         thr_size = thr_oc * (spatial /nthrs_in_slice);
+                         with spatial as const, thr_size has maxima when
+                            (A: thr_oc is max) and (B: nthrs_in_slice is min)
+                        */
+                        if (jcp.oc % nthr_oc > max_threads % nthr_oc) {
+                            // If (A) and (B) are true together, then it is the
+                            // global max
+                            max_thr_size = max_oc * max_os;
+                        } else {
+                            const size_t oc_max_os_min = max_oc * min_os;
+                            const size_t oc_min_os_max = min_oc * max_os;
+                            max_thr_size
+                                    = nstl::max(oc_max_os_min, oc_min_os_max);
                         }
-                        if (thr_size < min_thr_size) min_thr_size = thr_size;
+                    }
+
+                    size_t min_thr_size {1};
+                    {
+                        const int min_os = nstl::max(
+                                1, spatial / div_up(max_threads, nthr_oc));
+                        /* --- compute min_thr_size ------------
+                         may not necessarily be (min_oc * min_y)
+                         thr_size = thr_oc * (spatial /nthrs_in_slice);
+                         with spatial as const, thr_size has minima when
+                            (A: thr_oc is min) and (B: nthrs_in_slice is max)
+                        */
+                        if (max_threads % nthr_oc > jcp.oc % nthr_oc) {
+                            // If (A) and (B) are true together, then it is the
+                            // global min
+                            min_thr_size = min_oc * min_os;
+                        } else {
+                            const size_t oc_max_os_min = max_oc * min_os;
+                            const size_t oc_min_os_max = min_oc
+                                    * (size_t)(spatial
+                                            / (int)(max_threads / nthr_oc));
+                            min_thr_size
+                                    = nstl::min(oc_max_os_min, oc_min_os_max);
+                        }
                     }
                     auto thr_disb = (float)min_thr_size / max_thr_size;
 
                     const int oc_per_thr = max_oc;
-                    const int os_per_thr = max_y;
+                    const int os_per_thr = max_os;
                     ocb = nstl::min(oc_per_thr, ocb);
                     const int os_max = nstl::min(jcp.os, os_per_thr);
                     osb = nstl::min(os_max, osb);
@@ -1612,7 +1651,8 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                     int mem_access_cost
                             = (max_ic_block < 1) ? non_cache_access : 1;
                     max_ic_block = nstl::max(1, max_ic_block);
-                    icb = nstl::max(1, jcp.ic / div_up(jcp.ic, max_ic_block));
+                    int icb = nstl::max(
+                            1, jcp.ic / div_up(jcp.ic, max_ic_block));
                     int nb_ic = div_up(jcp.ic, icb);
                     int kb = icb * jcp.ks;
                     int kb_caligned = rnd_up(kb, simd_w);
@@ -1662,58 +1702,129 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                             = (((float)osb / simd_w) * ocb * kb)
                             / (osb_caligned * kb + ocb * kb_caligned
                                     + ocb * osb_caligned);
-
+                    // optimization: remove pow, when corresponding weight is 1
                     const float res_eff = pow(pow(thr_disb, thr_disb_k)
-                                    * pow(oc_disb, oc_disb_k)
-                                    * pow(os_disb, os_disb_k)
-                                    * pow(ic_disb, ic_disb)
-                                    * pow(reg_osb_disb, reg_osb_disb_k)
-                                    * pow(thr_mem_eff, thr_mem_eff_k)
-                                    * pow(gemm_eff, gemm_eff_k)
-                                    * pow(gemm_calc_eff, gemm_calc_eff_k),
+                                    * oc_disb // pow(oc_disb, oc_disb_k)
+                                    * os_disb // pow(os_disb, os_disb_k)
+                                    * ic_disb // pow(ic_disb, ic_disb_k)
+                                    // pow(reg_osb_disb, reg_osb_disb_k)
+                                    * reg_osb_disb
+                                    //pow(thr_mem_eff, thr_mem_eff_k)
+                                    * thr_mem_eff
+                                    //pow(gemm_calc_eff, gemm_calc_eff_k)
+                                    * pow(gemm_eff, gemm_eff_k) * gemm_calc_eff,
                             1.f / k_sum);
-                    return res_eff;
+
+                    if (res_eff > best_thr_eff) {
+                        best_thr_eff = res_eff;
+                        best_nthr_oc = nthr_oc;
+                        best_ocb = ocb;
+                        best_osb = osb;
+                        best_icb = icb;
+                    }
                 };
 
-                /* find the best thread distribution and blocking with highest
-                 * efficiency */
-                int best_nthr_oc {1}, best_ocb {jcp.oc}, best_osb {jcp.os},
-                        best_icb {jcp.ic};
-                float best_thr_eff = est_eff(best_nthr_oc, best_ocb, best_osb,
-                        best_icb, jcp.oc, jcp.os);
+                auto explore_cfg = [&](int nthr_oc, int ocb, int osb) {
+                    try_cfg(nthr_oc, ocb, osb);
+                    // few combinations to try, as the eff is better when ocb is
+                    // multiple of 8 and osb is multiple of 48 or min_os_block.
+                    try_cfg(nthr_oc, rnd_dn(ocb, 8), rnd_dn(osb, 48));
+                    try_cfg(nthr_oc, rnd_up(ocb, 8), rnd_dn(osb, 48));
+                    try_cfg(nthr_oc, rnd_up(ocb, 8), rnd_up(osb, min_os_block));
+                    try_cfg(nthr_oc, rnd_up(ocb, 8), rnd_up(osb, 48));
+                };
 
-                int icb {best_icb};
-                const int nthr_oc_max = max_threads;
-                for (int nthr_oc = 1; nthr_oc <= nthr_oc_max; ++nthr_oc) {
+                for (int nthr_oc = 1; nthr_oc <= max_threads; ++nthr_oc) {
                     const int max_oc_per_thr = div_up(jcp.oc, nthr_oc);
-                    const int min_oc_per_thr
-                            = nstl::min(min_oc_block, max_oc_per_thr);
-                    const int max_os_per_thr = nstl::min(jcp.os,
-                            div_up(spatial,
-                                    nstl::max(1, max_threads / nthr_oc)));
-                    const int min_os_per_thr
-                            = nstl::min(min_os_block, max_os_per_thr);
-                    for (int ocb = min_oc_per_thr; ocb <= max_oc_per_thr;
-                            ocb += nstl::max(1,
-                                    nstl::min(min_oc_block,
-                                            max_oc_per_thr - ocb))) {
-                        for (int osb = min_os_per_thr; osb <= jcp.os;
-                                osb += nstl::max(1,
-                                        nstl::min(min_os_block,
-                                                max_os_per_thr - osb))) {
-                            float thr_eff = est_eff(nthr_oc, ocb, osb, icb,
-                                    max_oc_per_thr, max_os_per_thr);
-                            if (thr_eff > best_thr_eff) {
-                                best_thr_eff = thr_eff;
-                                best_nthr_oc = nthr_oc;
-                                best_ocb = ocb;
-                                best_osb = osb;
-                                best_icb = icb;
-                            }
+                    int max_os_per_thr = div_up(spatial, max_threads / nthr_oc);
+                    int ocb {1}, osb {1}, icb {1};
+                    if (jcp.im2col_sz) {
+                        try_cfg(nthr_oc, max_oc_per_thr, max_os_per_thr);
+                        if ((best_ocb == max_oc_per_thr)
+                                && (best_osb == max_os_per_thr)
+                                && (best_icb == jcp.ic)) {
+                            // best case scenario
+                            continue;
                         }
+
+                        /* 
+                          memory eq from calc_max_icb():
+                            max_icb = (L2 - block_out_size)
+                                    / (inp_row_size + col_row_size
+                                            + wei_col_size);
+                            icb*sh*sw*osb + icb*jcp.ks*osb + 
+                                jcp.ks*max_oc_per_thr*icb + osb *ocb = L2
+
+                            a_k*icb*osb + b_k*icb + osb*ocb = L2
+                            We would like to maximize icb*osb*ocb (FMA).
+
+                            Unfortunately, above eq and constraint doesn't have
+                            a single solution. So, based on experiments we try
+                            few scenarios.
+                            1. icb = jcp.ic
+                            2. Solving the constraint eq we get 
+                              osb = (L2 - 2*b_k*icb)/(2*a_k*icb) >= min_oc_block
+                              => icb <= (L2)/(2* min_oc_block * a_k + 2 * b_k)
+                            3. Maximize channel compute:
+                              ocb = max_oc_per_thr;
+                              icb = jcp.ic;
+                        */
+                        int a_k = sh * sw + jcp.ks;
+                        int b_k = jcp.ks * max_oc_per_thr;
+
+                        // Note 1:
+                        icb = jcp.ic;
+                        ocb = utils::saturate(min_oc_block, max_oc_per_thr,
+                                (L2 - a_k * icb * min_os_block - b_k * icb)
+                                        / min_os_block);
+                        osb = utils::saturate(min_os_block, max_os_per_thr,
+                                (L2 - b_k * icb) / (a_k * icb + ocb));
+                        explore_cfg(nthr_oc, ocb, osb);
+
+                        // Note 2:
+                        const int icb_max = nstl::max(
+                                1, L2 / (2 * min_oc_block * a_k + 2 * b_k));
+                        if (icb_max < jcp.ic) {
+                            // adjust icb, such that it is evenly distributed.
+                            icb = jcp.ic / nstl::max(1, jcp.ic / icb_max);
+                            osb = nstl::max(
+                                    1, (L2 - 2 * b_k * icb) / (2 * icb * a_k));
+                            ocb = L2 / 2 / osb;
+
+                            if (ocb > max_oc_per_thr) {
+                                ocb = max_oc_per_thr;
+                                // reduce mem eq by making ocb constant. we get
+                                osb = utils::saturate(min_os_block,
+                                        max_os_per_thr,
+                                        (L2 - b_k * icb) / (a_k * icb + ocb));
+                            } else if (osb > max_os_per_thr) {
+                                // reduce mem eq by making osb constant. we get
+                                osb = max_os_per_thr;
+                                ocb = utils::saturate(min_oc_block,
+                                        max_oc_per_thr,
+                                        (L2 - a_k * icb * osb - b_k * icb)
+                                                / (osb));
+                            }
+
+                            explore_cfg(nthr_oc, ocb, osb);
+                        }
+
+                        // Note 3:
+                        ocb = max_oc_per_thr;
+                        icb = jcp.ic;
+                        osb = nstl::max(min_os_block,
+                                rnd_dn((L2 - b_k * icb) / (a_k * icb + ocb),
+                                        min_os_block));
+                        explore_cfg(nthr_oc, ocb, osb);
+
+                    } else {
+                        // from calc_max_icb, memory eq is independent of ocb.
+                        // So, set it to maximum.
+                        ocb = max_oc_per_thr;
+                        osb = (L2 - jcp.ks * jcp.ic) / (sh * sw * jcp.ic);
+                        explore_cfg(nthr_oc, ocb, osb);
                     }
                 }
-
                 jcp.outer_threading = true;
                 jcp.nthr_oc = best_nthr_oc;
                 jcp.oc_block = best_ocb;

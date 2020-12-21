@@ -169,7 +169,8 @@ struct rtus_driver_t : public jit_generator {
     rtus_driver_t(int iw, int stride_w, int src_step_h, int src_step_icb,
             int ws_step_icb, bool src_to_ws, size_t typesize, int ic,
             bool is_nspc = false)
-        : iw_(iw)
+        : jit_generator(nullptr, MAX_CODE_SIZE, true, isa)
+        , iw_(iw)
         , stride_w_(stride_w)
         , src_step_h_(src_step_h)
         , src_step_icb_(src_step_icb)
@@ -345,10 +346,9 @@ struct rtus_driver_t : public jit_generator {
                 // of xmm/ymm registers
                 const bool is_ymm = load_size > 16;
                 if (is_ymm)
-                    load_bytes(Ymm(vreg.getIdx()), reg, offset, load_size,
-                            isa == sse41);
+                    load_bytes(Ymm(vreg.getIdx()), reg, offset, load_size);
                 else
-                    load_bytes(vreg, reg, offset, load_size, isa == sse41);
+                    load_bytes(vreg, reg, offset, load_size);
             }
         };
 
@@ -367,10 +367,9 @@ struct rtus_driver_t : public jit_generator {
                 // of xmm/ymm registers
                 const bool is_ymm = store_size > 16;
                 if (is_ymm)
-                    store_bytes(Ymm(vreg.getIdx()), reg, offset, store_size,
-                            isa == sse41);
+                    store_bytes(Ymm(vreg.getIdx()), reg, offset, store_size);
                 else
-                    store_bytes(vreg, reg, offset, store_size, isa == sse41);
+                    store_bytes(vreg, reg, offset, store_size);
             }
         };
 

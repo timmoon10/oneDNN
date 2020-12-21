@@ -15,7 +15,12 @@
 *******************************************************************************/
 
 #include <assert.h>
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
+
+// For is_nvidia_gpu(...)
+#if DNNL_GPU_RUNTIME == DNNL_RUNTIME_DPCPP
+#include "oneapi/dnnl/dnnl_sycl.hpp"
+#endif
 
 #include "dnnl_common.hpp"
 #include "dnnl_memory.hpp"
@@ -108,12 +113,10 @@ inline bool should_stop(const benchdnn_timer_t &t) {
 }
 
 inline int measure_perf_individual(benchdnn_timer_t &t, dnnl_stream_t stream,
-        dnnl_primitive_t prim, std::vector<dnnl_exec_arg_t> &dnnl_args) {
+        perf_function_t &perf_func, std::vector<dnnl_exec_arg_t> &dnnl_args) {
     t.reset();
     while (true) {
-        DNN_SAFE(dnnl_primitive_execute(
-                         prim, stream, (int)dnnl_args.size(), dnnl_args.data()),
-                WARN);
+        DNN_SAFE(perf_func(stream, dnnl_args), WARN);
         t.stamp();
         if (should_stop(t)) break;
     }
@@ -121,14 +124,12 @@ inline int measure_perf_individual(benchdnn_timer_t &t, dnnl_stream_t stream,
 }
 
 inline int measure_perf_aggregate(benchdnn_timer_t &t, dnnl_stream_t stream,
-        dnnl_primitive_t prim, std::vector<dnnl_exec_arg_t> &dnnl_args) {
+        perf_function_t &perf_func, std::vector<dnnl_exec_arg_t> &dnnl_args) {
     const int max_batch_times = 10000;
 
     // Warm-up run
     t.reset();
-    DNN_SAFE(dnnl_primitive_execute(
-                     prim, stream, (int)dnnl_args.size(), dnnl_args.data()),
-            WARN);
+    DNN_SAFE(perf_func(stream, dnnl_args), WARN);
     DNN_SAFE(dnnl_stream_wait(stream), WARN);
     t.stamp();
 
@@ -138,9 +139,7 @@ inline int measure_perf_aggregate(benchdnn_timer_t &t, dnnl_stream_t stream,
 
     while (true) {
         for (int i = 0; i < cur_batch_times; i++) {
-            DNN_SAFE(dnnl_primitive_execute(prim, stream, (int)dnnl_args.size(),
-                             dnnl_args.data()),
-                    WARN);
+            DNN_SAFE(perf_func(stream, dnnl_args), WARN);
         }
         DNN_SAFE(dnnl_stream_wait(stream), WARN);
         t.stamp(cur_batch_times);
@@ -162,7 +161,8 @@ inline int measure_perf_aggregate(benchdnn_timer_t &t, dnnl_stream_t stream,
     return OK;
 }
 
-int measure_perf(benchdnn_timer_t &t, dnnl_primitive_t prim, args_t &args) {
+int measure_perf(
+        benchdnn_timer_t &t, perf_function_t &perf_func, args_t &args) {
     dnnl_engine_kind_t engine_kind;
     DNN_SAFE(dnnl_engine_get_kind(get_test_engine(), &engine_kind), CRIT);
 
@@ -172,16 +172,30 @@ int measure_perf(benchdnn_timer_t &t, dnnl_primitive_t prim, args_t &args) {
         std::vector<dnnl_exec_arg_t> dnnl_args;
         execute_unmap_args(args, dnnl_args);
 
-        // For CPU: measure indiividual iterations
+        // For CPU: measure individual iterations
         // For GPU: measure iterations in batches to hide driver overhead
         if (engine_kind == dnnl_cpu)
-            ret = measure_perf_individual(t, stream, prim, dnnl_args);
+            ret = measure_perf_individual(t, stream, perf_func, dnnl_args);
         else
-            ret = measure_perf_aggregate(t, stream, prim, dnnl_args);
+            ret = measure_perf_aggregate(t, stream, perf_func, dnnl_args);
 
         if (ret == OK) execute_map_args(args);
     }
     return ret;
+}
+
+dnnl_status_t primitive_executor(dnnl_primitive_t prim,
+        const dnnl_stream_t &stream,
+        const std::vector<dnnl_exec_arg_t> &dnnl_args) {
+    return dnnl_primitive_execute(
+            prim, stream, (int)dnnl_args.size(), dnnl_args.data());
+}
+
+int measure_perf(benchdnn_timer_t &t, dnnl_primitive_t prim, args_t &args) {
+    perf_function_t perf_func = std::bind(&primitive_executor, prim,
+            std::placeholders::_1, std::placeholders::_2);
+
+    return measure_perf(t, perf_func, args);
 }
 
 void maybe_prepare_runtime_scales(dnn_mem_t &scales_m, const attr_t &attr,
@@ -246,5 +260,45 @@ void check_known_skipped_case_common(
             r->state = SKIPPED, r->reason = DATA_TYPE_NOT_SUPPORTED;
             break;
         }
+        // cuda supports only f32, f16 and s8 data types
+        if (is_nvidia_gpu()
+                && (i_dt == dnnl_bf16 || i_dt == dnnl_u8 || i_dt == dnnl_s32)) {
+            r->state = SKIPPED, r->reason = DATA_TYPE_NOT_SUPPORTED;
+            break;
+        }
     }
+}
+
+bool is_nvidia_gpu(const engine_t &engine) {
+    dnnl_engine_kind_t engine_kind = dnnl_any_engine;
+    DNN_SAFE_V(dnnl_engine_get_kind(engine, &engine_kind));
+
+    if (engine_kind != dnnl_gpu) return false;
+#if DNNL_WITH_SYCL
+    constexpr int nvidia_vendor_id = 0x10DE;
+    auto eng = dnnl::engine(engine, true);
+    auto device = dnnl::sycl_interop::get_device(eng);
+    const auto eng_vendor_id
+            = device.get_info<cl::sycl::info::device::vendor_id>();
+    return eng_vendor_id == nvidia_vendor_id;
+#endif
+    return false;
+}
+
+bool is_nvidia_eltwise_ok(
+        dir_t dir, attr_t::post_ops_t::kind_t alg, float alpha) {
+    using pk_t = attr_t::post_ops_t::kind_t;
+    switch (alg) {
+        case pk_t::BRELU: return true;
+        case pk_t::ELU: return (dir & FLAG_FWD);
+        case pk_t::LOGISTIC: return (dir & FLAG_FWD);
+        case pk_t::TANH: return (dir & FLAG_FWD);
+        case pk_t::RELU: return alpha == 0.f;
+        // TODO: can be easily supported by Nvidia backend
+        // case pk_t::ELU_DST: return true;
+        // case pk_t::LOGISTIC_DST: return true;
+        // case pk_t::TANH_DST: return true;
+        // case pk_t::RELU_DST: return alpha == 0.f;
+        default: return false;
+    };
 }

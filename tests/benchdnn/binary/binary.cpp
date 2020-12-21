@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "tests/test_thread.hpp"
 
@@ -39,10 +39,8 @@ int fill_src(int input_idx, dnn_mem_t &mem_dt, dnn_mem_t &mem_fp) {
     const int f_min = dt == dnnl_u8 ? 0 : -range / 2;
 
     dnnl::impl::parallel_nd(nelems, [&](int64_t i) {
-        const float gen = ((97 * i) - 5 * input_idx + 101) % (range + 1);
-        const float value = (dt == dnnl_bf16 || dt == dnnl_f16)
-                ? (f_min + gen) / range
-                : (f_min + gen) * (1.0f + 4.0f / range);
+        const int64_t gen = (12 * i + 5 * input_idx + 16) % (range + 1);
+        const float value = (f_min + gen) * 1.25f;
         mem_fp.set_elem(i, round_to_nearest_representable(dt, value));
     });
 
@@ -241,6 +239,14 @@ void check_known_skipped_case(const prb_t *prb, res_t *res) {
     if (prb->inplace && prb->sdt[0] != prb->ddt) {
         res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
         return;
+    }
+
+    if (is_nvidia_gpu()) {
+        const bool alg_ok = !(prb->alg == alg_t::DIV || prb->alg == alg_t::SUB);
+        if (!alg_ok || !prb->attr.post_ops.is_def()) {
+            res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
+            return;
+        }
     }
 }
 

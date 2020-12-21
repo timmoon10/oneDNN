@@ -31,51 +31,105 @@
 
 #include "cpu/aarch64/xbyak_aarch64/xbyak_aarch64.h"
 #include "cpu/aarch64/xbyak_aarch64/xbyak_aarch64_util.h"
+#include "cpu/aarch64/xbyak_translator_aarch64/translator/include/xbyak_translator_aarch64/xbyak.h"
 
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
 
-/* The following enum is temporal implementation.
-   It should be made in dnnl_types.h,
-   but an RFC is requird to modify dnnl_types.h.
-   The following values are used with
-   static_cast<dnnl_cpu_isa_t>, the same values
-   defined in dnnl_cpu_isa_t are temporaly used. */
-/// CPU instruction set flags
-enum {
-    /// AARCH64 Advanced SIMD & floating-point
-    dnnl_cpu_isa_asimd = 0x1,
-    /// AARCH64 SVE 128 bits
-    dnnl_cpu_isa_sve_128 = 0x3,
-    /// AARCH64 SVE 256 bits
-    dnnl_cpu_isa_sve_256 = 0x7,
-    /// AARCH64 SVE 384 bits
-    dnnl_cpu_isa_sve_384 = 0xf,
-    /// AARCH64 SVE 512 bits
-    dnnl_cpu_isa_sve_512 = 0x1f,
-};
-
 enum cpu_isa_bit_t : unsigned {
-    asimd_bit = 1u << 0,
-    sve_128_bit = 1u << 1,
-    sve_256_bit = 1u << 2,
-    sve_384_bit = 1u << 3,
-    sve_512_bit = 1u << 4,
+    sse41_bit = 1u << 0,
+    avx_bit = 1u << 1,
+    avx2_bit = 1u << 2,
+    avx512_common_bit = 1u << 3,
+    avx512_mic_bit = 1u << 4,
+    avx512_mic_4ops_bit = 1u << 5,
+    avx512_core_bit = 1u << 6,
+    avx512_core_vnni_bit = 1u << 7,
+    avx512_core_bf16_bit = 1u << 8,
+    amx_tile_bit = 1u << 9,
+    amx_int8_bit = 1u << 10,
+    amx_bf16_bit = 1u << 11,
+    avx_vnni_bit = 1u << 12,
+
+    asimd_bit = 1u << 13,
+    sve_128_bit = 1u << 14,
+    sve_256_bit = 1u << 15,
+    sve_384_bit = 1u << 16,
+    sve_512_bit = 1u << 17,
 };
 
 enum cpu_isa_t : unsigned {
     isa_any = 0u,
+    sse41 = sse41_bit,
+    avx = avx_bit | sse41,
+    avx2 = avx2_bit | avx,
+    avx_vnni = avx_vnni_bit | avx_bit,
+    avx2_vnni = avx_vnni | avx2,
+    avx512_common = avx512_common_bit | avx2,
+    avx512_mic = avx512_mic_bit | avx512_common,
+    avx512_mic_4ops = avx512_mic_4ops_bit | avx512_mic,
+    avx512_core = avx512_core_bit | avx512_common,
+    avx512_core_vnni = avx512_core_vnni_bit | avx512_core,
+    avx512_core_bf16 = avx512_core_bf16_bit | avx512_core_vnni,
+    amx_tile = amx_tile_bit,
+    amx_int8 = amx_int8_bit | amx_tile,
+    amx_bf16 = amx_bf16_bit | amx_tile,
+    avx512_core_bf16_amx_int8 = avx512_core_bf16 | amx_int8,
+    avx512_core_bf16_amx_bf16 = avx512_core_bf16 | amx_bf16,
+    avx512_core_amx = avx512_core_bf16 | amx_int8 | amx_bf16,
+
     asimd = asimd_bit,
     sve_128 = sve_128_bit | asimd,
     sve_256 = sve_256_bit | asimd,
     sve_384 = sve_384_bit | asimd,
     sve_512 = sve_512_bit | asimd,
-    isa_all = ~0u,
+
+    // NOTE: Intel AMX is under initial support and turned off by default
+    isa_all = ~0u & ~amx_tile_bit & ~amx_int8_bit & ~amx_bf16_bit,
+};
+
+enum class cpu_isa_cmp_t {
+    // List of infix comparison relations between two cpu_isa_t
+    // where we take isa_1 and isa_2 to be two cpu_isa_t instances.
+
+    // isa_1 SUBSET isa_2 if all feature flags supported by isa_1
+    // are supported by isa_2 as well (equality allowed)
+    SUBSET,
+
+    // isa_1 SUPERSET isa_2 if all feature flags supported by isa_2
+    // are supported by isa_1 as well (equality allowed)
+    SUPERSET,
+
+    // Few more options that (depending upon need) can be enabled in future
+
+    // 1. PROPER_SUBSET: isa_1 SUBSET isa_2 and isa_1 != isa_2
+    // 2. PROPER_SUPERSET: isa_1 SUPERSET isa_2 and isa_1 != isa_2
 };
 
 const char *get_isa_info();
+
+static inline bool compare_isa(
+        cpu_isa_t isa_1, cpu_isa_cmp_t cmp, cpu_isa_t isa_2) {
+    unsigned mask_1 = static_cast<unsigned>(isa_1);
+    unsigned mask_2 = static_cast<unsigned>(isa_2);
+    unsigned mask_min = mask_1 & mask_2;
+
+    switch (cmp) {
+        case cpu_isa_cmp_t::SUBSET: return mask_1 == mask_min;
+        case cpu_isa_cmp_t::SUPERSET: return mask_2 == mask_min;
+        default: assert(!"unsupported comparison of isa"); return false;
+    }
+}
+
+static inline bool is_subset(cpu_isa_t isa_1, cpu_isa_t isa_2) {
+    return compare_isa(isa_1, cpu_isa_cmp_t::SUBSET, isa_2);
+}
+
+static inline bool is_superset(cpu_isa_t isa_1, cpu_isa_t isa_2) {
+    return compare_isa(isa_1, cpu_isa_cmp_t::SUPERSET, isa_2);
+}
 
 cpu_isa_t DNNL_API get_max_cpu_isa_mask(bool soft = false);
 status_t set_max_cpu_isa(dnnl_cpu_isa_t isa);
@@ -91,8 +145,100 @@ struct cpu_isa_traits<isa_all> {
 };
 
 template <>
+struct cpu_isa_traits<sse41> {
+    typedef Xbyak::Xmm Vmm;
+    static constexpr int vlen_shift = 4;
+    static constexpr int vlen = 16;
+    static constexpr int n_vregs = 16;
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_sse41;
+    static constexpr const char *user_option_env = "SSE41";
+};
+
+template <>
+struct cpu_isa_traits<avx> {
+    typedef Xbyak::Ymm Vmm;
+    static constexpr int vlen_shift = 5;
+    static constexpr int vlen = 32;
+    static constexpr int n_vregs = 16;
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_avx;
+    static constexpr const char *user_option_env = "AVX";
+};
+
+template <>
+struct cpu_isa_traits<avx2> : public cpu_isa_traits<avx> {
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_avx2;
+    static constexpr const char *user_option_env = "AVX2";
+};
+
+template <>
+struct cpu_isa_traits<avx2_vnni> : public cpu_isa_traits<avx2> {
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_avx2_vnni;
+    static constexpr const char *user_option_env = "AVX2_VNNI";
+};
+
+template <>
+struct cpu_isa_traits<avx512_common> {
+    typedef Xbyak::Zmm Vmm;
+    typedef Xbyak_aarch64::ZReg TReg;
+    typedef Xbyak_aarch64::ZRegB TRegB;
+    typedef Xbyak_aarch64::ZRegH TRegH;
+    typedef Xbyak_aarch64::ZRegS TRegS;
+    typedef Xbyak_aarch64::ZRegD TRegD;
+    static constexpr int vlen_shift = 6;
+    static constexpr int vlen = 64;
+    static constexpr int n_vregs = 32;
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_512);
+    static constexpr const char *user_option_env = "SVE_512";
+};
+
+template <>
+struct cpu_isa_traits<avx512_core> : public cpu_isa_traits<avx512_common> {
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_avx512_core;
+    static constexpr const char *user_option_env = "AVX512_CORE";
+};
+
+template <>
+struct cpu_isa_traits<avx512_mic> : public cpu_isa_traits<avx512_common> {
+    static constexpr dnnl_cpu_isa_t user_option_val = dnnl_cpu_isa_avx512_mic;
+    static constexpr const char *user_option_env = "AVX512_MIC";
+};
+
+template <>
+struct cpu_isa_traits<avx512_mic_4ops> : public cpu_isa_traits<avx512_mic> {
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = dnnl_cpu_isa_avx512_mic_4ops;
+    static constexpr const char *user_option_env = "AVX512_MIC_4OPS";
+};
+
+template <>
+struct cpu_isa_traits<avx512_core_vnni> : public cpu_isa_traits<avx512_core> {
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = dnnl_cpu_isa_avx512_core_vnni;
+    static constexpr const char *user_option_env = "AVX512_CORE_VNNI";
+};
+
+template <>
+struct cpu_isa_traits<avx512_core_bf16> : public cpu_isa_traits<avx512_core> {
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = dnnl_cpu_isa_avx512_core_bf16;
+    static constexpr const char *user_option_env = "AVX512_CORE_BF16";
+};
+
+template <>
+struct cpu_isa_traits<avx512_core_amx> {
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = dnnl_cpu_isa_avx512_core_amx;
+    static constexpr const char *user_option_env = "AVX512_CORE_AMX";
+};
+
+template <>
 struct cpu_isa_traits<asimd> {
-    typedef Xbyak_aarch64::VReg4S Vmm;
+    typedef Xbyak_aarch64::VReg TReg;
+    typedef Xbyak_aarch64::VReg16B TRegB;
+    typedef Xbyak_aarch64::VReg8H TRegH;
+    typedef Xbyak_aarch64::VReg4S TRegS;
+    typedef Xbyak_aarch64::VReg2D TRegD;
     static constexpr int vlen_shift = 4;
     static constexpr int vlen = 16;
     static constexpr int n_vregs = 32;
@@ -102,11 +248,30 @@ struct cpu_isa_traits<asimd> {
 };
 
 template <>
+struct cpu_isa_traits<sve_128> {
+    typedef Xbyak_aarch64::VReg TReg;
+    typedef Xbyak_aarch64::VReg16B TRegB;
+    typedef Xbyak_aarch64::VReg8H TRegH;
+    typedef Xbyak_aarch64::VReg4S TRegS;
+    typedef Xbyak_aarch64::VReg2D TRegD;
+    static constexpr int vlen_shift = 4;
+    static constexpr int vlen = 16;
+    static constexpr int n_vregs = 16;
+    static constexpr dnnl_cpu_isa_t user_option_val
+            = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_128);
+    static constexpr const char *user_option_env = "SVE_128";
+};
+
+template <>
 struct cpu_isa_traits<sve_256> {
-    typedef Xbyak_aarch64::ZRegS Vmm;
+    typedef Xbyak_aarch64::VReg TReg;
+    typedef Xbyak_aarch64::VReg16B TRegB;
+    typedef Xbyak_aarch64::VReg8H TRegH;
+    typedef Xbyak_aarch64::VReg4S TRegS;
+    typedef Xbyak_aarch64::VReg2D TRegD;
     static constexpr int vlen_shift = 5;
     static constexpr int vlen = 32;
-    static constexpr int n_vregs = 32;
+    static constexpr int n_vregs = 16;
     static constexpr dnnl_cpu_isa_t user_option_val
             = static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_256);
     static constexpr const char *user_option_env = "SVE_256";
@@ -114,7 +279,11 @@ struct cpu_isa_traits<sve_256> {
 
 template <>
 struct cpu_isa_traits<sve_512> {
-    typedef Xbyak_aarch64::ZRegS Vmm;
+    typedef Xbyak_aarch64::ZReg TReg;
+    typedef Xbyak_aarch64::ZRegB TRegB;
+    typedef Xbyak_aarch64::ZRegH TRegH;
+    typedef Xbyak_aarch64::ZRegS TRegS;
+    typedef Xbyak_aarch64::ZRegD TRegD;
     static constexpr int vlen_shift = 6;
     static constexpr int vlen = 64;
     static constexpr int n_vregs = 32;
@@ -149,10 +318,18 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
             return cpu().has(Cpu::tSVE) && cpu().getSveLen() == SVE_384;
         case sve_512:
             return cpu().has(Cpu::tSVE) && cpu().getSveLen() == SVE_512;
+        case sse41:
+        case avx2:
+        case avx512_common: return true;
         case isa_any: return true;
         case isa_all: return false;
     }
     return false;
+}
+
+static inline bool mayiuse_atomic() {
+    using namespace Xbyak_aarch64::util;
+    return cpu().isAtomicSupported();
 }
 
 inline bool isa_has_bf16(cpu_isa_t isa) {
@@ -169,7 +346,7 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
     ((isa) == asimd ? prefix STRINGIFY(asimd) : \
     ((isa) == sve_256 ? prefix STRINGIFY(sve_256) : \
     ((isa) == sve_512 ? prefix STRINGIFY(sve_512) : \
-    prefix suffix_if_any))))
+    prefix suffix_if_any)))
 /* clang-format on */
 
 } // namespace aarch64

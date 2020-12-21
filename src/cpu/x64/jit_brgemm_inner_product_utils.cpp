@@ -43,6 +43,56 @@ using namespace data_type;
 
 namespace brgemm_inner_product_utils {
 
+format_tag_t get_brgemm_ip_weights_tag(
+        cpu_isa_t isa, dim_t oc, data_type_t wei_dt, int n_sp_dims) {
+    using namespace format_tag;
+
+    if (isa == avx512_core_bf16_amx_int8)
+        return pick(n_sp_dims, OI16i16o4i, OIw16i16o4i, OIhw16i16o4i,
+                OIdhw16i16o4i);
+
+    if (oc >= 64) {
+        switch (wei_dt) {
+            case data_type::f32:
+                return pick(n_sp_dims, OI16i64o, OIw16i64o, OIhw16i64o,
+                        OIdhw16i64o);
+            case data_type::bf16:
+                return pick(n_sp_dims, OI8i64o2i, OIw8i64o2i, OIhw8i64o2i,
+                        OIdhw8i64o2i);
+            case data_type::s8:
+                return pick(n_sp_dims, OI4i64o4i, OIw4i64o4i, OIhw4i64o4i,
+                        OIdhw4i64o4i);
+            default: return format_tag::undef;
+        }
+    } else if (oc >= 32) {
+        switch (wei_dt) {
+            case data_type::f32:
+                return pick(n_sp_dims, OI16i32o, OIw16i32o, OIhw16i32o,
+                        OIdhw16i32o);
+            case data_type::bf16:
+                return pick(n_sp_dims, OI8i32o2i, OIw8i32o2i, OIhw8i32o2i,
+                        OIdhw8i32o2i);
+            case data_type::s8:
+                return pick(n_sp_dims, OI4i32o4i, OIw4i32o4i, OIhw4i32o4i,
+                        OIdhw4i32o4i);
+            default: return format_tag::undef;
+        }
+    } else {
+        switch (wei_dt) {
+            case data_type::f32:
+                return pick(n_sp_dims, OI16i16o, OIw16i16o, OIhw16i16o,
+                        OIdhw16i16o);
+            case data_type::bf16:
+                return pick(n_sp_dims, OI8i16o2i, OIw8i16o2i, OIhw8i16o2i,
+                        OIdhw8i16o2i);
+            case data_type::s8:
+                return pick(n_sp_dims, OI4i16o4i, OIw4i16o4i, OIhw4i16o4i,
+                        OIdhw4i16o4i);
+            default: return format_tag::undef;
+        }
+    }
+}
+
 // TODO: add support of post-ops with multiple binary and eltwise execution
 bool post_ops_ok(
         jit_brgemm_primitive_conf_t &jbgp, const primitive_attr_t &attr) {
@@ -66,6 +116,7 @@ bool post_ops_ok(
 
 status_t init_ip_conf_fwd(
         jit_brgemm_primitive_conf_t &jbgp, const primitive_attr_t &attr) {
+    const bool is_amx = jbgp.isa == avx512_core_bf16_amx_int8;
     const auto &p = attr.post_ops_;
     jbgp.with_sum = p.find(primitive_kind::sum) != -1;
     const int eltwise_ind = p.find(primitive_kind::eltwise);
@@ -82,22 +133,26 @@ status_t init_ip_conf_fwd(
     }
 
     jbgp.use_buffer = IMPLICATION(jbgp.dst_dt == jbgp.acc_dt, jbgp.with_sum);
-
-    jbgp.ic_block = jbgp.simd_w;
-    if (jbgp.oc >= 4 * jbgp.simd_w) {
-        jbgp.oc_block = 4 * jbgp.simd_w;
-    } else if (jbgp.oc >= 2 * jbgp.simd_w) {
-        jbgp.oc_block = 2 * jbgp.simd_w;
-    } else {
+    if (is_amx) {
+        jbgp.ic_block = 4 * jbgp.simd_w;
         jbgp.oc_block = jbgp.simd_w;
+    } else {
+        jbgp.ic_block = jbgp.simd_w;
+        if (jbgp.oc >= 4 * jbgp.simd_w) {
+            jbgp.oc_block = 4 * jbgp.simd_w;
+        } else if (jbgp.oc >= 2 * jbgp.simd_w) {
+            jbgp.oc_block = 2 * jbgp.simd_w;
+        } else {
+            jbgp.oc_block = jbgp.simd_w;
+        }
     }
 
-    jbgp.nb_ic = utils::div_up(jbgp.ic, jbgp.ic_block);
-    jbgp.nb_oc = utils::div_up(jbgp.oc, jbgp.oc_block);
+    jbgp.nb_ic = div_up(jbgp.ic, jbgp.ic_block);
+    jbgp.nb_oc = div_up(jbgp.oc, jbgp.oc_block);
     jbgp.os = jbgp.mb;
 
     // Configure matrix sizes
-    const int max_M = 64, min_M = 6;
+    const int max_M = 64, min_M = is_amx ? 16 : 6;
     jbgp.os_block = 1;
     for (int m_ = max_M; m_ >= min_M; m_--) {
         if (jbgp.os % m_ == 0) {
@@ -106,7 +161,7 @@ status_t init_ip_conf_fwd(
         }
     }
     if (jbgp.os_block == 1) jbgp.os_block = nstl::min(jbgp.os, max_M);
-    jbgp.nb_os = utils::div_up(jbgp.os, jbgp.os_block);
+    jbgp.nb_os = div_up(jbgp.os, jbgp.os_block);
     jbgp.nb_os_blocking = 1;
     jbgp.M = jbgp.os_block;
     jbgp.M_tail = jbgp.os % jbgp.os_block;
@@ -144,8 +199,8 @@ status_t init_ip_conf_bwd_d(jit_brgemm_primitive_conf_t &jbgp) {
         jbgp.ic_block = 2 * jbgp.simd_w;
     jbgp.oc_block = jbgp.simd_w;
 
-    jbgp.nb_ic = utils::div_up(jbgp.ic, jbgp.ic_block);
-    jbgp.nb_oc = utils::div_up(jbgp.oc, jbgp.oc_block);
+    jbgp.nb_ic = div_up(jbgp.ic, jbgp.ic_block);
+    jbgp.nb_oc = div_up(jbgp.oc, jbgp.oc_block);
     jbgp.os = jbgp.mb;
 
     // Configure matrix sizes
@@ -158,7 +213,7 @@ status_t init_ip_conf_bwd_d(jit_brgemm_primitive_conf_t &jbgp) {
         }
     }
     if (jbgp.os_block == 1) jbgp.os_block = nstl::min(jbgp.os, max_M);
-    jbgp.nb_os = utils::div_up(jbgp.os, jbgp.os_block);
+    jbgp.nb_os = div_up(jbgp.os, jbgp.os_block);
     jbgp.nb_os_blocking = 1;
     jbgp.M = jbgp.os_block;
     jbgp.M_tail = jbgp.os % jbgp.os_block;
@@ -199,7 +254,7 @@ void thread_balance(const jit_brgemm_primitive_conf_t &j, int &nb_os_blocking_,
         int src_size = j.ic * j.mb;
         int dst_size = j.oc * j.mb;
         int wei_size = j.ic * j.oc;
-        int os_chunks = utils::div_up(j.nb_os, nb_os_blocking);
+        int os_chunks = div_up(j.nb_os, nb_os_blocking);
         float wei_compensation_scale = 0.5f * (dst_size + src_size) / wei_size;
         float oi_channels_ratio = (float)src_size / dst_size;
         auto get_src_coef = [=]() {
@@ -220,41 +275,40 @@ void thread_balance(const jit_brgemm_primitive_conf_t &j, int &nb_os_blocking_,
 
         float src_tr = 0.0f;
         if (j.use_buffer_a) {
-            int src_tr_oc_par_work = utils::div_up(os_chunks, nthr_mb)
-                    * utils::div_up(ic_chunks, nthr_ic) * j.nb_ic_blocking;
-            src_tr = get_src_coef() * utils::div_up(src_tr_oc_par_work, nthr_oc)
+            int src_tr_oc_par_work = div_up(os_chunks, nthr_mb)
+                    * div_up(ic_chunks, nthr_ic) * j.nb_ic_blocking;
+            src_tr = get_src_coef() * div_up(src_tr_oc_par_work, nthr_oc)
                     * nb_os_blocking * j.os_block * j.ic_block;
         }
 
         float dst_tr = 0.0f;
         if (j.use_buffer_b) {
-            int dst_tr_ic_par_work = utils::div_up(os_chunks, nthr_mb)
-                    * utils::div_up(oc_chunks, nthr_oc) * j.nb_oc_blocking;
-            dst_tr = get_dst_coef() * utils::div_up(dst_tr_ic_par_work, nthr_ic)
+            int dst_tr_ic_par_work = div_up(os_chunks, nthr_mb)
+                    * div_up(oc_chunks, nthr_oc) * j.nb_oc_blocking;
+            dst_tr = get_dst_coef() * div_up(dst_tr_ic_par_work, nthr_ic)
                     * nb_os_blocking * j.os_block * j.oc_block;
         }
 
-        float src_v = get_src_coef() * utils::div_up(os_chunks, nthr_mb)
-                * utils::div_up(ic_chunks, nthr_ic) * nb_os_blocking
-                * j.os_block * j.nb_ic_blocking * j.ic_block;
-        float dst_v = get_dst_coef() * utils::div_up(os_chunks, nthr_mb)
-                * utils::div_up(oc_chunks, nthr_oc) * nb_os_blocking
-                * j.os_block * j.nb_oc_blocking * j.oc_block;
+        float src_v = get_src_coef() * div_up(os_chunks, nthr_mb)
+                * div_up(ic_chunks, nthr_ic) * nb_os_blocking * j.os_block
+                * j.nb_ic_blocking * j.ic_block;
+        float dst_v = get_dst_coef() * div_up(os_chunks, nthr_mb)
+                * div_up(oc_chunks, nthr_oc) * nb_os_blocking * j.os_block
+                * j.nb_oc_blocking * j.oc_block;
 
         auto acc_dt_sz = types::data_type_size(j.acc_dt);
-        float wei_v = get_wei_coef() * acc_dt_sz
-                * utils::div_up(oc_chunks, nthr_oc)
-                * utils::div_up(ic_chunks, nthr_ic) * j.nb_oc_blocking
-                * j.oc_block * j.nb_ic_blocking * j.ic_block;
+        float wei_v = get_wei_coef() * acc_dt_sz * div_up(oc_chunks, nthr_oc)
+                * div_up(ic_chunks, nthr_ic) * j.nb_oc_blocking * j.oc_block
+                * j.nb_ic_blocking * j.ic_block;
 
         float wei_r = 0;
         if (nthr_mb > 1) {
             auto wei_dt_sz = types::data_type_size(j.wei_dt);
-            int wei_r_mb_par_work = utils::div_up(oc_chunks, nthr_oc)
-                    * utils::div_up(ic_chunks, nthr_ic) * j.nb_oc_blocking
+            int wei_r_mb_par_work = div_up(oc_chunks, nthr_oc)
+                    * div_up(ic_chunks, nthr_ic) * j.nb_oc_blocking
                     * j.nb_ic_blocking;
             wei_r = get_wei_coef() * (wei_dt_sz + nthr_mb * acc_dt_sz)
-                    * utils::div_up(wei_r_mb_par_work, nthr_mb) * j.oc_block
+                    * div_up(wei_r_mb_par_work, nthr_mb) * j.oc_block
                     * j.ic_block;
         }
 
@@ -268,11 +322,10 @@ void thread_balance(const jit_brgemm_primitive_conf_t &j, int &nb_os_blocking_,
     const int nthr_mb_max = nstl::min(nthr, j.nb_os);
     for (int nthr_mb = 1; nthr_mb <= nthr_mb_max; ++nthr_mb) {
         int nb_os_blocking = j.nb_os_blocking;
-        int os_chunks = utils::div_up(j.nb_os, nb_os_blocking);
+        int os_chunks = div_up(j.nb_os, nb_os_blocking);
         if (os_chunks < nthr_mb) {
-            int coef = utils::saturate(1, 4, 2 * j.mb / (j.oc + j.ic));
-            int os_blocking_max
-                    = utils::div_up(utils::div_up(j.nb_os, coef), nthr_mb);
+            int coef = saturate(1, 4, 2 * j.mb / (j.oc + j.ic));
+            int os_blocking_max = div_up(div_up(j.nb_os, coef), nthr_mb);
             for (int bl = os_blocking_max; bl >= 1; bl--)
                 if (j.nb_os % bl == 0) {
                     nb_os_blocking = bl;
@@ -310,14 +363,14 @@ status_t init_ip_conf_bwd_w(jit_brgemm_primitive_conf_t &jbgp) {
         jbgp.oc_block = jbgp.simd_w;
     }
 
-    jbgp.nb_ic = utils::div_up(jbgp.ic, jbgp.ic_block);
-    jbgp.nb_oc = utils::div_up(jbgp.oc, jbgp.oc_block);
+    jbgp.nb_ic = div_up(jbgp.ic, jbgp.ic_block);
+    jbgp.nb_oc = div_up(jbgp.oc, jbgp.oc_block);
     jbgp.nb_oc_blocking = 1;
     jbgp.nb_ic_blocking = jbgp.nb_ic % 2 ? 1 : 2;
 
     jbgp.os = jbgp.mb;
     jbgp.os_block = 16;
-    jbgp.nb_os = utils::div_up(jbgp.os, jbgp.os_block);
+    jbgp.nb_os = div_up(jbgp.os, jbgp.os_block);
 
     // Configure matrix sizes
     jbgp.M = jbgp.ic_block;
@@ -357,7 +410,7 @@ status_t init_ip_conf_bwd_w(jit_brgemm_primitive_conf_t &jbgp) {
     return status::success;
 }
 
-status_t init_ip_conf(jit_brgemm_primitive_conf_t &jbgp,
+status_t init_ip_conf(cpu_isa_t isa, jit_brgemm_primitive_conf_t &jbgp,
         const inner_product_desc_t &ipd, memory_desc_t &src_md,
         memory_desc_t &weights_md, memory_desc_t &dst_md,
         memory_desc_t &bias_md, const primitive_attr_t &attr, int nthreads) {
@@ -369,11 +422,12 @@ status_t init_ip_conf(jit_brgemm_primitive_conf_t &jbgp,
     if (!mayiuse(avx512_common)) return status::unimplemented;
 
     int ndims = src_d.ndims();
-    int dst_ndims = dst_d.ndims();
-    if (dst_ndims != 2) return status::unimplemented;
+    if (weights_d.ndims() != ndims || dst_d.ndims() != 2)
+        return status::unimplemented;
 
     jbgp = zero<decltype(jbgp)>();
     jbgp.ndims = ndims;
+    jbgp.isa = isa;
     jbgp.prop_kind = ipd.prop_kind;
     jbgp.ngroups = 1;
     jbgp.mb = src_d.dims()[0];
@@ -390,13 +444,12 @@ status_t init_ip_conf(jit_brgemm_primitive_conf_t &jbgp,
     jbgp.kw = (ndims < 3) ? 1 : weights_d.dims()[ndims - 1];
     jbgp.stride_d = jbgp.stride_h = jbgp.stride_w = 1;
 
-    if (!utils::everyone_is(1, jbgp.ow, jbgp.oh, jbgp.od))
+    if (!everyone_is(1, jbgp.ow, jbgp.oh, jbgp.od))
         return status::unimplemented;
     if (jbgp.kw != jbgp.iw || jbgp.kh != jbgp.ih || jbgp.kd != jbgp.id)
         return status::unimplemented;
-    if (!utils::everyone_is(1, jbgp.kw, jbgp.kh, jbgp.kd))
+    if (!everyone_is(1, jbgp.kw, jbgp.kh, jbgp.kd))
         return status::unimplemented;
-    if (ndims != 2) return status::unimplemented;
 
     const int full_simd_w = 16;
     jbgp.simd_w = full_simd_w;
@@ -413,31 +466,43 @@ status_t init_ip_conf(jit_brgemm_primitive_conf_t &jbgp,
             ? pick_by_prop_kind(jbgp.prop_kind, ipd.bias_desc.data_type,
                     data_type::undef, ipd.diff_bias_desc.data_type)
             : data_type::undef;
-    jbgp.signed_input = jbgp.src_dt == s8;
+    jbgp.signed_input = isa == avx512_core_vnni && jbgp.src_dt == s8;
+    const bool is_int8 = one_of(jbgp.src_dt, u8, s8) && jbgp.wei_dt == s8;
+    const bool is_bf16
+            = everyone_is(bf16, jbgp.src_dt, jbgp.wei_dt, jbgp.dst_dt)
+            || pick_by_prop_kind(jbgp.prop_kind,
+                    everyone_is(bf16, jbgp.src_dt, jbgp.wei_dt)
+                            && jbgp.dst_dt == f32,
+                    everyone_is(bf16, jbgp.wei_dt, jbgp.dst_dt)
+                            && jbgp.src_dt == f32,
+                    everyone_is(bf16, jbgp.src_dt, jbgp.dst_dt)
+                            && jbgp.wei_dt == f32);
 
-    if (!IMPLICATION(jbgp.wei_dt == s8, mayiuse(avx512_core_vnni)))
+    if (!IMPLICATION(is_int8,
+                one_of(isa, avx512_core_vnni, avx512_core_bf16_amx_int8)))
         return status::unimplemented;
-    if (!IMPLICATION(jbgp.wei_dt == bf16, mayiuse(avx512_core_bf16)))
+    if (!IMPLICATION(is_bf16, isa == avx512_core_bf16))
         return status::unimplemented;
 
-    if (one_of(jbgp.src_dt, u8, s8)) {
+    if (is_int8) {
         jbgp.acc_dt = s32;
         jbgp.with_scales = true;
-    } else if (one_of(jbgp.src_dt, f32, bf16)) {
+    } else if (is_bf16) {
         jbgp.acc_dt = f32;
     } else
         return status::unimplemented;
 
     auto set_or_check_tags = [&]() -> status_t {
         using namespace format_tag;
-        format_tag_t desired_src_tag = nc;
+        format_tag_t desired_src_tag = pick(ndims - 2, nc, ncw, nchw, ncdhw);
         format_tag_t desired_dst_tag = nc;
 
         if (src_d.format_kind() == format_kind::any) {
             CHECK(memory_desc_init_by_tag(src_md, desired_src_tag));
             jbgp.src_tag = desired_src_tag;
         } else {
-            jbgp.src_tag = memory_desc_matches_one_of_tag(src_md, nc);
+            jbgp.src_tag
+                    = memory_desc_matches_one_of_tag(src_md, desired_src_tag);
         }
 
         if (dst_d.format_kind() == format_kind::any) {
@@ -447,16 +512,15 @@ status_t init_ip_conf(jit_brgemm_primitive_conf_t &jbgp,
             jbgp.dst_tag = memory_desc_matches_one_of_tag(dst_md, nc);
         }
 
-        if (jbgp.src_tag == format_tag::undef
-                || jbgp.dst_tag == format_tag::undef
-                || jbgp.src_tag != jbgp.dst_tag)
+        if (one_of(format_tag::undef, jbgp.src_tag, jbgp.dst_tag))
             return status::unimplemented;
 
         if (jbgp.with_bias && bias_md.format_kind == format_kind::any)
             CHECK(memory_desc_init_by_tag(bias_md, x));
 
         memory_desc_t want_wei_md = weights_md;
-        jbgp.wei_tag = get_brgemm_ip_weights_tag((dim_t)jbgp.oc, jbgp.wei_dt);
+        jbgp.wei_tag = get_brgemm_ip_weights_tag(
+                isa, (dim_t)jbgp.oc, jbgp.wei_dt, ndims - 2);
         CHECK(memory_desc_init_by_tag(want_wei_md, jbgp.wei_tag));
 
         if (jbgp.signed_input) {
@@ -509,10 +573,10 @@ void init_scratchpad(memory_tracking::registrar_t &scratchpad,
     }
 
     if (jbgp.use_buffer_a) {
-        int ic_chunks = utils::div_up(
-                utils::div_up(jbgp.nb_ic, jbgp.nb_ic_blocking), jbgp.nthr_ic_b);
-        int os_chunks = utils::div_up(
-                utils::div_up(jbgp.nb_os, jbgp.nb_os_blocking), jbgp.nthr_mb);
+        int ic_chunks = div_up(
+                div_up(jbgp.nb_ic, jbgp.nb_ic_blocking), jbgp.nthr_ic_b);
+        int os_chunks
+                = div_up(div_up(jbgp.nb_os, jbgp.nb_os_blocking), jbgp.nthr_mb);
         scratchpad.book(key_brgemm_primitive_buffer_a,
                 jbgp.nthr * ic_chunks * os_chunks * jbgp.gemm_batch_size
                         * jbgp.os_block * jbgp.ic_block * jbgp.nb_ic_blocking,
@@ -520,8 +584,8 @@ void init_scratchpad(memory_tracking::registrar_t &scratchpad,
     }
 
     if (jbgp.use_buffer_b && jbgp.prop_kind == dnnl_backward_weights) {
-        int os_chunks = utils::div_up(
-                utils::div_up(jbgp.nb_os, jbgp.nb_os_blocking), jbgp.nthr_mb);
+        int os_chunks
+                = div_up(div_up(jbgp.nb_os, jbgp.nb_os_blocking), jbgp.nthr_mb);
         scratchpad.book(key_brgemm_primitive_buffer_b,
                 jbgp.nthr * os_chunks * jbgp.gemm_batch_size * jbgp.os_block
                         * jbgp.oc_block,
@@ -551,6 +615,10 @@ void init_scratchpad(memory_tracking::registrar_t &scratchpad,
     if (dnnl_thr_syncable() && jbgp.prop_kind == dnnl_backward_weights)
         scratchpad.book<simple_barrier::ctx_t>(
                 key_conv_wei_bia_reduction_bctx, 1);
+
+    if (jbgp.isa == avx512_core_bf16_amx_int8)
+        scratchpad.book(
+                key_conv_amx_tile_buffer, jbgp.nthr * 1024, sizeof(char));
 }
 
 } // namespace brgemm_inner_product_utils

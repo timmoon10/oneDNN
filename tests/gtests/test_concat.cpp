@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -90,12 +90,28 @@ class concat_test_t : public ::testing::TestWithParam<concat_test_params_t> {
     }
 
 protected:
+    bool cuda_supported_format_tag(memory::format_tag tag) {
+        return impl::utils::one_of(tag, dnnl_a, dnnl_ab, dnnl_abc, dnnl_abcd,
+                dnnl_abcde, dnnl_abcdef, dnnl_abdec, dnnl_acb, dnnl_acbde,
+                dnnl_acbdef, dnnl_acdb, dnnl_acdeb, dnnl_ba, dnnl_bac,
+                dnnl_bacd, dnnl_bca, dnnl_bcda, dnnl_bcdea, dnnl_cba, dnnl_cdba,
+                dnnl_cdeba, dnnl_decab, dnnl_defcab, dnnl_aBc4b, dnnl_aBcd4b,
+                dnnl_aBcde4b);
+    }
+
     void SetUp() override {
         auto data_type = data_traits<data_t>::data_type;
         SKIP_IF(unsupported_data_type(data_type),
                 "Engine does not support this data type.");
         concat_test_params_t p
                 = ::testing::TestWithParam<decltype(p)>::GetParam();
+        for (int i = 0; i < p.srcs_cds.size(); i++) {
+            SKIP_IF_CUDA(!cuda_supported_format_tag(p.srcs_format[i]),
+                    "Unsupported format tag");
+        }
+
+        SKIP_IF_CUDA(!cuda_supported_format_tag(p.dst_format),
+                "Unsupported format tag");
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status, false);
     }
@@ -127,7 +143,7 @@ protected:
         std::vector<memory> srcs;
         for (size_t i = 0; i < p.srcs_cds.size(); i++) {
             auto md = memory::desc(p.srcs_cds[i], data_type, p.srcs_format[i]);
-            auto src_memory = memory(md, eng);
+            auto src_memory = test::make_memory(md, eng);
             const size_t sz = src_memory.get_desc().get_size() / sizeof(data_t);
             fill_data<data_t>(sz, src_memory);
             check_zero_tail<data_t>(1, src_memory);
@@ -148,7 +164,7 @@ protected:
                                 query::exec_arg_md, DNNL_ARG_MULTIPLE_SRC + i)
                     == concat_pd.src_desc(i));
 
-        auto dst = memory(concat_pd.dst_desc(), eng);
+        auto dst = test::make_memory(concat_pd.dst_desc(), eng);
         fill_data<data_t>(dst.get_desc().get_size() / sizeof(data_t), dst);
         check_zero_tail<data_t>(1, dst);
 

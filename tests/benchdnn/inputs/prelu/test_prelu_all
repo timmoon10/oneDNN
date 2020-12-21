@@ -1,6 +1,7 @@
 --reset
 
 --dir=FWD_D,BWD_DW
---dt=f32,bf16
---tag=abx
---batch=shapes_all
+--sdt=f32:f32
+--batch=option_set_all
+
+--batch=test_prelu_bfloat16

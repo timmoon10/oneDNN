@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 #if DNNL_X64
 #include "src/cpu/x64/cpu_isa_traits.hpp"
@@ -59,6 +59,9 @@ protected:
         ASSERT_EQ(p.aalgorithm, algorithm::convolution_direct);
         auto eng = get_test_engine();
         memory::data_type data_type = data_traits<data_t>::data_type;
+        SKIP_IF_CUDA((p.expected_src_fmt == data_fmt_t::blocked_cX
+                             || p.expected_dst_fmt == data_fmt_t::blocked_cX),
+                "unsupported format");
         ASSERT_EQ(data_type, dnnl::memory::data_type::f32);
 
         test_convolution_sizes_t cd = p.test_cd;

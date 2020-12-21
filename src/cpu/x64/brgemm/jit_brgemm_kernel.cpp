@@ -37,7 +37,9 @@ using namespace Xbyak;
 
 struct jit_brgemm_kernel_base_t : public jit_generator {
     jit_brgemm_kernel_base_t(const brgemm_t &abrg)
-        : brg(abrg), eltwise_injector_(nullptr) {
+        : jit_generator(nullptr, MAX_CODE_SIZE, true, avx512_common)
+        , brg(abrg)
+        , eltwise_injector_(nullptr) {
         if (brg.with_eltwise) {
             const auto &p = brg.attr->post_ops_;
             const int eltwise_ind = p.find(primitive_kind::eltwise);
@@ -132,14 +134,16 @@ private:
     }
 #if defined(_N_BCST_1_LOAD)
     Xbyak::Zmm bcst(int bd) {
-        assert(brg.ld_block2 * brg.bd_block < 31);
-        return Xbyak::Zmm(31 - (brg.ld_block2 * brg.bd_block) - bd);
+        int idx = 31 - (brg.ld_block2 * brg.bd_block) - bd;
+        assert(idx > 0);
+        return Xbyak::Zmm(idx);
     }
     Xbyak::Zmm load() { return Xbyak::Zmm(0); }
 #else
     Xbyak::Zmm load(int ld) {
-        assert(brg.ld_block2 * brg.bd_block < 31);
-        return Xbyak::Zmm(31 - (brg.ld_block2 * brg.bd_block) - ld);
+        int idx = 31 - (brg.ld_block2 * brg.bd_block) - ld;
+        assert(idx > 0);
+        return Xbyak::Zmm(idx);
     }
     Xbyak::Zmm bcst() { return Xbyak::Zmm(0); }
 #endif
@@ -168,7 +172,7 @@ private:
             int bd_block, int ld_block, bool is_ld_tail);
     void store_accumulators_apply_post_ops(
             int bd_block, int ld_block, bool is_ld_tail);
-    void apply_beta(int bd_block, int ld_block, bool is_ld_tail);
+    void apply_alpha_beta(int bd_block, int ld_block, bool is_ld_tail);
 
     void restore_A_B_matrices();
     void restore_offsets();
@@ -361,16 +365,21 @@ void jit_brgemm_kernel_base_t::load_accumulators(
     }
 }
 
-void jit_brgemm_kernel_base_t::apply_beta(
+void jit_brgemm_kernel_base_t::apply_alpha_beta(
         int bd_block, int ld_block2, bool is_ld_tail) {
     auto k_mask = (!is_ld_tail) ? ld_full_mask : ld_tail_mask;
     auto zmm_beta = zmm_tmp_1();
     auto zmm_alpha = zmm_tmp_2();
     auto zmm_prev_dst = zmm_tmp_3();
 
-    const bool apply_alpha = (brg.alpha != 1.f && brg.alpha != 0.f);
+    const bool apply_alpha = brg.alpha != 1.f;
+    const bool apply_beta = brg.beta != 0.f;
+    if (!apply_alpha && !apply_beta) return;
 
-    if (brg.beta != 1.f) {
+    const bool dq2ps_required = brg.is_int8 && (apply_alpha || brg.beta != 1.f);
+    const bool use_vadd_for_beta = brg.beta == 1.f && !dq2ps_required;
+
+    if (apply_beta && !use_vadd_for_beta) {
         mov(reg_tmp_gpr, float2int((float)brg.beta));
         movq(Xmm(zmm_beta.getIdx()), reg_tmp_gpr);
         vbroadcastss(zmm_beta, Xmm(zmm_beta.getIdx()));
@@ -380,45 +389,49 @@ void jit_brgemm_kernel_base_t::apply_beta(
         movq(Xmm(zmm_alpha.getIdx()), reg_tmp_gpr);
         vbroadcastss(zmm_alpha, Xmm(zmm_alpha.getIdx()));
     }
-    for (int bd = 0; bd < bd_block; bd++)
-        for (int ld = 0; ld < ld_block2; ld++) {
-            auto zmm = accm(ld_block2, bd, ld);
-            if (brg.is_int8 && (apply_alpha || brg.beta != 1.f))
-                vcvtdq2ps(zmm, zmm);
-            if (apply_alpha) vmulps(zmm, zmm, zmm_alpha);
-            if (brg.beta != 1.f) {
-                cvt2ps(brg.dt_c, zmm_prev_dst,
-                        ptr[reg_aux_C + C_offset(bd, ld)], true, false, k_mask);
-                vfmadd231ps(zmm, zmm_prev_dst, zmm_beta);
-            } else {
+    for_(int bd = 0; bd < bd_block; bd++)
+    for (int ld = 0; ld < ld_block2; ld++) {
+        auto zmm = accm(ld_block2, bd, ld);
+        if (dq2ps_required) vcvtdq2ps(zmm, zmm);
+        if (apply_alpha) vmulps(zmm, zmm, zmm_alpha);
+        if (apply_beta) {
+            auto ptr_C = ptr[reg_aux_C + C_offset(bd, ld)];
+            if (use_vadd_for_beta) {
+                auto zmm_masked = zmm | k_mask | T_z;
                 if (brg.is_int8)
-                    vpaddd(zmm | k_mask | T_z, zmm,
-                            ptr[reg_aux_C + C_offset(bd, ld)]);
+                    vpaddd(zmm_masked, zmm, ptr_C);
                 else
-                    vaddps(zmm | k_mask | T_z, zmm,
-                            ptr[reg_aux_C + C_offset(bd, ld)]);
+                    vaddps(zmm_masked, zmm, ptr_C);
+            } else {
+                cvt2ps(brg.dt_c, zmm_prev_dst, ptr_C, true, false, k_mask);
+                vfmadd231ps(zmm, zmm_prev_dst, zmm_beta);
             }
         }
+    }
 }
 
 void jit_brgemm_kernel_base_t::store_accumulators_apply_post_ops(
         int bd_block, int ld_block2, bool is_ld_tail) {
     auto k_mask = (!is_ld_tail) ? ld_full_mask : ld_tail_mask;
 
+    // if (brg.is_int8 && alpha_or_beta_applicable && !beta_uses_vadd) ->
+    // accumulated values are already converted to ps in apply_alpha_beta()
+    const bool alpha_or_beta_applicable = brg.alpha != 1.0f || brg.beta != 0.f;
+    const bool beta_uses_vadd
+            = brg.beta == 1.f && IMPLICATION(brg.is_int8, brg.alpha == 1.0f);
+    const bool dq2ps_required = brg.is_int8
+            && IMPLICATION(alpha_or_beta_applicable, beta_uses_vadd);
+
     if (brg.with_bias) { mov(reg_aux_bias, ptr[rsp + reg_aux_bias_offs_]); }
-    for (int bd = 0; bd < bd_block; bd++) {
-        for (int ld = 0; ld < ld_block2; ld++) {
-            auto zmm = accm(ld_block2, bd, ld);
-            if (!brg.is_f32 && !brg.is_bf16
-                    && ((brg.beta != 0.f) || (brg.beta != 1.f)))
-                vcvtdq2ps(zmm, zmm);
-            if (brg.with_bias) {
-                auto zmm_bias = zmm_tmp_1();
-                cvt2ps(brg.dt_bias, zmm_bias,
-                        ptr[reg_aux_bias + bias_offset(ld)], true, false,
-                        k_mask);
-                vaddps(zmm, zmm, zmm_bias);
-            }
+    for_(int bd = 0; bd < bd_block; bd++)
+    for (int ld = 0; ld < ld_block2; ld++) {
+        auto zmm = accm(ld_block2, bd, ld);
+        if (dq2ps_required) vcvtdq2ps(zmm, zmm);
+        if (brg.with_bias) {
+            auto zmm_bias = zmm_tmp_1();
+            auto ptr_bias = ptr[reg_aux_bias + bias_offset(ld)];
+            cvt2ps(brg.dt_bias, zmm_bias, ptr_bias, true, false, k_mask);
+            vaddps(zmm, zmm, zmm_bias);
         }
     }
 
@@ -481,15 +494,22 @@ void jit_brgemm_kernel_base_t::store_accumulators_apply_post_ops(
     if (brg.with_eltwise && sum_before_eltwise)
         eltwise_injector_->compute_vector_range(32 - bd_block * ld_block2, 32);
 
-    auto zmm_zero = zmm_tmp_1();
-    if (brg.dt_d == data_type::u8) vpxord(zmm_zero, zmm_zero, zmm_zero);
+    const bool dt_requires_saturation
+            = one_of(brg.dt_d, data_type::u8, data_type::s8, data_type::s32);
+    auto zmm_lbound = zmm_tmp_1();
+    auto zmm_ubound = zmm_tmp_2();
+    if (dt_requires_saturation) {
+        init_saturate_f32(
+                zmm_lbound, zmm_ubound, reg_tmp_gpr, data_type::f32, brg.dt_d);
+    }
 
     for (int bd = 0; bd < bd_block; bd++) {
-        for (int ld = 0; ld < ld_block2; ld++) {
-            auto zmm = accm(ld_block2, bd, ld);
-            if (brg.dt_d == data_type::u8) vmaxps(zmm, zmm_zero, zmm);
-            if (!one_of(brg.dt_d, data_type::f32, data_type::bf16))
+        if (dt_requires_saturation) {
+            for (int ld = 0; ld < ld_block2; ld++) {
+                auto zmm = accm(ld_block2, bd, ld);
+                saturate_f32(zmm, zmm_lbound, zmm_ubound, brg.dt_d);
                 vcvtps2dq(zmm, zmm);
+            }
         }
         for (int ld = 0; ld < ld_block2; ld++) {
             auto addr = ptr[reg_aux_D + D_offset(bd, ld)];
@@ -514,11 +534,31 @@ void jit_brgemm_kernel_base_t::store_accumulators_apply_post_ops(
 
 void jit_brgemm_kernel_base_t::store_accumulators_without_post_ops(
         int bd_block, int ld_block2, bool is_ld_tail) {
+
+    // if (brg.is_int8 && alpha_or_beta_applicable && !beta_uses_vadd) ->
+    // accumulated values are converted to ps in apply_alpha_beta()
+    const bool alpha_or_beta_applicable = brg.alpha != 1.0f || brg.beta != 0.f;
+    const bool beta_uses_vadd
+            = brg.beta == 1.f && IMPLICATION(brg.is_int8, brg.alpha == 1.0f);
+    const bool dt_requires_saturation = brg.is_int8
+            && !IMPLICATION(alpha_or_beta_applicable, beta_uses_vadd);
+    auto zmm_lbound = zmm_tmp_1();
+    auto zmm_ubound = zmm_tmp_2();
+    if (dt_requires_saturation) {
+        init_saturate_f32(
+                zmm_lbound, zmm_ubound, reg_tmp_gpr, data_type::f32, brg.dt_d);
+    }
+
     for (int bd = 0; bd < bd_block; bd++) {
+        if (dt_requires_saturation) {
+            for (int ld = 0; ld < ld_block2; ld++) {
+                auto zmm = accm(ld_block2, bd, ld);
+                saturate_f32(zmm, zmm_lbound, zmm_ubound, brg.dt_d);
+                vcvtps2dq(zmm, zmm);
+            }
+        }
         for (int ld = 0; ld < ld_block2; ld++) {
             auto zmm = accm(ld_block2, bd, ld);
-            if (!one_of(brg.beta, 1.f, 0.f) && (!brg.is_f32 && !brg.is_bf16))
-                vcvtps2dq(zmm, zmm);
             if (is_ld_tail)
                 vmovups(ptr[reg_aux_C + C_offset(bd, ld)] | ld_tail_mask | T_z,
                         zmm);
@@ -530,53 +570,87 @@ void jit_brgemm_kernel_base_t::store_accumulators_without_post_ops(
 
 void jit_brgemm_kernel_base_t::store_accumulators(
         int bd_block2, bool is_bdb_tail, int ld_block2, bool is_ld_tail) {
+    const bool are_post_ops_applicable = one_of(true, brg.with_eltwise,
+            brg.with_scales, brg.with_bias, brg.with_sum, brg.dt_d != brg.dt_c,
+            brg.req_s8s8_compensation);
+    const bool need_to_apply_alpha_beta = brg.beta != 0.f || brg.alpha != 1.f;
+
     if (brg.is_int8_amx || brg.is_bf16_amx) {
         mov(ptr[rsp + reg_ldb_loop_offs_], reg_ldb_loop);
-        if (brg.beta != 0.f && brg.alpha != 0)
+        if (need_to_apply_alpha_beta || are_post_ops_applicable)
             mov(reg_stride_ld_block, brg.ld_block * brg.typesize_C);
         else
             mov(reg_stride_ld_block, brg.LDC * brg.typesize_C);
 
-        mov(reg_buf, ptr[rsp + reg_buf_offs_]);
-        for (int bdb = 0; bdb < bd_block2; bdb++) {
-            for (int ldb = 0; ldb < ld_block2; ldb++) {
-                int idx = (is_ld_tail) ? brg.ld_block2 : ldb;
-                if (brg.beta != 0.f && brg.alpha != 0) {
-                    tilestored(ptr[reg_buf + reg_stride_ld_block],
-                            Tmm(brgemm_amx::get_C_tensor(bdb, idx)));
-                    for (int bd = 0; bd < brg.bd_block; bd++) {
-                        size_t buf_offset
-                                = (bd * brg.ld_block) * brg.typesize_C;
-                        if (is_ld_tail)
-                            vmovups(accm(1, bd, 0) | ld_tail_mask | T_z,
-                                    ptr[reg_buf + buf_offset]);
-                        else
-                            vmovups(accm(1, bd, 0), ptr[reg_buf + buf_offset]);
+        auto store_accumulators_amx = [=](const bool apply_post_ops) {
+            mov(reg_buf, ptr[rsp + reg_buf_offs_]);
+            for (int bdb = 0; bdb < bd_block2; bdb++) {
+                for (int ldb = 0; ldb < ld_block2; ldb++) {
+                    int idx = (is_ld_tail) ? brg.ld_block2 : ldb;
+                    if (need_to_apply_alpha_beta || are_post_ops_applicable) {
+                        tilestored(ptr[reg_buf + reg_stride_ld_block],
+                                Tmm(brgemm_amx::get_C_tensor(bdb, idx)));
+                        for (int bd = 0; bd < brg.bd_block; bd++) {
+                            size_t buf_offset
+                                    = (bd * brg.ld_block) * brg.typesize_C;
+                            auto vreg_acc = is_ld_tail
+                                    ? accm(1, bd, 0) | ld_tail_mask | T_z
+                                    : accm(1, bd, 0);
+                            vmovups(vreg_acc, ptr[reg_buf + buf_offset]);
+                        }
+                        if (need_to_apply_alpha_beta)
+                            apply_alpha_beta(brg.bd_block, 1, is_ld_tail);
+
+                        if (apply_post_ops) {
+                            store_accumulators_apply_post_ops(
+                                    brg.bd_block, 1, is_ld_tail);
+                            mov(reg_buf, ptr[rsp + reg_buf_offs_]);
+                            add(reg_aux_D, ldb_D_offset(1));
+                        } else {
+                            store_accumulators_without_post_ops(
+                                    brg.bd_block, 1, is_ld_tail);
+                        }
+                    } else {
+                        tilestored(ptr[reg_aux_C + reg_stride_ld_block],
+                                Tmm(brgemm_amx::get_C_tensor(bdb, idx)));
                     }
-                    apply_beta(brg.bd_block, 1, is_ld_tail);
-                    store_accumulators_without_post_ops(
-                            brg.bd_block, 1, is_ld_tail);
-                } else {
-                    tilestored(ptr[reg_aux_C + reg_stride_ld_block],
-                            Tmm(brgemm_amx::get_C_tensor(bdb, idx)));
+                    add(reg_aux_C, ldb_C_offset(1));
                 }
-                add(reg_aux_C, ldb_C_offset(1));
+                sub(reg_aux_C, ldb_C_offset(ld_block2));
+                add(reg_aux_C, bdb_C_offset(1));
+                if (apply_post_ops) {
+                    sub(reg_aux_D, ldb_D_offset(ld_block2));
+                    add(reg_aux_D, bdb_D_offset(1));
+                }
             }
-            sub(reg_aux_C, ldb_C_offset(ld_block2));
-            add(reg_aux_C, bdb_C_offset(1));
+            sub(reg_aux_C, bdb_C_offset(bd_block2));
+            if (apply_post_ops) sub(reg_aux_D, bdb_D_offset(bd_block2));
+        };
+
+        Label label_done;
+        if (are_post_ops_applicable) {
+            Label label_store_without_post_ops;
+            mov(reg_do_post_ops, ptr[rsp + reg_do_post_ops_offs_]);
+            cmp(reg_do_post_ops, 0);
+            jz(label_store_without_post_ops, T_NEAR);
+
+            store_accumulators_amx(true);
+            jmp(label_done, T_NEAR);
+
+            L_aligned(label_store_without_post_ops);
         }
-        sub(reg_aux_C, bdb_C_offset(bd_block2));
+        store_accumulators_amx(false);
+        L_aligned(label_done);
+
         mov(reg_ldb_loop, ptr[rsp + reg_ldb_loop_offs_]);
     } else {
         int bd_block = (is_bdb_tail) ? brg.bdb_tail : brg.bd_block;
-        if (brg.beta != 0.f && brg.alpha != 0) {
-            apply_beta(bd_block, ld_block2, is_ld_tail);
-        }
+        if (need_to_apply_alpha_beta)
+            apply_alpha_beta(bd_block, ld_block2, is_ld_tail);
 
-        if (one_of(true, brg.with_eltwise, brg.with_scales, brg.with_bias,
-                    brg.with_sum, brg.dt_d != brg.dt_c,
-                    brg.req_s8s8_compensation)) {
-            Label label_done, label_store_without_post_ops;
+        Label label_done;
+        if (are_post_ops_applicable) {
+            Label label_store_without_post_ops;
 
             mov(reg_do_post_ops, ptr[rsp + reg_do_post_ops_offs_]);
             cmp(reg_do_post_ops, 0);
@@ -586,14 +660,9 @@ void jit_brgemm_kernel_base_t::store_accumulators(
             jmp(label_done, T_NEAR);
 
             L_aligned(label_store_without_post_ops);
-            store_accumulators_without_post_ops(
-                    bd_block, ld_block2, is_ld_tail);
-
-            L_aligned(label_done);
-        } else {
-            store_accumulators_without_post_ops(
-                    bd_block, ld_block2, is_ld_tail);
         }
+        store_accumulators_without_post_ops(bd_block, ld_block2, is_ld_tail);
+        L_aligned(label_done);
     }
 }
 

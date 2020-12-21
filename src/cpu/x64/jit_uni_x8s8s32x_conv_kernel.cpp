@@ -55,7 +55,7 @@ template <cpu_isa_t isa, typename Vmm>
 _jit_uni_x8s8s32x_fwd_kernel<isa, Vmm>::_jit_uni_x8s8s32x_fwd_kernel(
         const jit_conv_conf_t &ajcp, const primitive_attr_t &attr,
         const memory_desc_t &dst_md)
-    : jcp(ajcp), attr_(attr) {
+    : jit_generator(nullptr, MAX_CODE_SIZE, true, isa), jcp(ajcp), attr_(attr) {
     if (jcp.with_eltwise || jcp.with_binary || jcp.with_sum) {
         using namespace binary_injector;
         static constexpr bool preserve_gpr = true;
@@ -243,7 +243,7 @@ void _jit_uni_x8s8s32x_fwd_kernel<isa, Vmm>::store_output(
         }
         if (jcp.signed_input) {
             const int comp_offset = sizeof(int32_t) * k * oc_block;
-            cvt2ps(data_type::s32, vmm_comp, reg_compensation, comp_offset,
+            load_data(data_type::s32, vmm_comp, reg_compensation, comp_offset,
                     load_size);
         }
         if (jcp.src_zero_point) {
@@ -265,8 +265,12 @@ void _jit_uni_x8s8s32x_fwd_kernel<isa, Vmm>::store_output(
         for (int j = 0; j < ur_w; ++j) {
             const Vmm vmm = vmm_out(j, k);
 
+            /* add comp in s32 to avoid loss of precision
+               when convert s32 to f32 in integer (2^24)
+               TODO: do the same to zero_point and bias */
+            if (jcp.signed_input) uni_vpaddd(vmm, vmm, vmm_comp);
             uni_vcvtdq2ps(vmm, vmm);
-            if (jcp.signed_input) uni_vaddps(vmm, vmm, vmm_comp);
+
             if (jcp.src_zero_point) uni_vaddps(vmm, vmm, vmm_zp_comp);
             if (jcp.with_bias) uni_vaddps(vmm, vmm, vmm_bias);
 
@@ -563,8 +567,7 @@ void _jit_uni_x8s8s32x_fwd_kernel<isa, Vmm>::compute_ker(int ur_w, int pad_l,
                                 const auto inp_bcastd
                                         = Xmm(inp_bcastd_vmm.getIdx());
                                 load_bytes(inp_bcastd_vmm, aux_reg_inp,
-                                        aux_input_offset, ic_tail_size,
-                                        isa == sse41);
+                                        aux_input_offset, ic_tail_size);
                                 uni_vpbroadcastd(
                                         vmm_inp(jj, nb_oc_block), inp_bcastd);
                             } else {
@@ -1326,7 +1329,7 @@ status_t jit_uni_x8s8s32x_fwd_kernel<isa>::init_conf(jit_conv_conf_t &jcp,
 
     using namespace injector;
     const bool post_ops_ok_
-            = post_ops_ok<isa>({eltwise, binary}, jcp.post_ops, dst_d);
+            = post_ops_ok({isa, {eltwise, binary, sum}, jcp.post_ops, &dst_d});
     if (!post_ops_ok_) return status::unimplemented;
 
     jcp.is_resrc_depthwise = true && jcp.is_depthwise && jcp.stride_w < jcp.kw

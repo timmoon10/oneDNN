@@ -17,7 +17,11 @@
 #ifndef COMMON_ENGINE_HPP
 #define COMMON_ENGINE_HPP
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
+
+#if DNNL_CPU_RUNTIME == DNNL_RUNTIME_THREADPOOL
+#include "oneapi/dnnl/dnnl_threadpool_iface.hpp"
+#endif
 
 #include "c_types_map.hpp"
 #include "memory.hpp"
@@ -43,7 +47,7 @@ struct dnnl_engine : public dnnl::impl::c_compatible {
     /** get the runtime kind of the current engine */
     dnnl::impl::runtime_kind_t runtime_kind() const { return runtime_kind_; }
 
-    virtual intptr_t device_id() const { return 0; }
+    virtual dnnl::impl::device_id_t device_id() const = 0;
 
     /** create memory storage */
     virtual dnnl::impl::status_t create_memory_storage(
@@ -57,9 +61,16 @@ struct dnnl_engine : public dnnl::impl::c_compatible {
     }
 
     /** create stream */
-    virtual dnnl::impl::status_t create_stream(dnnl::impl::stream_t **stream,
-            unsigned flags, const dnnl::impl::stream_attr_t *attr)
+    virtual dnnl::impl::status_t create_stream(
+            dnnl::impl::stream_t **stream, unsigned flags)
             = 0;
+
+#if DNNL_CPU_RUNTIME == DNNL_RUNTIME_THREADPOOL
+    virtual dnnl::impl::status_t create_stream(dnnl::impl::stream_t **stream,
+            dnnl::threadpool_interop::threadpool_iface *threadpool) {
+        return dnnl::impl::status::invalid_arguments;
+    }
+#endif
 
     virtual dnnl::impl::status_t get_service_stream(
             dnnl::impl::stream_t *&stream) {
@@ -128,6 +139,8 @@ namespace impl {
 inline runtime_kind_t get_default_runtime(engine_kind_t kind) {
 #if DNNL_GPU_RUNTIME == DNNL_RUNTIME_OCL
     if (kind == engine_kind::gpu) return runtime_kind::ocl;
+#elif DNNL_GPU_RUNTIME == DNNL_RUNTIME_SYCL
+    if (kind == engine_kind::gpu) return runtime_kind::sycl;
 #endif
 #if DNNL_CPU_RUNTIME == DNNL_RUNTIME_SEQ
     return runtime_kind::seq;
@@ -136,6 +149,22 @@ inline runtime_kind_t get_default_runtime(engine_kind_t kind) {
 #elif DNNL_CPU_RUNTIME == DNNL_RUNTIME_TBB
     return runtime_kind::tbb;
 #elif DNNL_CPU_RUNTIME == DNNL_RUNTIME_THREADPOOL
+    return runtime_kind::threadpool;
+#elif DNNL_CPU_RUNTIME == DNNL_RUNTIME_SYCL
+    return runtime_kind::sycl;
+#else
+    return runtime_kind::none;
+#endif
+}
+
+inline runtime_kind_t get_cpu_native_runtime() {
+#if DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_SEQ
+    return runtime_kind::seq;
+#elif DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_OMP
+    return runtime_kind::omp;
+#elif DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_TBB
+    return runtime_kind::tbb;
+#elif DNNL_CPU_THREADING_RUNTIME == DNNL_RUNTIME_THREADPOOL
     return runtime_kind::threadpool;
 #else
     return runtime_kind::none;

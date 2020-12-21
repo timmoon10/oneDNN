@@ -59,6 +59,10 @@ status_t gemm_f32_matmul_t::pd_t::init(engine_t *engine) {
 
     // set state
     params_.dst_is_acc_ = true;
+    if (!has_runtime_dims_or_strides())
+        params_.can_fuse_src_batch_dims_
+                = matmul_helper_t(src_md(), weights_md(), dst_md())
+                          .can_fuse_src_batch_dims();
 
     return check_and_configure_attributes();
 }
@@ -130,7 +134,7 @@ status_t gemm_f32_matmul_t::execute_ref(const exec_ctx_t &ctx) const {
     matmul_helper_t helper(src_d, weights_d, dst_d);
     const int ndims = pd()->ndims();
     const int batch_ndims = ndims - 2;
-    const dim_t M = helper.M();
+    dim_t M = helper.M();
     const dim_t N = helper.N();
     const dim_t K = helper.K();
     const dim_t batch = helper.batch();
@@ -143,9 +147,12 @@ status_t gemm_f32_matmul_t::execute_ref(const exec_ctx_t &ctx) const {
     const gemm_based::params_t &params = pd()->params();
     const float alpha = params.get_gemm_alpha(scales);
     const float beta = params.gemm_beta_;
+    const bool can_fuse_src_batch_dims = pd()->has_runtime_dims_or_strides()
+            ? helper.can_fuse_src_batch_dims()
+            : params.can_fuse_src_batch_dims_;
 
     std::atomic<status_t> st(status::success);
-    const bool parallel_over_batch = batch > 1;
+    const bool parallel_over_batch = batch > 1 && !can_fuse_src_batch_dims;
     if (parallel_over_batch) {
         const int src_mask
                 = utils::get_dims_mask(dst_d.dims(), src_d.dims(), ndims);
@@ -188,6 +195,9 @@ status_t gemm_f32_matmul_t::execute_ref(const exec_ctx_t &ctx) const {
             }
         });
     } else {
+        // collapse batch into M, if weights batch dimensions are broadcasted.
+        M = batch * M;
+
         st = extended_sgemm(&transB, &transA, &N, &M, &K, &alpha, weights, &ldb,
                 src, &lda, &beta, dst, &ldc, nullptr, false);
         if (st != status::success) return st;

@@ -281,6 +281,8 @@ struct conv_conf_t {
 
     bool is_depthwise;
     bool is_nhwc;
+    bool reorder_wei = false;
+    bool reorder_bias = false;
     int ver;
     format_tag_t src_tag, dst_tag, wei_tag;
     bool is_nchw;
@@ -547,6 +549,7 @@ struct reorder_conf_t {
     bool plain_xFxE_to_abcdef;
     int transpose16x16; // 3-state logic
     bool nchw;
+    bool unaligned_sizes;
     int ndims;
     size_t nelems;
 
@@ -576,6 +579,7 @@ struct concat_conf_t {
 // Elementwise
 struct eltwise_conf_t {
     int ndims;
+    int vector_size;
     bool with_zero_padding;
     data_type_t data_type;
     alg_kind_t alg;
@@ -856,6 +860,7 @@ inline void def_eltwise_alg_kinds(compute::kernel_ctx_t &kernel_ctx) {
     kernel_ctx.define_int("SWISH", alg_kind::eltwise_swish);
     kernel_ctx.define_int("LOG", alg_kind::eltwise_log);
     kernel_ctx.define_int("CLIP", alg_kind::eltwise_clip);
+    kernel_ctx.define_int("CLIP_V2", alg_kind::eltwise_clip_v2);
     kernel_ctx.define_int("POW", alg_kind::eltwise_pow);
     kernel_ctx.define_int("GELU_ERF", alg_kind::eltwise_gelu_erf);
     kernel_ctx.define_int("ROUND", alg_kind::eltwise_round);
@@ -867,6 +872,8 @@ inline void def_eltwise_alg_kinds(compute::kernel_ctx_t &kernel_ctx) {
     kernel_ctx.define_int("ELU_DST", alg_kind::eltwise_elu_use_dst_for_bwd);
     kernel_ctx.define_int("SQRT_DST", alg_kind::eltwise_sqrt_use_dst_for_bwd);
     kernel_ctx.define_int("EXP_DST", alg_kind::eltwise_exp_use_dst_for_bwd);
+    kernel_ctx.define_int(
+            "CLIP_V2_DST", alg_kind::eltwise_clip_v2_use_dst_for_bwd);
 }
 
 inline bool post_ops_with_binary_ok(

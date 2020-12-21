@@ -17,7 +17,7 @@
 #ifndef GPU_OCL_OCL_GPU_ENGINE_HPP
 #define GPU_OCL_OCL_GPU_ENGINE_HPP
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "common/c_types_map.hpp"
 #include "common/engine.hpp"
@@ -25,7 +25,6 @@
 #include "common/utils.hpp"
 #include "gpu/compute/compute.hpp"
 #include "gpu/gpu_impl_list.hpp"
-#include "gpu/ocl/ocl_gpu_device_info.hpp"
 #include "gpu/ocl/ocl_gpu_kernel.hpp"
 #include "gpu/ocl/ocl_utils.hpp"
 
@@ -36,36 +35,27 @@ namespace ocl {
 
 class ocl_gpu_engine_t : public compute::compute_engine_t {
 public:
-    static status_t get_ocl_devices(std::vector<cl_device_id> *devices);
-
     ocl_gpu_engine_t(cl_device_id adevice)
-        : compute::compute_engine_t(engine_kind::gpu, runtime_kind::ocl,
-                new ocl_gpu_device_info_t(adevice))
+        : compute::compute_engine_t(engine_kind::gpu, runtime_kind::ocl)
         , device_(adevice)
         , context_(nullptr)
-        , is_user_context_(false)
-        , enable_ngen_kernels_(false)
-        , checked_ngen_kernels_(false) {}
+        , is_user_context_(false) {}
     ocl_gpu_engine_t(cl_device_id adevice, cl_context acontext)
-        : compute::compute_engine_t(engine_kind::gpu, runtime_kind::ocl,
-                new ocl_gpu_device_info_t(adevice))
+        : compute::compute_engine_t(engine_kind::gpu, runtime_kind::ocl)
         , device_(adevice)
         , context_(acontext)
-        , is_user_context_(true)
-        , enable_ngen_kernels_(false)
-        , checked_ngen_kernels_(false) {}
+        , is_user_context_(true) {}
     ~ocl_gpu_engine_t() override {
         if (device_) { clReleaseDevice(device_); }
         if (context_) { clReleaseContext(context_); }
     }
 
-    status_t init();
+    status_t init() override;
 
     status_t create_memory_storage(memory_storage_t **storage, unsigned flags,
             size_t size, void *handle) override;
 
-    status_t create_stream(stream_t **stream, unsigned flags,
-            const stream_attr_t *attr) override;
+    status_t create_stream(stream_t **stream, unsigned flags) override;
     status_t create_stream(stream_t **stream, cl_command_queue queue);
 
     status_t create_kernel(compute::kernel_t *kernel,
@@ -106,23 +96,17 @@ public:
     virtual cl_device_id device() const { return device_; }
     virtual cl_context context() const { return context_; }
 
-    intptr_t device_id() const override {
-        return reinterpret_cast<intptr_t>(device());
+    device_id_t device_id() const override {
+        return std::make_tuple(0, reinterpret_cast<uint64_t>(device()), 0);
     }
 
-    bool mayiuse_ngen_kernels() override {
-        check_mayiuse_ngen_kernels();
-        return enable_ngen_kernels_;
-    }
+protected:
+    status_t init_device_info() override;
 
 private:
     cl_device_id device_;
     cl_context context_;
     bool is_user_context_;
-    bool enable_ngen_kernels_;
-    bool checked_ngen_kernels_;
-
-    void check_mayiuse_ngen_kernels();
 };
 
 } // namespace ocl

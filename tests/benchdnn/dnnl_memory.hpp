@@ -17,10 +17,16 @@
 #ifndef DNNL_MEMORY_HPP
 #define DNNL_MEMORY_HPP
 
+#if DNNL_GPU_RUNTIME == DNNL_RUNTIME_DPCPP
+#include "oneapi/dnnl/dnnl_sycl.h"
+#endif
+
 #include "dnnl_common.hpp"
 
 int init_md(dnnl_memory_desc_t *md, int ndims, const dnnl_dims_t dims,
         dnnl_data_type_t data_type, const std::string &tag);
+
+#define dnnl_mem_default_value 0xFF
 
 struct dnn_mem_t {
     dnn_mem_t() { map(); }
@@ -185,7 +191,11 @@ struct dnn_mem_t {
         mapped_ptr_ = NULL;
     }
 
+    static int check_mem_size(const dnnl_memory_desc_t &md);
     static int check_mem_size(const_dnnl_primitive_desc_t const_pd);
+
+    static dnn_mem_t create_from_host_ptr(
+            const dnnl_memory_desc_t &md, dnnl_engine_t engine, void *host_ptr);
 
     /* fields */
     dnnl_memory_desc_t md_ {};
@@ -217,7 +227,8 @@ private:
         DNN_SAFE_V(dnnl_engine_get_kind(engine_, &engine_kind_));
 
         size_t sz = dnnl_memory_desc_get_size(&md_);
-        if (engine_kind_ == dnnl_cpu && handle == DNNL_MEMORY_ALLOCATE) {
+        if (engine_kind_ == dnnl_cpu && handle == DNNL_MEMORY_ALLOCATE
+                && DNNL_CPU_RUNTIME != DNNL_RUNTIME_DPCPP) {
             // Allocate memory for native runtime directly
             is_data_owner_ = true;
             const size_t alignment = 2 * 1024 * 1024;
@@ -227,14 +238,29 @@ private:
         } else {
             is_data_owner_ = false;
             data_ = NULL;
+
+#if DNNL_WITH_SYCL
+            // XXX: A hack to mitigate the issue from create_from_host_ptr when
+            // perform a CPU reorder due to USM in not supported on Nvidia, but
+            // it's not allowed to convert host_ptr to SYCL buffer.
+            engine_t e(engine_kind_);
+            if (is_nvidia_gpu(e)) {
+                DNN_SAFE(dnnl_sycl_interop_memory_create(&m_, &md_, engine,
+                                 dnnl_sycl_interop_buffer, handle),
+                        CRIT);
+            } else {
+                DNN_SAFE(dnnl_memory_create(&m_, &md_, engine, handle), CRIT);
+            }
+#else
             DNN_SAFE(dnnl_memory_create(&m_, &md_, engine, handle), CRIT);
+#endif
         }
 
         if (handle == DNNL_MEMORY_ALLOCATE) {
             // Fill memory with a magic number (NAN for fp data types) to catch
             // possible uninitialized access.
             map();
-            memset(mapped_ptr_, 0xFF, sz);
+            memset(mapped_ptr_, dnnl_mem_default_value, sz);
             unmap();
 
             // Set own data handle to trigger zero padding
@@ -282,7 +308,8 @@ private:
 };
 
 // Check that zero padding is preserved.
-int check_zero_padding(const dnn_mem_t &mem, int arg);
+int check_zero_padding(
+        const dnn_mem_t &mem, int arg, int *error_count = nullptr);
 
 // Returns physical offset by logical one. Logical offset is represented by an
 // array pos. If is_pos_padded is true pos represents the position in already

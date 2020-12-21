@@ -17,7 +17,7 @@
 #include <cmath>
 #include <stdlib.h>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "dnn_types.hpp"
 #include "dnnl_common.hpp"
@@ -58,7 +58,7 @@ int fill_memory(const prb_t *prb, data_kind_t kind, dnn_mem_t &mem) {
                 (float)c_src->min, /* saturate to min of output data type */
                 (float)1.6 / scale, /* rounding check */
                 (float)0.2 / scale, /* saturate to 0 */
-                (float)1.0,
+                (float)1.0 / scale, /* exact multiplication check */
                 (float)2.0,
                 (float)scale,
         };
@@ -149,13 +149,12 @@ static int compare(const prb_t *prb, const dnn_mem_t &mem_ref,
             = dt_out == dnnl_u8 ? 0.f : -(float)(1l << (width - 1));
     const float dt_out_max
             = dt_out == dnnl_u8 ? 255.f : (float)((1l << (width - 1)) - 1);
-    const float tolerance = (dt_out == dnnl_bf16)
-            ? 4e-3 // due to bf16 truncation (7th mantissa bit -> 1/129)
-            : 0.;
+    const float trh = 0.f;
 
     for (int64_t i = 0; i < nelems; i++) {
         const float dt = mem_got.get_elem(i);
-        const float fp = mem_ref.get_elem(i);
+        const float fp0 = mem_ref.get_elem(i);
+        const float fp = round_to_nearest_representable(dt_out, fp0);
 
         if (fp == dt_out_max)
             inf_p++;
@@ -168,7 +167,7 @@ static int compare(const prb_t *prb, const dnn_mem_t &mem_ref,
 
         const float diff = fabsf(fp - dt);
         const float rel_diff = diff / (fabsf(fp) > FLT_MIN ? fabsf(fp) : 1);
-        bool ok = rel_diff <= tolerance;
+        bool ok = rel_diff <= trh;
 
         // f32->f16 results in inf for FLT_MAX input
         if (!ok) ok = std::isinf(fp) && std::isinf(dt);
@@ -315,6 +314,14 @@ void check_known_skipped_case(const prb_t *prb, res_t *res) {
         // GPU does not support run-time dims and zero-points
         if (prb->runtime_dim_mask != 0 || !prb->attr.zero_points.is_def()
                 || prb->attr.oscale.runtime) {
+            res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
+            return;
+        }
+    }
+
+    if (is_nvidia_gpu()) {
+        const bool oscale_ok = prb->attr.oscale.policy == policy_t::COMMON;
+        if (!oscale_ok) {
             res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
             return;
         }

@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -123,8 +123,47 @@ class inner_product_test_bwd_weights_t
 protected:
     void SetUp() override {
         auto p = ::testing::TestWithParam<inprod_test_params_t>::GetParam();
+        SKIP_IF_CUDA(
+                !cuda_check_format_tags(p.src_format, p.diff_weights_format,
+                        p.diff_bias_format, p.diff_dst_format),
+                "Unsupported format tag");
+        SKIP_IF_CUDA(p.ndims > 5, "Unsupported number of dimensions");
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
+    }
+
+    bool cuda_check_format_tags(memory::format_tag src_format,
+            memory::format_tag diff_wei_format,
+            memory::format_tag diff_bia_format,
+            memory::format_tag diff_dst_format) {
+        bool src_ok = src_format == memory::format_tag::ncdhw
+                || src_format == memory::format_tag::ndhwc
+                || src_format == memory::format_tag::nchw
+                || src_format == memory::format_tag::nhwc
+                || src_format == memory::format_tag::ncw
+                || src_format == memory::format_tag::nwc
+                || src_format == memory::format_tag::nc
+                || src_format == memory::format_tag::any;
+        bool diff_wei_ok = diff_wei_format == memory::format_tag::oidhw
+                || diff_wei_format == memory::format_tag::odhwi
+                || diff_wei_format == memory::format_tag::dhwio
+                || diff_wei_format == memory::format_tag::oihw
+                || diff_wei_format == memory::format_tag::ohwi
+                || diff_wei_format == memory::format_tag::hwio
+                || diff_wei_format == memory::format_tag::oiw
+                || diff_wei_format == memory::format_tag::owi
+                || diff_wei_format == memory::format_tag::wio
+                || diff_wei_format == memory::format_tag::io
+                || diff_wei_format == memory::format_tag::oi
+                || diff_wei_format == memory::format_tag::any;
+        bool diff_bia_ok = diff_bia_format == memory::format_tag::undef
+                || diff_bia_format == memory::format_tag::any
+                || diff_bia_format == memory::format_tag::a
+                || diff_bia_format == memory::format_tag::x;
+        bool diff_dst_ok = diff_dst_format == memory::format_tag::any
+                || diff_dst_format == memory::format_tag::nc;
+
+        return src_ok && diff_wei_ok && diff_bia_ok && diff_dst_ok;
     }
 
     void Test() {
@@ -185,12 +224,17 @@ protected:
         ip_primitive_desc = inner_product_backward_weights::primitive_desc(
                 ip_primitive_desc.get()); // test construction from a C pd
 
-        memory ip_src(ip_primitive_desc.src_desc(), eng);
-        memory ip_diff_dst(ip_primitive_desc.diff_dst_desc(), eng);
-        memory ip_diff_weights(ip_primitive_desc.diff_weights_desc(), eng);
-        memory diff_weights_ref(ip_primitive_desc.diff_weights_desc(), eng);
-        memory ip_diff_bias(ip_primitive_desc.diff_bias_desc(), eng);
-        memory diff_bias_ref(ip_primitive_desc.diff_bias_desc(), eng);
+        auto ip_src = test::make_memory(ip_primitive_desc.src_desc(), eng);
+        auto ip_diff_dst
+                = test::make_memory(ip_primitive_desc.diff_dst_desc(), eng);
+        auto ip_diff_weights
+                = test::make_memory(ip_primitive_desc.diff_weights_desc(), eng);
+        auto diff_weights_ref
+                = test::make_memory(ip_primitive_desc.diff_weights_desc(), eng);
+        auto ip_diff_bias
+                = test::make_memory(ip_primitive_desc.diff_bias_desc(), eng);
+        auto diff_bias_ref
+                = test::make_memory(ip_primitive_desc.diff_bias_desc(), eng);
 
         fill_data<data_t>(
                 ip_src.get_desc().get_size() / sizeof(data_t), ip_src);

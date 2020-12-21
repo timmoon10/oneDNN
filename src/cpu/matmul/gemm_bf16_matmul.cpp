@@ -146,7 +146,7 @@ status_t gemm_bf16_matmul_t<dst_type>::execute_ref(
     matmul_helper_t helper(src_d, weights_d, dst_d);
     const int ndims = pd()->ndims();
     const int batch_ndims = ndims - 2;
-    const dim_t M = helper.M();
+    dim_t M = helper.M();
     const dim_t N = helper.N();
     const dim_t K = helper.K();
     const dim_t batch = helper.batch();
@@ -158,6 +158,9 @@ status_t gemm_bf16_matmul_t<dst_type>::execute_ref(
     const dim_t acc_batch_stride = M * N;
 
     const gemm_based::params_t &params = pd()->params();
+    const bool can_fuse_src_batch_dims = pd()->has_runtime_dims_or_strides()
+            ? helper.can_fuse_src_batch_dims()
+            : params.can_fuse_src_batch_dims_;
     bool dst_is_acc = params.dst_is_acc_;
     acc_data_t *acc = dst_is_acc
             ? (acc_data_t *)dst
@@ -166,9 +169,11 @@ status_t gemm_bf16_matmul_t<dst_type>::execute_ref(
     // case: dynamic sizes
     bool need_free_acc = false;
     if (acc == nullptr) {
-        acc = (acc_data_t *)malloc(sizeof(acc_data_t)
-                        * nstl::min(batch, (dim_t)dnnl_get_max_threads()) * M
-                        * N,
+        acc = (acc_data_t *)malloc(sizeof(acc_data_t) * M * N
+                        * (can_fuse_src_batch_dims
+                                        ? batch
+                                        : nstl::min(batch,
+                                                (dim_t)dnnl_get_max_threads())),
                 64);
         if (acc == nullptr) return status::out_of_memory;
         need_free_acc = true;
@@ -179,7 +184,7 @@ status_t gemm_bf16_matmul_t<dst_type>::execute_ref(
     const dim_t acc_ldc = dst_is_acc ? ldc : N;
 
     std::atomic<status_t> st(status::success);
-    const bool parallel_over_batch = batch > 1;
+    const bool parallel_over_batch = batch > 1 && !can_fuse_src_batch_dims;
     if (parallel_over_batch) {
         const int src_mask
                 = utils::get_dims_mask(dst_d.dims(), src_d.dims(), ndims);
@@ -231,6 +236,9 @@ status_t gemm_bf16_matmul_t<dst_type>::execute_ref(
             }
         });
     } else {
+        // collapse batch into M, if weights batch dimensions are broadcasted.
+        M = M * batch;
+
         st = gemm_bf16bf16f32(&transB, &transA, &N, &M, &K, &alpha, weights,
                 &ldb, src, &lda, &beta, acc, &acc_ldc);
         if (st != status::success) return st;

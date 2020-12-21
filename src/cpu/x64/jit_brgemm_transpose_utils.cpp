@@ -49,7 +49,7 @@ private:
     using opmask_t = const Xbyak::Opmask;
 
     enum { typesize = sizeof(float), transpose_size = 16 };
-    dim_t src_stride, tr_src_stride;
+    dim_t src_stride = 0, tr_src_stride = 0;
 
     opmask_t k3333 = k1;
     opmask_t k5555 = k2;
@@ -311,7 +311,7 @@ private:
         typesize = sizeof(int16_t),
         transpose_size = 16,
     };
-    dim_t src_stride, tr_src_stride;
+    dim_t src_stride = 0, tr_src_stride = 0;
 
     opmask_t kFFFF = k1;
     opmask_t k5555 = k2;
@@ -647,10 +647,10 @@ private:
         transpose_size = 16,
     };
 
-    int last_row_block_tail, col_tail;
-    dim_t src_stride, tr_src_stride;
-    dim_t src_col_shift, tr_src_col_shift;
-    dim_t src_batch_shift, tr_src_batch_shift;
+    int last_row_block_tail = 0, col_tail = 0;
+    dim_t src_stride = 0, tr_src_stride = 0;
+    dim_t src_col_shift = 0, tr_src_col_shift = 0;
+    dim_t src_batch_shift = 0, tr_src_batch_shift = 0;
 
     opmask_t kFFFF = k1;
     opmask_t mask_tail = k2;
@@ -873,7 +873,7 @@ private:
     using opmask_t = const Xbyak::Opmask;
 
     enum { typesize = sizeof(float), transpose_size = 16 };
-    dim_t src_stride, tr_src_stride;
+    dim_t src_stride = 0, tr_src_stride = 0;
 
     opmask_t k3333 = k1;
     opmask_t k5555 = k2;
@@ -1038,9 +1038,21 @@ void jit_brgemm_trans_wei_f32_t::generate() {
     int fwd_oc_block = 0;
     switch (conf_->wei_tag) {
         case OI16i64o:
-        case OI8i64o2i: fwd_oc_block = 4 * conf_->simd_w; break;
+        case OIw16i64o:
+        case OIhw16i64o:
+        case OIdhw16i64o:
+        case OI8i64o2i:
+        case OIw8i64o2i:
+        case OIhw8i64o2i:
+        case OIdhw8i64o2i: fwd_oc_block = 4 * conf_->simd_w; break;
         case OI16i32o:
-        case OI8i32o2i: fwd_oc_block = 2 * conf_->simd_w; break;
+        case OIw16i32o:
+        case OIhw16i32o:
+        case OIdhw16i32o:
+        case OI8i32o2i:
+        case OIw8i32o2i:
+        case OIhw8i32o2i:
+        case OIdhw8i32o2i: fwd_oc_block = 2 * conf_->simd_w; break;
         default: fwd_oc_block = conf_->simd_w;
     };
 
@@ -1134,7 +1146,7 @@ private:
     using zmm = const Xbyak::Zmm;
 
     enum { typesize = sizeof(int16_t), transpose_size = 16 };
-    dim_t src_stride, tr_src_stride;
+    dim_t src_stride = 0, tr_src_stride = 0;
 
     opmask_t kTail = k7;
 
@@ -1246,9 +1258,21 @@ void jit_brgemm_trans_wei_bf16_t::generate() {
     int fwd_oc_block = 0;
     switch (conf_->wei_tag) {
         case OI16i64o:
-        case OI8i64o2i: fwd_oc_block = 4 * conf_->simd_w; break;
+        case OIw16i64o:
+        case OIhw16i64o:
+        case OIdhw16i64o:
+        case OI8i64o2i:
+        case OIw8i64o2i:
+        case OIhw8i64o2i:
+        case OIdhw8i64o2i: fwd_oc_block = 4 * conf_->simd_w; break;
         case OI16i32o:
-        case OI8i32o2i: fwd_oc_block = 2 * conf_->simd_w; break;
+        case OIw16i32o:
+        case OIhw16i32o:
+        case OIdhw16i32o:
+        case OI8i32o2i:
+        case OIw8i32o2i:
+        case OIhw8i32o2i:
+        case OIdhw8i32o2i: fwd_oc_block = 2 * conf_->simd_w; break;
         default: fwd_oc_block = conf_->simd_w;
     };
 

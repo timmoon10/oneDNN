@@ -480,7 +480,11 @@ const impl_list_map_t comp_s8s8_impl_list_map {
     {{f32, s8, 3}, {
         REG_SR(f32, any, s8, wio, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oiw, s8, OIw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, oiw, s8, OIw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, oiw, s8, OIw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, wio, s8, OIw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, wio, s8, OIw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, wio, s8, OIw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oiw, s8, OIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, wio, s8, OIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oiw, s8, OIw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -498,7 +502,11 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(f32, goiw, s8, gOIw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, wigo, s8, gOIw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oihw, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, oihw, s8, OIhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, oihw, s8, OIhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, hwio, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, hwio, s8, OIhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, hwio, s8, OIhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, hwio, s8, OIhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oihw, s8, OIhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, hwio, s8, OIhw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -522,7 +530,11 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(f32, goihw, s8, gOIhw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, hwigo, s8, gOIhw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oidhw, s8, OIdhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, oidhw, s8, OIdhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, oidhw, s8, OIdhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, dhwio, s8, OIdhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, dhwio, s8, OIdhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(f32, dhwio, s8, OIdhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oidhw, s8, OIdhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, dhwio, s8, OIdhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(f32, oidhw, s8, OIdhw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -545,10 +557,25 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         nullptr,
     }},
     // bf16 -> s8
+    {{bf16, s8, 2}, {
+        REG_SR(bf16, oi, s8, OI4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, io, s8, OI4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oi, s8, OI4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, io, s8, OI4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oi, s8, OI4i64o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, io, s8, OI4i64o4i, fmt_order::keep, spec::conv_req_comp),
+
+        nullptr,
+    }},
+    // bf16 -> s8
     {{bf16, s8, 3}, {
         REG_SR(bf16, any, s8, wio, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oiw, s8, OIw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oiw, s8, OIw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oiw, s8, OIw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, wio, s8, OIw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, wio, s8, OIw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, wio, s8, OIw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oiw, s8, OIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, wio, s8, OIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oiw, s8, OIw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -566,7 +593,11 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(bf16, goiw, s8, gOIw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, wigo, s8, gOIw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oihw, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oihw, s8, OIhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oihw, s8, OIhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, hwio, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, hwio, s8, OIhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, hwio, s8, OIhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, hwio, s8, OIhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oihw, s8, OIhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, hwio, s8, OIhw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -590,7 +621,11 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(bf16, goihw, s8, gOIhw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, hwigo, s8, gOIhw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oidhw, s8, OIdhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oidhw, s8, OIdhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, oidhw, s8, OIdhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, dhwio, s8, OIdhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, dhwio, s8, OIdhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(bf16, dhwio, s8, OIdhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oidhw, s8, OIdhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, dhwio, s8, OIdhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(bf16, oidhw, s8, OIdhw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -613,10 +648,25 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         nullptr,
     }},
     // s8 -> s8
+    {{s8, s8, 2}, {
+        REG_SR(s8, oi, s8, OI4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, io, s8, OI4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oi, s8, OI4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, io, s8, OI4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oi, s8, OI4i64o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, io, s8, OI4i64o4i, fmt_order::keep, spec::conv_req_comp),
+
+        nullptr,
+    }},
+    // s8 -> s8
     {{s8, s8, 3}, {
         REG_SR(s8, any, s8, wio, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oiw, s8, OIw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oiw, s8, OIw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oiw, s8, OIw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, wio, s8, OIw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, wio, s8, OIw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, wio, s8, OIw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oiw, s8, OIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, wio, s8, OIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oiw, s8, OIw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -633,8 +683,12 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(s8, wigo, s8, gOIw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, goiw, s8, gOIw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, wigo, s8, gOIw4o4i, fmt_order::keep, spec::conv_req_comp),
-        REG_SR(s8, hwio, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oihw, s8, OIhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oihw, s8, OIhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oihw, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, hwio, s8, OIhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, hwio, s8, OIhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, hwio, s8, OIhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, hwio, s8, OIhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oihw, s8, OIhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, hwio, s8, OIhw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -658,7 +712,11 @@ const impl_list_map_t comp_s8s8_impl_list_map {
         REG_SR(s8, goihw, s8, gOIhw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, hwigo, s8, gOIhw4o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oidhw, s8, OIdhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oidhw, s8, OIdhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, oidhw, s8, OIdhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, dhwio, s8, OIdhw4i16o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, dhwio, s8, OIdhw4i32o4i, fmt_order::keep, spec::conv_req_comp),
+        REG_SR(s8, dhwio, s8, OIdhw4i64o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oidhw, s8, OIdhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, dhwio, s8, OIdhw2i8o4i, fmt_order::keep, spec::conv_req_comp),
         REG_SR(s8, oidhw, s8, OIdhw4o4i, fmt_order::keep, spec::conv_req_comp),
@@ -686,8 +744,8 @@ const impl_list_map_t comp_s8s8_impl_list_map {
 
 } // namespace
 
-const rpd_create_f *cpu_engine_t::get_reorder_implementation_list(
-        const memory_desc_t *src_md, const memory_desc_t *dst_md) const {
+const rpd_create_f *cpu_engine_impl_list_t::get_reorder_implementation_list(
+        const memory_desc_t *src_md, const memory_desc_t *dst_md) {
     const impl_list_map_t &impl_list
             = (dst_md->extra.flags
                       & (memory_extra_flags::compensation_conv_s8s8

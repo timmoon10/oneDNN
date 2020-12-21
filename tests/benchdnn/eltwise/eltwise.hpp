@@ -19,7 +19,7 @@
 
 #include <iostream>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "common.hpp"
 #include "dnn_types.hpp"
@@ -93,7 +93,8 @@ struct prb_t {
     bool use_dst() const {
         return alg == alg_t::RELU_DST || alg == alg_t::TANH_DST
                 || alg == alg_t::ELU_DST || alg == alg_t::SQRT_DST
-                || alg == alg_t::LOGISTIC_DST || alg == alg_t::EXP_DST;
+                || alg == alg_t::LOGISTIC_DST || alg == alg_t::EXP_DST
+                || alg == alg_t::CLIP_V2_DST;
     }
 };
 std::ostream &operator<<(std::ostream &s, const prb_t &prb);

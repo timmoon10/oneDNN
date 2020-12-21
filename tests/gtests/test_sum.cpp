@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -47,7 +47,7 @@ TEST_F(iface_sum_test_t, SumTestDstDataTypeCompliance) {
     for_(tag dst_tag : {tag::any, tag::abcd, tag::acdb})
     for (dt dst_dt : {dt::undef, dt::s8, dt::s32, dt::f32}) {
         sum::primitive_desc sum_pd;
-
+        SKIP_FOR_LOOP_CUDA(dst_dt == dt::s32, "Unsupported data_type");
         if (dst_dt != dt::undef) {
             memory::desc dst_md(shape, dst_dt, dst_tag);
             sum_pd = sum::primitive_desc(
@@ -132,6 +132,14 @@ private:
     }
 
 protected:
+    bool cuda_supported_format_tag(memory::format_tag tag) {
+        return impl::utils::one_of(tag, dnnl_a, dnnl_ab, dnnl_abc, dnnl_abcd,
+                dnnl_abcde, dnnl_abcdef, dnnl_abdec, dnnl_acb, dnnl_acbde,
+                dnnl_acbdef, dnnl_acdb, dnnl_acdeb, dnnl_ba, dnnl_bac,
+                dnnl_bacd, dnnl_bca, dnnl_bcda, dnnl_bcdea, dnnl_cba, dnnl_cdba,
+                dnnl_cdeba, dnnl_decab, dnnl_defcab, dnnl_aBc4b, dnnl_aBcd4b,
+                dnnl_aBcde4b);
+    }
     void SetUp() override {
         src_data_type = data_traits<src_data_t>::data_type;
         dst_data_type = data_traits<dst_data_t>::data_type;
@@ -142,6 +150,15 @@ protected:
                 "GPU does not support bfloat16 data type.");
         SKIP_IF(unsupported_data_type(src_data_type),
                 "Engine does not support this data type.");
+        SKIP_IF(unsupported_data_type(dst_data_type),
+                "Engine does not support this data type.");
+
+        SKIP_IF_CUDA(!cuda_supported_format_tag(p.dst_format),
+                "Unsupported format tag");
+        for (int i = 0; i < p.srcs_format.size(); i++) {
+            SKIP_IF_CUDA(!cuda_supported_format_tag(p.srcs_format[i]),
+                    "Unsupported format tag");
+        }
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
@@ -160,7 +177,7 @@ protected:
 
         for (size_t i = 0; i < num_srcs; i++) {
             auto desc = memory::desc(p.dims, src_data_type, p.srcs_format[i]);
-            auto src_memory = memory(desc, eng);
+            auto src_memory = test::make_memory(desc, eng);
             const size_t sz
                     = src_memory.get_desc().get_size() / sizeof(src_data_t);
             fill_data<src_data_t>(sz, src_memory);
@@ -195,7 +212,7 @@ protected:
 
             ASSERT_EQ(sum_pd.dst_desc().data.ndims, dst_desc.data.ndims);
         }
-        dst = memory(sum_pd.dst_desc(), eng);
+        dst = test::make_memory(sum_pd.dst_desc(), eng);
         // test construction from a C pd
         sum_pd = sum::primitive_desc(sum_pd.get());
 

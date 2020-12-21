@@ -21,9 +21,9 @@
 #include <windows.h>
 #endif
 
-#include "dnnl.h"
-#include "dnnl_debug.h"
-#include "dnnl_version.h"
+#include "oneapi/dnnl/dnnl.h"
+#include "oneapi/dnnl/dnnl_debug.h"
+#include "oneapi/dnnl/dnnl_version.h"
 
 #include "c_types_map.hpp"
 #include "verbose.hpp"
@@ -55,6 +55,10 @@
 #include "gpu/ocl/verbose.hpp"
 #endif
 
+#if DNNL_WITH_SYCL
+#include "sycl/verbose.hpp"
+#endif
+
 namespace dnnl {
 namespace impl {
 
@@ -81,6 +85,9 @@ int get_verbose() {
                 dnnl_runtime2str(dnnl_version()->gpu_runtime));
 #if DNNL_GPU_RUNTIME == DNNL_RUNTIME_OCL
         gpu::ocl::print_verbose_header();
+#endif
+#if DNNL_WITH_SYCL
+        sycl::print_verbose_header();
 #endif
         version_printed = true;
     }
@@ -998,11 +1005,17 @@ static void init_info_matmul(const engine_t *e, pd_t *s, char *buffer) {
         auto md = s->src_md();
         DPRINT(dat_str, DNNL_VERBOSE_DAT_LEN, dat_written, "src_");
         MD2STR(dat_str, DNNL_VERBOSE_DAT_LEN, dat_written, md);
+
+        DIM2STR(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, md);
+        DPRINT(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, ":");
     }
     { // src1
         auto md = s->weights_md(0);
         DPRINT(dat_str, DNNL_VERBOSE_DAT_LEN, dat_written, " wei_");
         MD2STR(dat_str, DNNL_VERBOSE_DAT_LEN, dat_written, md);
+
+        DIM2STR(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, md);
+        DPRINT(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, ":");
     }
     { // bia
         if (s->with_bias()) {
@@ -1023,23 +1036,11 @@ static void init_info_matmul(const engine_t *e, pd_t *s, char *buffer) {
         auto md = s->dst_md();
         DPRINT(dat_str, DNNL_VERBOSE_DAT_LEN, dat_written, " dst_");
         MD2STR(dat_str, DNNL_VERBOSE_DAT_LEN, dat_written, md);
+
+        DIM2STR(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, md);
     }
 
     attr2str(attr_str, DNNL_VERBOSE_ATTR_LEN, attr_written, s->attr());
-
-#define DPRINT_RT(str, val) \
-    do { \
-        if (is_runtime_value(val)) \
-            DPRINT(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, str "*"); \
-        else \
-            DPRINT(prb_str, DNNL_VERBOSE_PRB_LEN, prb_written, str DFMT, val); \
-    } while (0)
-
-    if (s->batched()) DPRINT_RT("b", s->batch());
-    DPRINT_RT("m", s->M());
-    DPRINT_RT("n", s->N());
-    DPRINT_RT("k", s->K());
-#undef DPRINT_RT
 
     verbose_templ(buffer, e, s->kind(), s->name(), prop_kind::undef, dat_str,
             attr_str, aux_str, prb_str);
@@ -1170,7 +1171,7 @@ dnnl_status_t dnnl_set_verbose(int level) {
     return success;
 }
 
-const dnnl_version_t *dnnl_version() {
+const dnnl_version_t *dnnl_version(void) {
     static const dnnl_version_t ver
             = {DNNL_VERSION_MAJOR, DNNL_VERSION_MINOR, DNNL_VERSION_PATCH,
                     DNNL_VERSION_HASH, DNNL_CPU_RUNTIME, DNNL_GPU_RUNTIME};

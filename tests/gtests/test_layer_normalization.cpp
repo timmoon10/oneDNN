@@ -20,7 +20,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 #define CPU_INST_TEST_CASE(str, ...) \
     CPU_INSTANTIATE_TEST_SUITE_P( \
@@ -62,6 +62,7 @@ private:
 
 protected:
     void SetUp() override {
+        SKIP_IF_CUDA(true, "Layer normalization not supported by CUDA.");
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
@@ -133,10 +134,10 @@ protected:
                 lnorm_fwd_pd.query_md(query::exec_arg_md, DNNL_ARG_SCALE_SHIFT)
                 == lnorm_fwd_pd.weights_desc());
 
-        weights = memory(lnorm_fwd_pd.weights_desc(), eng);
+        weights = test::make_memory(lnorm_fwd_pd.weights_desc(), eng);
         if (isTraining || useGlobalStats) {
-            mean = memory(*stat_d, eng);
-            variance = memory(*stat_d, eng);
+            mean = test::make_memory(*stat_d, eng);
+            variance = test::make_memory(*stat_d, eng);
         }
 
         fill<float>(src->get());
@@ -189,10 +190,11 @@ protected:
                             query::exec_arg_md, DNNL_ARG_DIFF_SCALE_SHIFT)
                 == lnorm_bwd_pd.diff_weights_desc());
 
-        if (useScaleShift) weights = memory(lnorm_bwd_pd.weights_desc(), eng);
-        diff_weights = memory(lnorm_bwd_pd.diff_weights_desc(), eng);
-        mean = memory(*stat_d, eng);
-        variance = memory(*stat_d, eng);
+        if (useScaleShift)
+            weights = test::make_memory(lnorm_bwd_pd.weights_desc(), eng);
+        diff_weights = test::make_memory(lnorm_bwd_pd.diff_weights_desc(), eng);
+        mean = test::make_memory(*stat_d, eng);
+        variance = test::make_memory(*stat_d, eng);
 
         if (useScaleShift) fill<float>(weights);
         fill<float>(diff_src->get());

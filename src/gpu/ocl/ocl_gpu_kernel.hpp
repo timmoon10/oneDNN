@@ -51,11 +51,16 @@ public:
             const compute::kernel_arg_list_t &arg_list) const override;
 
     status_t realize(
-            compute::kernel_t *kernel, engine_t *engine) const override;
+            compute::kernel_t *kernel, const engine_t *engine) const override;
 
     const char *name() const {
         assert(state_ == state_t::binary);
         return binary_name_.c_str();
+    }
+
+    const std::vector<unsigned char> &binary() const {
+        assert(state_ == state_t::binary);
+        return binary_;
     }
 
     enum class state_t { binary, kernel };
@@ -64,7 +69,6 @@ protected:
     ocl_gpu_kernel_t(cl_kernel ocl_kernel)
         : state_(state_t::kernel), ocl_kernel_(ocl_kernel) {}
 
-private:
     state_t state_;
     cl_kernel ocl_kernel_;
     std::vector<unsigned char> binary_;

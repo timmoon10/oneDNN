@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -215,8 +215,19 @@ private:
     stream strm;
 
 protected:
+    bool cuda_supported_format_tag(memory::format_tag tag) {
+        return impl::utils::one_of(
+                tag, dnnl_abc, dnnl_abcd, dnnl_acb, dnnl_acdb);
+    }
     void SetUp() override {
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
+        SKIP_IF_CUDA(p.aalgorithm == algorithm::resampling_nearest,
+                "nearet algorithm is not supported for cudnn backend");
+        SKIP_IF_CUDA(p.ndims == 5,
+                "cudnn resampling backend does not support 5d tensor");
+        SKIP_IF_CUDA(!cuda_supported_format_tag(p.src_format),
+                "Unsupported format tag");
+
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
@@ -276,9 +287,9 @@ protected:
                     resampling_pd.dst_desc(), resampling_pd_no_dst.dst_desc());
         }
 
-        memory src(resampling_pd.src_desc(), eng);
-        memory dst(resampling_pd.dst_desc(), eng);
-        memory dst_ref(resampling_pd.dst_desc(), eng);
+        auto src = test::make_memory(resampling_pd.src_desc(), eng);
+        auto dst = test::make_memory(resampling_pd.dst_desc(), eng);
+        auto dst_ref = test::make_memory(resampling_pd.dst_desc(), eng);
 
         fill_data<data_t>(src.get_desc().get_size() / sizeof(data_t), src);
         check_zero_tail<data_t>(1, src);
@@ -301,9 +312,12 @@ protected:
         auto resampling_bwd_pd = resampling_backward::primitive_desc(
                 resampling_bwd_desc, eng, resampling_pd);
 
-        memory diff_src(resampling_bwd_pd.diff_src_desc(), eng);
-        memory diff_dst(resampling_bwd_pd.diff_dst_desc(), eng);
-        memory diff_src_ref(resampling_bwd_pd.diff_src_desc(), eng);
+        auto diff_src
+                = test::make_memory(resampling_bwd_pd.diff_src_desc(), eng);
+        auto diff_dst
+                = test::make_memory(resampling_bwd_pd.diff_dst_desc(), eng);
+        auto diff_src_ref
+                = test::make_memory(resampling_bwd_pd.diff_src_desc(), eng);
 
         fill_data<data_t>(
                 diff_dst.get_desc().get_size() / sizeof(data_t), diff_dst);

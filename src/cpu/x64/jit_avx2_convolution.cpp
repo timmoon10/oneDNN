@@ -45,17 +45,18 @@ using namespace nstl;
                                    : wht_blk_off_(f, g, oc, ic, kd, kh, kw)
 
 void jit_avx2_convolution_fwd_t::execute_forward(const exec_ctx_t &ctx) const {
+    const auto &jcp = kernel_->jcp;
     auto src = CTX_IN_MEM(const data_t *, DNNL_ARG_SRC);
     auto weights = CTX_IN_MEM(const data_t *, DNNL_ARG_WEIGHTS);
     auto bias = CTX_IN_MEM(const data_t *, DNNL_ARG_BIAS);
     auto dst = CTX_OUT_MEM(data_t *, DNNL_ARG_DST);
+    const auto post_ops_binary_rhs_arg_vec
+            = binary_injector::prepare_binary_args(pd()->jcp_.post_ops, ctx);
 
     const memory_desc_wrapper src_d(pd()->src_md());
     const memory_desc_wrapper dst_d(pd()->dst_md());
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
     const memory_desc_wrapper bias_d(pd()->weights_md(1));
-
-    const auto &jcp = kernel_->jcp;
 
     const size_t ocb_work = div_up(jcp.nb_oc, jcp.nb_oc_blocking);
     const size_t work_amount
@@ -138,7 +139,8 @@ void jit_avx2_convolution_fwd_t::execute_forward(const exec_ctx_t &ctx) const {
                         par_conv.flags |= FLAG_IC_FIRST;
                     }
 
-                    if (jcp.with_eltwise && icb + 1 == jcp.nb_ic)
+                    if ((jcp.with_eltwise || jcp.with_binary)
+                            && icb + 1 == jcp.nb_ic)
                         par_conv.flags |= FLAG_IC_LAST;
 
                     par_conv.reduce_work = this_block_size(
@@ -160,6 +162,11 @@ void jit_avx2_convolution_fwd_t::execute_forward(const exec_ctx_t &ctx) const {
                             - div_up(d_b_overflow, (jcp.dilate_d + 1));
                     par_conv.kd_padding = nstl::max(0, kd_padding);
 
+                    par_conv.oc_l_off = _oc * jcp.oc_block;
+                    par_conv.post_ops_binary_rhs_arg_vec
+                            = post_ops_binary_rhs_arg_vec.data();
+                    par_conv.dst_orig = dst;
+
                     (*kernel_)(&par_conv);
                 }
                 nd_iterator_step(n, jcp.mb, g, jcp.ngroups, ocbb, ocb_work, od,
@@ -180,8 +187,7 @@ void jit_avx2_convolution_fwd_t::execute_forward(const exec_ctx_t &ctx) const {
 
     parallel(jcp.nthr, ker);
 
-    if (pd()->wants_zero_pad_dst())
-        ctx.memory(DNNL_ARG_DST)->zero_pad(ctx.stream());
+    if (pd()->wants_zero_pad_dst()) ctx.memory(DNNL_ARG_DST)->zero_pad(ctx);
 }
 
 void jit_avx2_convolution_bwd_data_t::execute_backward_data(

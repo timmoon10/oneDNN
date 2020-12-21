@@ -21,7 +21,7 @@
 #include <type_traits>
 
 #include "c_types_map.hpp"
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 #include "primitive_attr.hpp"
 #include "type_helpers.hpp"
 
@@ -29,7 +29,6 @@ namespace dnnl {
 namespace impl {
 
 struct primitive_desc_t;
-
 namespace primitive_hashing {
 
 struct cached_op_desc_t {
@@ -219,20 +218,11 @@ struct key_t {
     std::vector<memory_desc_t> mds;
     engine_kind_t engine_kind_;
     runtime_kind_t runtime_kind_;
-    intptr_t device_id_;
+    device_id_t device_id_;
 
 private:
     void init_mds(const primitive_desc_t *pd);
 };
-
-// The following code is derived from Boost C++ library
-// Copyright 2005-2014 Daniel James.
-// Distributed under the Boost Software License, Version 1.0. (See accompanying
-// file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt)
-template <typename T>
-static size_t hash_combine(size_t seed, const T &v) {
-    return seed ^= std::hash<T> {}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
 
 size_t get_md_hash(const memory_desc_t &md);
 size_t get_attr_hash(const primitive_attr_t &attr);
@@ -300,8 +290,9 @@ struct hash<dnnl::impl::primitive_hashing::key_t> {
                 seed, hash_combine(0, static_cast<size_t>(key.engine_kind_)));
         seed = hash_combine(
                 seed, hash_combine(0, static_cast<size_t>(key.runtime_kind_)));
-        seed = hash_combine(
-                seed, hash_combine(0, static_cast<size_t>(key.device_id_)));
+        seed = hash_combine(seed, hash_combine(0, std::get<0>(key.device_id_)));
+        seed = hash_combine(seed, hash_combine(0, std::get<1>(key.device_id_)));
+        seed = hash_combine(seed, hash_combine(0, std::get<2>(key.device_id_)));
         // Combine hash for op_desc with the computed hash
 #define CASE(pkind) \
     case primitive_kind::pkind: \

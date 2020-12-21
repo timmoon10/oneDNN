@@ -1,5 +1,9 @@
 /*******************************************************************************
+<<<<<<< HEAD
 * Copyright 2017-2020 Intel Corporation
+=======
+* Copyright 2020 Intel Corporation
+>>>>>>> tmp_fj_main
 * Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,70 +31,78 @@ namespace aarch64 {
 namespace simple_barrier {
 
 void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
-        Xbyak_aarch64::XReg reg_nthr) {
+        Xbyak_aarch64::XReg reg_nthr, bool usedAsFunc = false) {
 #define BAR_CTR_OFF offsetof(ctx_t, ctr)
 #define BAR_SENSE_OFF offsetof(ctx_t, sense)
     using namespace Xbyak_aarch64;
 
-    XReg x_tmp_0(23);
-    XReg x_tmp_1(24);
-    XReg x_tmp_2(25);
+    const XReg x_tmp_0 = code.X_TMP_0;
+    const WReg w_tmp_1 = code.W_TMP_1;
+    const XReg x_addr_sense = code.X_TMP_2;
+    const XReg x_addr_ctx = code.X_TMP_3;
+    const XReg x_sense = code.X_TMP_4;
+    const XReg x_tmp_addr = code.X_DEFAULT_ADDR;
 
-    XReg reg_tmp(27);
-    XReg sp_tmp1(28);
-    XReg sp_tmp2(29);
-    XReg sp(31);
+    if (usedAsFunc) {
+        const XReg x_tmp_0 = code.x9;
+        const WReg w_tmp_1 = code.w10;
+        const XReg x_addr_sense = code.x11;
+        const XReg x_addr_ctx = code.x12;
+        const XReg x_sense = code.x13;
+        const XReg x_tmp_addr = code.x14;
+    }
 
-    Label barrier_exit_label, barrier_exit_restore_label, spin_label;
+    Label barrier_exit_label, spin_label, atomic_label;
 
-    code.cmp(reg_nthr, 1);
-    code.b(LS, barrier_exit_label);
-
-    code.mov(sp_tmp1, reg_tmp);
+    code.xa_->cmp(reg_nthr, 1);
+    code.xa_->b(EQ, barrier_exit_label);
 
     /* take and save current sense */
-    code.add_imm(x_tmp_0, reg_ctx, BAR_SENSE_OFF, x_tmp_0);
-    code.ldr(reg_tmp, ptr(x_tmp_0));
-    code.mov(sp_tmp2, reg_tmp);
-    code.mov(reg_tmp, 1);
+    code.xa_->add_imm(x_addr_sense, reg_ctx, BAR_SENSE_OFF, x_tmp_0);
+    code.xa_->ldr(x_sense, ptr(x_addr_sense));
 
-#if 0
-    if (mayiuse(avx512_mic)) {
-        code.prefetchwt1(code.ptr[reg_ctx + BAR_CTR_OFF]);
-        code.prefetchwt1(code.ptr[reg_ctx + BAR_CTR_OFF]);
+    code.xa_->add_imm(x_addr_ctx, reg_ctx, BAR_CTR_OFF, x_tmp_addr);
+    if (mayiuse(sve_512)) {
+        code.xa_->prfm(PLDL1KEEP, ptr(x_addr_ctx));
+        code.xa_->prfm(PLDL1KEEP, ptr(x_addr_ctx));
     }
-#endif // #if 0
 
-    code.add_imm(x_tmp_1, reg_ctx, BAR_CTR_OFF, x_tmp_1);
-    code.ldaddal(reg_tmp, reg_tmp, ptr(x_tmp_1));
-    code.add_imm(reg_tmp, reg_tmp, 1, x_tmp_0);
-    code.cmp(reg_tmp, reg_nthr);
-    code.mov(reg_tmp, sp_tmp2);
-    code.b(NE, spin_label);
+    if (mayiuse_atomic()) {
+        code.xa_->mov(x_tmp_0, 1);
+        code.xa_->ldaddal(x_tmp_0, x_tmp_0, ptr(x_addr_ctx));
+        code.xa_->add(x_tmp_0, x_tmp_0, 1);
+    } else {
+        code.xa_->L(atomic_label);
+        code.xa_->ldaxr(x_tmp_0, ptr(x_addr_ctx));
+        code.xa_->add(x_tmp_0, x_tmp_0, 1);
+        code.xa_->stlxr(w_tmp_1, x_tmp_0, ptr(x_addr_ctx));
+        code.xa_->cbnz(w_tmp_1, atomic_label);
+    }
+    code.xa_->cmp(x_tmp_0, reg_nthr);
+    code.xa_->b(NE, spin_label);
 
     /* the last thread {{{ */
-    code.mov_imm(x_tmp_2, 0);
-    code.str(x_tmp_2, ptr(x_tmp_1));
+    code.xa_->mov_imm(x_tmp_0, 0);
+    code.xa_->str(x_tmp_0, ptr(x_addr_ctx)); // reset ctx
+    /* commit CTX clear, before modify SENSE,
+       otherwise other threads load old SENSE value. */
+    code.xa_->dmb(ISH);
 
     // notify waiting threads
-    code.mvn(reg_tmp, reg_tmp);
-    code.str(reg_tmp, ptr(x_tmp_0));
-    code.b(barrier_exit_restore_label);
+    code.xa_->mvn(x_sense, x_sense);
+    code.xa_->str(x_sense, ptr(x_addr_sense));
+    code.xa_->b(barrier_exit_label);
     /* }}} the last thread */
 
-    code.CodeGenerator::L(spin_label);
-    code.ldr(x_tmp_1, ptr(x_tmp_0));
-    code.cmp(reg_tmp, x_tmp_1);
-    code.b(EQ, spin_label);
+    code.xa_->L(spin_label);
+    code.xa_->yield();
+    code.xa_->ldr(x_tmp_0, ptr(x_addr_sense));
+    code.xa_->cmp(x_tmp_0, x_sense);
+    code.xa_->b(EQ, spin_label);
 
-//#ifdef DNNL_INDIRECT_JIT_AARCH64
-    code.CodeGenerator::dmb(ISH);
-//#endif //#ifdef DNNL_INDIRECT_JIT_AARCH64
+    code.xa_->dmb(ISH);
+    code.xa_->L(barrier_exit_label);
 
-    code.CodeGenerator::L(barrier_exit_restore_label);
-    code.mov(reg_tmp, sp_tmp1);
-
-    code.CodeGenerator::L(barrier_exit_label);
 #undef BAR_CTR_OFF
 #undef BAR_SENSE_OFF
 }
@@ -99,9 +111,8 @@ void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
 struct jit_t : public jit_generator {
 
     void generate() override {
-        this->preamble();
-        simple_barrier::generate(*this, abi_param1, abi_param2);
-        this->postamble();
+        simple_barrier::generate(*this, abi_param1, abi_param2, true);
+        ret();
     }
 
     // TODO: Need to check status

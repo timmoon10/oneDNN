@@ -19,7 +19,7 @@
 #include <malloc.h>
 #endif
 
-#include "dnnl_types.h"
+#include "oneapi/dnnl/dnnl_types.h"
 
 #include "common/bfloat16.hpp"
 #include "common/dnnl_traits.hpp"
@@ -377,6 +377,12 @@ void gemm_kernel(dim_t m, dim_t n, const dim_t k, const float alpha,
         const c_type *co, offset_type offsetc,
         const gemm_info_t<a_type, b_type, c_type> *arg) {
 
+#if DNNL_WITH_SYCL
+    std::vector<c_type> col_offset_vec(m);
+    std::vector<c_type> row_offset_vec(n);
+    c_type *col_offset = col_offset_vec.data();
+    c_type *row_offset = row_offset_vec.data();
+#else
     // Since m and n are limited by blocking, stack overflow may not happen;
     // it's up to 32kB
 #if !defined(_MSC_VER)
@@ -385,6 +391,7 @@ void gemm_kernel(dim_t m, dim_t n, const dim_t k, const float alpha,
 #else
     c_type *col_offset = (c_type *)_alloca(sizeof(*col_offset) * m);
     c_type *row_offset = (c_type *)_alloca(sizeof(*row_offset) * n);
+#endif
 #endif
 
     bool col_req = false;
@@ -1598,20 +1605,20 @@ static inline void adjust_thread_count(dim_t m, dim_t n, dim_t k, int *nthrs) {
 
 template <typename a_type, typename b_type, typename c_type>
 static dnnl_status_t call_no_copy_sgemm(
-        gemm_info_t<a_type, b_type, c_type> *arg) {
+        int nthrs, gemm_info_t<a_type, b_type, c_type> *arg) {
 
     if (arg->packing == pack_type::none) {
         auto transa_char = (arg->transa != do_trans) ? "N" : "T";
         auto transb_char = (arg->transb != do_trans) ? "N" : "T";
 
         if (mayiuse(avx512_core))
-            return jit_avx512_common_gemm_f32(transa_char, transb_char, &arg->m,
-                    &arg->n, &arg->k, &arg->alpha, (float *)arg->a, &arg->lda,
-                    (float *)arg->b, &arg->ldb, &arg->beta, (float *)arg->c,
-                    &arg->ldc, (float *)arg->co);
+            return jit_avx512_common_gemm_f32(nthrs, transa_char, transb_char,
+                    &arg->m, &arg->n, &arg->k, &arg->alpha, (float *)arg->a,
+                    &arg->lda, (float *)arg->b, &arg->ldb, &arg->beta,
+                    (float *)arg->c, &arg->ldc, (float *)arg->co);
         else
-            return jit_avx_gemm_f32(transa_char, transb_char, &arg->m, &arg->n,
-                    &arg->k, &arg->alpha, (float *)arg->a, &arg->lda,
+            return jit_avx_gemm_f32(nthrs, transa_char, transb_char, &arg->m,
+                    &arg->n, &arg->k, &arg->alpha, (float *)arg->a, &arg->lda,
                     (float *)arg->b, &arg->ldb, &arg->beta, (float *)arg->c,
                     &arg->ldc, (float *)arg->co);
     } else
@@ -1735,7 +1742,8 @@ static dnnl_status_t gemm_threading_driver(
         if (arg->measure_only) return dnnl_success;
     }
 
-    if (nocopy_checker(nthr_goal, arg)) return call_no_copy_sgemm(arg);
+    if (nocopy_checker(nthr_goal, arg))
+        return call_no_copy_sgemm(nthr_goal, arg);
 
     if (nthr_goal == 1)
         return gemm_kernel_driver(0, arg->m, arg->n, arg->k, arg->a, arg->b,

@@ -19,7 +19,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -122,8 +122,21 @@ protected:
         SKIP_IF(unsupported_data_type(data_type),
                 "Engine does not support this data type.");
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
+        SKIP_IF_CUDA(
+                !cuda_check_format_tags(p.format), "Unsupported format tag");
+        SKIP_IF_CUDA(p.aalgorithm != algorithm::lrn_across_channels,
+                "Unsupported algorithm");
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
+    }
+    bool cuda_check_format_tags(memory::format_tag format) {
+        bool ok = format == memory::format_tag::ncdhw
+                || format == memory::format_tag::nchw
+                || format == memory::format_tag::nhwc
+                || format == memory::format_tag::ncw
+                || format == memory::format_tag::nwc
+                || format == memory::format_tag::any;
+        return ok;
     }
 
     void Test() {
@@ -172,7 +185,7 @@ protected:
                 = {{DNNL_ARG_SRC, l_src.get()}, {DNNL_ARG_DST, l_dst.get()}};
         if (with_workspace) {
             auto workspace_md = lrn_prim_desc.workspace_desc();
-            workspace = memory(workspace_md, eng);
+            workspace = test::make_memory(workspace_md, eng);
             args.insert({DNNL_ARG_WORKSPACE, workspace});
         }
         l.execute(strm, args);

@@ -216,7 +216,10 @@ status_t gen9_gemm_t::launch_nocopy(const gemm_exec_ctx_t &ctx,
     size_t lthreads_y = 8;
     size_t lthreads_z = 1;
 
-#ifndef CL_VERSION_2_0
+    // TODO: remove DNNL_SYCL_DPCPP from the condition once non-uniform
+    // work-groups are fixed in the compiler.
+#if !defined(CL_VERSION_2_0) || defined(DNNL_SYCL_COMPUTECPP) \
+        || defined(DNNL_SYCL_DPCPP)
     while (nthreads_x % lthreads_x)
         lthreads_x--;
     while (nthreads_y % lthreads_y)
@@ -438,8 +441,8 @@ status_t gen9_gemm_t::execute_superkernel(const gemm_exec_ctx_t &ctx) const {
     auto eltwise_beta = pd()->eltwise_beta();
     auto eltwise_scale = pd()->eltwise_scale();
 
-    auto &a = GEMM_CTX_ARG_STORAGE(a);
-    auto &b = GEMM_CTX_ARG_STORAGE(b);
+    auto &a = GEMM_CTX_ARG_STORAGE(b);
+    auto &b = GEMM_CTX_ARG_STORAGE(a);
     auto &c = GEMM_CTX_ARG_STORAGE(c);
 
     size_t off_a0
@@ -454,6 +457,11 @@ status_t gen9_gemm_t::execute_superkernel(const gemm_exec_ctx_t &ctx) const {
 
     auto temp_buf = ctx.get_scratchpad_grantor().get_memory_storage(
             memory_tracking::names::key_gemm_tmp_buffer);
+    auto temp_buf_size
+            = ctx.get_scratchpad_grantor()
+                      .get_registry()
+                      .get(memory_tracking::names::key_gemm_tmp_buffer)
+                      .size;
 
     int unroll_m[2], unroll_n;
     gen9_gemm_nocopy_superkernel_t::get_unrolls(
@@ -516,7 +524,7 @@ status_t gen9_gemm_t::execute_superkernel(const gemm_exec_ctx_t &ctx) const {
     }
 
     void *plan_void = nullptr;
-    temp_buf->map_data(&plan_void, nullptr);
+    temp_buf->map_data(&plan_void, nullptr, temp_buf_size);
 
     if (!plan_void) return status::runtime_error;
 

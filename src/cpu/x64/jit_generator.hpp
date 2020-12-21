@@ -163,12 +163,12 @@ public:
         if (xmm_to_preserve) {
             sub(rsp, xmm_to_preserve * xmm_len);
             for (size_t i = 0; i < xmm_to_preserve; ++i)
-                movdqu(ptr[rsp + i * xmm_len],
+                uni_vmovdqu(ptr[rsp + i * xmm_len],
                         Xbyak::Xmm(xmm_to_preserve_start + i));
         }
         for (size_t i = 0; i < num_abi_save_gpr_regs; ++i)
             push(Xbyak::Reg64(abi_save_gpr_regs[i]));
-        if (mayiuse(avx512_common)) {
+        if (is_valid_isa(avx512_common)) {
             mov(reg_EVEX_max_8b_offt, 2 * EVEX_max_8b_offt);
         }
     }
@@ -196,15 +196,15 @@ public:
     }
 
     void mic_prefetcht0(Xbyak::Address a) {
-        if (mayiuse(avx512_mic)) prefetcht0(a);
+        if (is_valid_isa(avx512_mic)) prefetcht0(a);
     }
 
     void mic_prefetcht1(Xbyak::Address a) {
-        if (mayiuse(avx512_mic)) prefetcht1(a);
+        if (is_valid_isa(avx512_mic)) prefetcht1(a);
     }
 
     void mic_prefetcht2(Xbyak::Address a) {
-        if (mayiuse(avx512_mic)) prefetcht2(a);
+        if (is_valid_isa(avx512_mic)) prefetcht2(a);
     }
 
     void uni_vzeroupper() {
@@ -216,7 +216,7 @@ public:
             pop(Xbyak::Reg64(abi_save_gpr_regs[num_abi_save_gpr_regs - 1 - i]));
         if (xmm_to_preserve) {
             for (size_t i = 0; i < xmm_to_preserve; ++i)
-                movdqu(Xbyak::Xmm(xmm_to_preserve_start + i),
+                uni_vmovdqu(Xbyak::Xmm(xmm_to_preserve_start + i),
                         ptr[rsp + i * xmm_len]);
             add(rsp, xmm_to_preserve * xmm_len);
         }
@@ -305,9 +305,9 @@ public:
 
     void uni_vpxor(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx512_core))
+        if (is_valid_isa(avx512_core))
             vpxord(x1, x2, op);
-        else if (mayiuse(avx))
+        else if (is_valid_isa(avx))
             vpxor(x1, x2, op);
         else {
             assert(x1.isEqualIfNotInherited(x2));
@@ -316,9 +316,9 @@ public:
     }
     void uni_vpxor(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx512_core))
+        if (is_valid_isa(avx512_core))
             vpxord(x1, x2, op);
-        else if (mayiuse(avx2))
+        else if (is_valid_isa(avx2))
             vpxor(x1, x2, op);
         else
             vxorps(x1, x2, op);
@@ -329,19 +329,19 @@ public:
     }
 
     void uni_vmovss(const Xbyak::Address &addr, const Xbyak::Xmm &x) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vmovss(addr, x);
         else
             movss(addr, x);
     }
     void uni_vmovss(const Xbyak::Xmm &x, const Xbyak::Address &addr) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vmovss(x, addr);
         else
             movss(x, addr);
     }
     void uni_vmovss(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vmovss(x1, x1, x2);
         else
             movss(x1, x2);
@@ -370,7 +370,10 @@ public:
     }
 
     void uni_vmovdqu(const Xbyak::Address &addr, const Xbyak::Xmm &x) {
-        movdqu(addr, x);
+        if (is_valid_isa(avx))
+            vmovdqu(addr, x);
+        else
+            movdqu(addr, x);
     }
     void uni_vmovdqu(const Xbyak::Address &addr, const Xbyak::Ymm &x) {
         vmovdqu(addr, x);
@@ -380,7 +383,10 @@ public:
     }
 
     void uni_vmovdqu(const Xbyak::Xmm &x, const Xbyak::Address &addr) {
-        movdqu(x, addr);
+        if (is_valid_isa(avx))
+            vmovdqu(x, addr);
+        else
+            movdqu(x, addr);
     }
     void uni_vmovdqu(const Xbyak::Ymm &x, const Xbyak::Address &addr) {
         vmovdqu(x, addr);
@@ -433,7 +439,7 @@ public:
         shufps(x, x, 0x0);
     }
     void uni_vbroadcastss(const Xbyak::Ymm &x, const Xbyak::Operand &op) {
-        if (op.isMEM() || mayiuse(avx2)) {
+        if (op.isMEM() || is_valid_isa(avx2)) {
             vbroadcastss(x, op);
         } else {
             Xbyak::Xmm t(x.getIdx());
@@ -448,7 +454,7 @@ public:
         pshufd(x, x, 0x0);
     }
     void uni_vpbroadcastd(const Xbyak::Ymm &x, const Xbyak::Operand &op) {
-        if (mayiuse(avx2)) {
+        if (is_valid_isa(avx2)) {
             vpbroadcastd(x, op);
         } else {
             const Xbyak::Xmm t(x.getIdx());
@@ -465,7 +471,7 @@ public:
 
     void uni_vshufps(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op, Xbyak::uint8 imm) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vshufps(x1, x2, op, imm);
         else {
             movups(x1, x2);
@@ -601,7 +607,7 @@ public:
 
     void uni_vpmulld(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx)) {
+        if (is_valid_isa(avx)) {
             vpmulld(x1, x2, op);
         } else {
             if (x1.getIdx() != x2.getIdx()) movdqa(x1, x2);
@@ -615,7 +621,7 @@ public:
 
     void uni_vmulps(const Xbyak::Xmm &x, const Xbyak::Operand &op1,
             const Xbyak::Operand &op2) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vmulps(x, op1, op2);
         else {
             assert(x.isEqualIfNotInherited(op1));
@@ -651,7 +657,7 @@ public:
     }
     void uni_vfmadd132ps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfmadd132ps(x1, x2, op);
         else {
             // Note: x1 gets overriden by x1*op
@@ -672,7 +678,7 @@ public:
     }
     void uni_vfmadd213ps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfmadd213ps(x1, x2, op);
         else {
             // Note: x1 gets overriden by x1*x2
@@ -693,7 +699,7 @@ public:
     }
     void uni_vfmadd213ss(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfmadd213ss(x1, x2, op);
         else {
             // Note: x1 gets overriden by x1*x2
@@ -714,7 +720,7 @@ public:
     }
     void uni_vfmadd231ps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfmadd231ps(x1, x2, op);
         else {
             // Note: x2 gets overriden by x2*op
@@ -734,7 +740,7 @@ public:
     }
     void uni_vfmadd231ss(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfmadd231ss(Xbyak::Xmm(x1.getIdx()), Xbyak::Xmm(x2.getIdx()), op);
         else {
             // Note: x2 gets overriden by x2*op
@@ -756,7 +762,7 @@ public:
 
     void uni_vfnmadd231ps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfnmadd231ps(x1, x2, op);
         else {
             // Note: x2 gets overriden by x2*op
@@ -777,7 +783,7 @@ public:
     }
     void uni_vfmsub213ps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx2))
+        if (is_valid_isa(avx2))
             vfmsub213ps(x1, x2, op);
         else {
             // Note: x1 gets overriden by x1*x2
@@ -797,56 +803,56 @@ public:
 
     void uni_vpaddd(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpaddd(x1, x2, op);
         else {
             if (x1.getIdx() != x2.getIdx()) movdqa(x1, x2);
             paddd(x1, op);
         }
     }
-    void uni_vpaddd(const Xbyak::Ymm &x1, const Xbyak::Xmm &x2,
+    void uni_vpaddd(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
         vpaddd(x1, x2, op);
     }
 
     void uni_vpaddb(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpaddb(x1, x2, op);
         else {
             if (x1.getIdx() != x2.getIdx()) movdqa(x1, x2);
             paddb(x1, op);
         }
     }
-    void uni_vpaddb(const Xbyak::Ymm &x1, const Xbyak::Xmm &x2,
+    void uni_vpaddb(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
         vpaddb(x1, x2, op);
     }
 
     void uni_vpmaddwd(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpmaddwd(x1, x2, op);
         else {
             if (x1.getIdx() != x2.getIdx()) movdqa(x1, x2);
             pmaddwd(x1, op);
         }
     }
-    void uni_vpmaddwd(const Xbyak::Ymm &x1, const Xbyak::Xmm &x2,
+    void uni_vpmaddwd(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
         vpmaddwd(x1, x2, op);
     }
 
     void uni_vpmaddubsw(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpmaddubsw(x1, x2, op);
         else {
             if (x1.getIdx() != x2.getIdx()) movdqa(x1, x2);
             pmaddubsw(x1, op);
         }
     }
-    void uni_vpmaddubsw(const Xbyak::Ymm &x1, const Xbyak::Xmm &x2,
+    void uni_vpmaddubsw(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
         vpmaddubsw(x1, x2, op);
     }
@@ -858,7 +864,7 @@ public:
     }
     void uni_vandps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (!mayiuse(avx512_common) || x1.getBit() < 512)
+        if (!is_valid_isa(avx512_common) || x1.getBit() < 512)
             vandps(x1, x2, op);
         else
             vpandd(x1, x2, op);
@@ -871,7 +877,7 @@ public:
     }
     void uni_vorps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (!mayiuse(avx512_common) || x1.getBit() < 512)
+        if (!is_valid_isa(avx512_common) || x1.getBit() < 512)
             vorps(x1, x2, op);
         else
             vpord(x1, x2, op);
@@ -884,7 +890,7 @@ public:
     }
     void uni_vxorps(const Xbyak::Ymm &x1, const Xbyak::Ymm &x2,
             const Xbyak::Operand &op) {
-        if (!mayiuse(avx512_common) || x1.getBit() < 512)
+        if (!is_valid_isa(avx512_common) || x1.getBit() < 512)
             vxorps(x1, x2, op);
         else
             vpxord(x1, x2, op);
@@ -1011,13 +1017,13 @@ public:
     }
 
     void uni_vmovq(const Xbyak::Xmm &x, const Xbyak::Reg64 &r) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vmovq(x, r);
         else
             movq(x, r);
     }
     void uni_vmovq(const Xbyak::Address &addr, const Xbyak::Xmm &x) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vmovq(addr, x);
         else
             movq(addr, x);
@@ -1056,7 +1062,7 @@ public:
     void uni_vpinsrb(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op, const int imm) {
         assert(x1.getIdx() == x2.getIdx());
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpinsrb(x1, x2, op, imm);
         else
             pinsrb(x1, op, imm);
@@ -1070,7 +1076,7 @@ public:
     void uni_vpinsrd(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op, const int imm) {
         assert(x1.getIdx() == x2.getIdx());
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpinsrd(x1, x2, op, imm);
         else
             pinsrd(x1, op, imm);
@@ -1083,7 +1089,7 @@ public:
     void uni_vpinsrq(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op, const int imm) {
         assert(x1.getIdx() == x2.getIdx());
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpinsrq(x1, x2, op, imm);
         else
             pinsrq(x1, op, imm);
@@ -1096,7 +1102,7 @@ public:
     void uni_vpinsrw(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op, const int imm) {
         assert(x1.getIdx() == x2.getIdx());
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpinsrw(x1, x2, op, imm);
         else
             pinsrw(x1, op, imm);
@@ -1108,7 +1114,7 @@ public:
 
     void uni_vpextrb(
             const Xbyak::Operand &op, const Xbyak::Xmm &x, const int imm) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpextrb(op, x, imm);
         else
             pextrb(op, x, imm);
@@ -1121,7 +1127,7 @@ public:
 
     void uni_vpextrw(
             const Xbyak::Operand &op, const Xbyak::Xmm &x, const int imm) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpextrw(op, x, imm);
         else
             pextrw(op, x, imm);
@@ -1133,7 +1139,7 @@ public:
 
     void uni_vpextrd(
             const Xbyak::Operand &op, const Xbyak::Xmm &x, const int imm) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpextrd(op, x, imm);
         else
             pextrd(op, x, imm);
@@ -1145,7 +1151,7 @@ public:
 
     void uni_vpextrq(
             const Xbyak::Operand &op, const Xbyak::Xmm &x, const int imm) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpextrq(op, x, imm);
         else
             pextrq(op, x, imm);
@@ -1157,7 +1163,7 @@ public:
 
     void uni_vpmaxsd(const Xbyak::Xmm &x1, const Xbyak::Xmm &x2,
             const Xbyak::Operand &op) {
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vpmaxsd(x1, x2, op);
         else {
             if (x1.getIdx() != x2.getIdx()) movdqa(x1, x2);
@@ -1245,12 +1251,12 @@ public:
         // signed, as cvtps2dq will return MIN_INT if the value
         // does not fit
         if (odt == u8) {
-            if (mayiuse(avx))
+            if (is_valid_isa(avx))
                 vmaxps(vmm, vmm, vmm_lbound);
             else
                 maxps(vmm, vmm_lbound);
         }
-        if (mayiuse(avx))
+        if (is_valid_isa(avx))
             vminps(vmm, vmm, vmm_ubound);
         else
             minps(vmm, vmm_ubound);
@@ -1274,13 +1280,12 @@ public:
     */
     template <typename Vmm>
     void load_bytes(const Vmm &vmm, const Xbyak::Reg64 &reg, int64_t offset,
-            int load_size, bool force_sse = false) {
+            int load_size) {
 
         constexpr bool is_xmm = std::is_same<Vmm, Xbyak::Xmm>::value;
         constexpr bool is_ymm = std::is_same<Vmm, Xbyak::Ymm>::value;
         static_assert(
                 is_xmm || is_ymm, "only Xmm or Ymm registers are allowed");
-        const bool use_avx = mayiuse(avx) && !force_sse;
 
         MAYBE_UNUSED(is_xmm);
         MAYBE_UNUSED(is_ymm);
@@ -1294,7 +1299,10 @@ public:
         // At most 16 bytes can fit inside the Xmm register
         assert(IMPLICATION(load_size > 16, is_ymm));
 
-        assert(mayiuse(sse41)
+        // Ensure that vector register is compatible with the ISA in hand
+        assert(IMPLICATION(is_ymm, is_valid_isa(avx)));
+
+        assert(is_valid_isa(sse41)
                 && "routine is not supported for the current isa");
 
         auto xmm = Xbyak::Xmm(vmm.getIdx());
@@ -1304,26 +1312,6 @@ public:
         const auto addr = [&](int bytes_offset) {
             return ptr[reg + offset + bytes_offset * sizeof(int8_t)];
         };
-
-        // VEX-fying macro when AVX and SSE41 instructions have
-        // same number of arguments
-#define MAYBE_VEX2(instr, arg1, arg2) \
-    do { \
-        if (use_avx) \
-            CONCAT2(v, instr)(arg1, arg2); \
-        else \
-            instr(arg1, arg2); \
-    } while (0)
-
-        // VEX-fying macro when AVX have one extra argument for
-        // destination (namely, the first argument)
-#define MAYBE_VEX(instr, arg1, arg2, arg3) \
-    do { \
-        if (use_avx) \
-            CONCAT2(v, instr)(arg1, arg1, arg2, arg3); \
-        else \
-            instr(arg1, arg2, arg3); \
-    } while (0)
 
         if (load_size == 32) {
             vmovups(ymm, addr(0));
@@ -1340,52 +1328,52 @@ public:
         }
 
         if (bytes_to_load >= 8 && bytes_to_load < 16)
-            MAYBE_VEX(pinsrq, xmm, addr(start_bytes), 0);
+            uni_vpinsrq(xmm, xmm, addr(start_bytes), 0);
         else if (bytes_to_load == 16)
-            MAYBE_VEX2(movdqu, xmm, addr(start_bytes));
+            uni_vmovdqu(xmm, addr(start_bytes));
 
         switch (bytes_to_load) {
             case 0: break;
-            case 1: MAYBE_VEX(pinsrb, xmm, addr(start_bytes), 0); break;
-            case 2: MAYBE_VEX(pinsrw, xmm, addr(start_bytes), 0); break;
+            case 1: uni_vpinsrb(xmm, xmm, addr(start_bytes), 0); break;
+            case 2: uni_vpinsrw(xmm, xmm, addr(start_bytes), 0); break;
             case 3:
-                MAYBE_VEX(pinsrw, xmm, addr(start_bytes), 0);
-                MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 2), 2);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 2), 2);
                 break;
-            case 4: MAYBE_VEX(pinsrd, xmm, addr(start_bytes), 0); break;
+            case 4: uni_vpinsrd(xmm, xmm, addr(start_bytes), 0); break;
             case 5:
-                MAYBE_VEX(pinsrd, xmm, addr(start_bytes), 0);
-                MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 4), 4);
+                uni_vpinsrd(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 4), 4);
                 break;
             case 6:
-                MAYBE_VEX(pinsrd, xmm, addr(start_bytes), 0);
-                MAYBE_VEX(pinsrw, xmm, addr(start_bytes + 4), 2);
+                uni_vpinsrd(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 4), 2);
                 break;
             case 7:
-                MAYBE_VEX(pinsrd, xmm, addr(start_bytes), 0);
-                MAYBE_VEX(pinsrw, xmm, addr(start_bytes + 4), 2);
-                MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 6), 6);
+                uni_vpinsrd(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 4), 2);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 6), 6);
                 break;
             case 8: break;
-            case 9: MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 8), 8); break;
-            case 10: MAYBE_VEX(pinsrw, xmm, addr(start_bytes + 8), 4); break;
+            case 9: uni_vpinsrb(xmm, xmm, addr(start_bytes + 8), 8); break;
+            case 10: uni_vpinsrw(xmm, xmm, addr(start_bytes + 8), 4); break;
             case 11:
-                MAYBE_VEX(pinsrw, xmm, addr(start_bytes + 8), 4);
-                MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 10), 10);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 8), 4);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 10), 10);
                 break;
-            case 12: MAYBE_VEX(pinsrd, xmm, addr(start_bytes + 8), 2); break;
+            case 12: uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2); break;
             case 13:
-                MAYBE_VEX(pinsrd, xmm, addr(start_bytes + 8), 2);
-                MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 12), 12);
+                uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 12), 12);
                 break;
             case 14:
-                MAYBE_VEX(pinsrd, xmm, addr(start_bytes + 8), 2);
-                MAYBE_VEX(pinsrw, xmm, addr(start_bytes + 12), 6);
+                uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 12), 6);
                 break;
             case 15:
-                MAYBE_VEX(pinsrd, xmm, addr(start_bytes + 8), 2);
-                MAYBE_VEX(pinsrw, xmm, addr(start_bytes + 12), 6);
-                MAYBE_VEX(pinsrb, xmm, addr(start_bytes + 14), 14);
+                uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 12), 6);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 14), 14);
                 break;
             case 16: break;
             default: assert(!"improper load size");
@@ -1395,8 +1383,6 @@ public:
             vinsertf128(ymm, ymm, xmm, 1); // insert to upper bits of ymm
             vinsertf128(ymm, ymm, addr(0), 0); // insert to lower bits of ymm
         }
-#undef MAYBE_VEX2
-#undef MAYBE_VEX
     }
 
     /**
@@ -1419,13 +1405,12 @@ public:
     */
     template <typename Vmm>
     void store_bytes(const Vmm &vmm, const Xbyak::Reg64 &reg, int64_t offset,
-            int store_size, bool force_sse = false) {
+            int store_size) {
 
         constexpr bool is_xmm = std::is_same<Vmm, Xbyak::Xmm>::value;
         constexpr bool is_ymm = std::is_same<Vmm, Xbyak::Ymm>::value;
         static_assert(
                 is_xmm || is_ymm, "only Xmm or Ymm registers are allowed");
-        const bool use_avx = mayiuse(avx) && !force_sse;
 
         MAYBE_UNUSED(is_xmm);
         MAYBE_UNUSED(is_ymm);
@@ -1439,6 +1424,9 @@ public:
         // At most 16 bytes can fit inside the Xmm register
         assert(IMPLICATION(store_size > 16, is_ymm));
 
+        // Ensure that vector register is compatible with the ISA in hand
+        assert(IMPLICATION(is_ymm, is_valid_isa(avx)));
+
         assert(mayiuse(sse41)
                 && "routine is not supported for the current isa");
 
@@ -1448,24 +1436,6 @@ public:
         const auto addr = [&](int bytes_offset) {
             return ptr[reg + offset + bytes_offset * sizeof(int8_t)];
         };
-
-        // VEX-fying macro when AVX and SSE41 instructions have
-        // same number of arguments
-#define MAYBE_VEX2(instr, arg1, arg2) \
-    do { \
-        if (use_avx) \
-            CONCAT2(v, instr)(arg1, arg2); \
-        else \
-            instr(arg1, arg2); \
-    } while (0)
-
-#define MAYBE_VEX3(instr, arg1, arg2, arg3) \
-    do { \
-        if (use_avx) \
-            CONCAT2(v, instr)(arg1, arg2, arg3); \
-        else \
-            instr(arg1, arg2, arg3); \
-    } while (0)
 
         if (store_size == 32) {
             vmovups(addr(0), ymm);
@@ -1483,58 +1453,56 @@ public:
         }
 
         if (bytes_to_store >= 8 && bytes_to_store < 16)
-            MAYBE_VEX3(pextrq, addr(start_bytes), xmm, 0);
+            uni_vpextrq(addr(start_bytes), xmm, 0);
         else if (bytes_to_store == 16)
-            MAYBE_VEX2(movdqu, addr(start_bytes), xmm);
+            uni_vmovdqu(addr(start_bytes), xmm);
 
         switch (bytes_to_store) {
             case 0: break;
-            case 1: MAYBE_VEX3(pextrb, addr(start_bytes), xmm, 0); break;
-            case 2: MAYBE_VEX3(pextrw, addr(start_bytes), xmm, 0); break;
+            case 1: uni_vpextrb(addr(start_bytes), xmm, 0); break;
+            case 2: uni_vpextrw(addr(start_bytes), xmm, 0); break;
             case 3:
-                MAYBE_VEX3(pextrw, addr(start_bytes), xmm, 0);
-                MAYBE_VEX3(pextrb, addr(start_bytes + 2), xmm, 2);
+                uni_vpextrw(addr(start_bytes), xmm, 0);
+                uni_vpextrb(addr(start_bytes + 2), xmm, 2);
                 break;
-            case 4: MAYBE_VEX3(pextrd, addr(start_bytes), xmm, 0); break;
+            case 4: uni_vpextrd(addr(start_bytes), xmm, 0); break;
             case 5:
-                MAYBE_VEX3(pextrd, addr(start_bytes), xmm, 0);
-                MAYBE_VEX3(pextrb, addr(start_bytes + 4), xmm, 4);
+                uni_vpextrd(addr(start_bytes), xmm, 0);
+                uni_vpextrb(addr(start_bytes + 4), xmm, 4);
                 break;
             case 6:
-                MAYBE_VEX3(pextrd, addr(start_bytes), xmm, 0);
-                MAYBE_VEX3(pextrw, addr(start_bytes + 4), xmm, 2);
+                uni_vpextrd(addr(start_bytes), xmm, 0);
+                uni_vpextrw(addr(start_bytes + 4), xmm, 2);
                 break;
             case 7:
-                MAYBE_VEX3(pextrd, addr(start_bytes), xmm, 0);
-                MAYBE_VEX3(pextrw, addr(start_bytes + 4), xmm, 2);
-                MAYBE_VEX3(pextrb, addr(start_bytes + 6), xmm, 6);
+                uni_vpextrd(addr(start_bytes), xmm, 0);
+                uni_vpextrw(addr(start_bytes + 4), xmm, 2);
+                uni_vpextrb(addr(start_bytes + 6), xmm, 6);
                 break;
             case 8: break;
-            case 9: MAYBE_VEX3(pextrb, addr(start_bytes + 8), xmm, 8); break;
-            case 10: MAYBE_VEX3(pextrw, addr(start_bytes + 8), xmm, 4); break;
+            case 9: uni_vpextrb(addr(start_bytes + 8), xmm, 8); break;
+            case 10: uni_vpextrw(addr(start_bytes + 8), xmm, 4); break;
             case 11:
-                MAYBE_VEX3(pextrw, addr(start_bytes + 8), xmm, 4);
-                MAYBE_VEX3(pextrb, addr(start_bytes + 10), xmm, 10);
+                uni_vpextrw(addr(start_bytes + 8), xmm, 4);
+                uni_vpextrb(addr(start_bytes + 10), xmm, 10);
                 break;
-            case 12: MAYBE_VEX3(pextrd, addr(start_bytes + 8), xmm, 2); break;
+            case 12: uni_vpextrd(addr(start_bytes + 8), xmm, 2); break;
             case 13:
-                MAYBE_VEX3(pextrd, addr(start_bytes + 8), xmm, 2);
-                MAYBE_VEX3(pextrb, addr(start_bytes + 12), xmm, 12);
+                uni_vpextrd(addr(start_bytes + 8), xmm, 2);
+                uni_vpextrb(addr(start_bytes + 12), xmm, 12);
                 break;
             case 14:
-                MAYBE_VEX3(pextrd, addr(start_bytes + 8), xmm, 2);
-                MAYBE_VEX3(pextrw, addr(start_bytes + 12), xmm, 6);
+                uni_vpextrd(addr(start_bytes + 8), xmm, 2);
+                uni_vpextrw(addr(start_bytes + 12), xmm, 6);
                 break;
             case 15:
-                MAYBE_VEX3(pextrd, addr(start_bytes + 8), xmm, 2);
-                MAYBE_VEX3(pextrw, addr(start_bytes + 12), xmm, 6);
-                MAYBE_VEX3(pextrb, addr(start_bytes + 14), xmm, 14);
+                uni_vpextrd(addr(start_bytes + 8), xmm, 2);
+                uni_vpextrw(addr(start_bytes + 12), xmm, 6);
+                uni_vpextrb(addr(start_bytes + 14), xmm, 14);
                 break;
             case 16: break;
             default: assert(!"improper store size");
         }
-#undef MAYBE_VEX2
-#undef MAYBE_VEX3
     }
 
     /**
@@ -1574,6 +1542,9 @@ public:
 
         // Ensure offset is at most 4 bytes to be encoded in the instruction
         assert(offset >= INT_MIN && offset <= INT_MAX);
+
+        // Ensure that vector register is compatible with the ISA in hand
+        assert(IMPLICATION(is_ymm, is_valid_isa(avx)));
 
         assert(mayiuse(sse41)
                 && "routine is not supported for the current isa");
@@ -1615,10 +1586,19 @@ public:
 
         assert(mayiuse(sse41)
                 && "routine is not supported for the current isa");
-        constexpr bool is_xmm = std::is_same<Vmm, Xbyak::Xmm>::value;
-        // Avoid using Ymm with avx isa
-        assert(IMPLICATION(!mayiuse(avx2), is_xmm));
-        MAYBE_UNUSED(is_xmm);
+        constexpr bool is_ymm = std::is_same<Vmm, Xbyak::Ymm>::value;
+
+        // Owing to lack of cross lane operations in non avx2 compatible isa
+        // this functionality remains unimplemented for int8 data type
+        const bool is_int8_dt
+                = utils::one_of(type_out, data_type::s8, data_type::u8);
+        assert(IMPLICATION(is_ymm && is_int8_dt, is_valid_isa(avx2)));
+
+        // Ensure that vector register is compatible with the ISA in hand
+        assert(IMPLICATION(is_ymm, is_valid_isa(avx)));
+
+        MAYBE_UNUSED(is_ymm);
+        MAYBE_UNUSED(is_int8_dt);
 
         auto ymm = Xbyak::Ymm(vmm.getIdx());
 
@@ -1630,7 +1610,10 @@ public:
             case data_type::u8:
             case data_type::s8:
                 uni_vpackssdw(vmm, vmm, vmm);
-                if (mayiuse(avx2)) vpermq(ymm, ymm, 0x08);
+                // For each y_i of size 64 bits, following cross lane
+                // operation on ymm yields
+                // [y_3 y_2 y_1 y_0] |--> [0 0 y_2 y_0]
+                if (is_ymm) vpermq(ymm, ymm, 0x08);
                 if (type_out == data_type::s8)
                     uni_vpacksswb(vmm, vmm, vmm);
                 else
@@ -1671,11 +1654,15 @@ public:
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_generator);
 
 public:
+    /* All uni_ instructions -- apart from uni_vzeroupper() -- will comply with
+     * the max_cpu_isa argument */
     jit_generator(void *code_ptr = nullptr, size_t code_size = MAX_CODE_SIZE,
-            bool use_autogrow = true)
+            bool use_autogrow = true, cpu_isa_t max_cpu_isa = isa_all)
         : Xbyak::CodeGenerator(code_size,
                 (code_ptr == nullptr && use_autogrow) ? Xbyak::AutoGrow
-                                                      : code_ptr) {}
+                                                      : code_ptr)
+        , max_cpu_isa_(max_cpu_isa) {}
+
     virtual ~jit_generator() {}
 
     virtual const char *name() const = 0;
@@ -1701,12 +1688,17 @@ public:
     }
 
 private:
+    const cpu_isa_t max_cpu_isa_;
     const Xbyak::uint8 *getCode() {
         this->ready();
         if (!is_initialized()) return nullptr;
         const Xbyak::uint8 *code = CodeGenerator::getCode();
         register_jit_code(code, getSize());
         return code;
+    }
+
+    inline bool is_valid_isa(cpu_isa_t isa) {
+        return is_subset(isa, max_cpu_isa_) && mayiuse(isa);
     }
 
     static inline bool is_initialized() {

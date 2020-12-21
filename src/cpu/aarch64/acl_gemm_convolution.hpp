@@ -21,7 +21,7 @@
 #include "common/memory_tracking.hpp"
 #include "common/primitive.hpp"
 
-#include "cpu/aarch64/acl_gemm_convolution_utils.hpp"
+#include "cpu/aarch64/acl_convolution_utils.hpp"
 #include "cpu/gemm/gemm.hpp"
 
 #include "cpu/cpu_convolution_pd.hpp"
@@ -34,36 +34,13 @@ namespace impl {
 namespace cpu {
 namespace aarch64 {
 
-struct acl_obj_t {
-    arm_compute::NEGEMMConvolutionLayer gemm_conv;
-    arm_compute::Tensor src_tensor;
-    arm_compute::Tensor wei_tensor;
-    arm_compute::Tensor bia_tensor;
-    arm_compute::Tensor dst_tensor;
-};
-
 struct acl_resource_t : public resource_t {
-    acl_resource_t() : acl_obj_(utils::make_unique<acl_obj_t>()) {}
+    acl_resource_t()
+        : acl_obj_(utils::make_unique<
+                acl_obj_t<arm_compute::NEGEMMConvolutionLayer>>()) {}
 
-    status_t configure(const acl_conv_gemm_conf_t &acp) {
+    status_t configure(const acl_conv_conf_t &acp) {
         if (!acl_obj_) return status::out_of_memory;
-
-        // clang-format off
-        // Validate convolution manually to check for return status
-        arm_compute::NEGEMMConvolutionLayer acl_gemm_conv;
-        auto acl_st = acl_gemm_conv.validate(
-            &acp.src_info,
-            &acp.wei_info,
-            acp.with_bias ? &acp.bia_info : nullptr,
-            &acp.dst_info,
-            acp.padstride_info,
-            acp.weights_info,
-            acp.dilation_info,
-            acp.act_info);
-        // clang-format on
-        if (acl_st.error_code() != arm_compute::ErrorCode::OK) {
-            return status::unimplemented;
-        }
 
         // Init Compute Library tensors based on info from descriptor
         acl_obj_->src_tensor.allocator()->init(acp.src_info);
@@ -72,7 +49,7 @@ struct acl_resource_t : public resource_t {
         acl_obj_->bia_tensor.allocator()->init(acp.bia_info);
 
         // clang-format off
-        acl_obj_->gemm_conv.configure(
+        acl_obj_->conv.configure(
             &acl_obj_->src_tensor,
             &acl_obj_->wei_tensor,
             acp.with_bias ? &acl_obj_->bia_tensor : nullptr,
@@ -86,15 +63,19 @@ struct acl_resource_t : public resource_t {
         return status::success;
     }
 
-    acl_obj_t &get_acl_obj() const { return *acl_obj_; }
+    acl_obj_t<arm_compute::NEGEMMConvolutionLayer> &get_acl_obj() const {
+        return *acl_obj_;
+    }
 
     DNNL_DISALLOW_COPY_AND_ASSIGN(acl_resource_t);
 
 private:
-    std::unique_ptr<acl_obj_t> acl_obj_;
+    std::unique_ptr<acl_obj_t<arm_compute::NEGEMMConvolutionLayer>> acl_obj_;
 
 }; // acl_resource_t
 
+template <data_type_t src_type, data_type_t wei_type = src_type,
+        data_type_t dst_type = src_type, data_type_t bia_type = dst_type>
 struct acl_gemm_convolution_fwd_t : public primitive_t {
     struct pd_t : public cpu_convolution_fwd_pd_t {
         pd_t(const convolution_desc_t *adesc, const primitive_attr_t *attr,
@@ -105,17 +86,22 @@ struct acl_gemm_convolution_fwd_t : public primitive_t {
                 "gemm:acl", acl_gemm_convolution_fwd_t, USE_GLOBAL_SCRATCHPAD);
 
         status_t init(engine_t *engine) {
-            bool ok = true && is_fwd()
+            using namespace data_type;
+            using smask_t = primitive_attr_t::skip_mask_t;
+
+            bool ok = is_fwd()
                     && set_default_alg_kind(alg_kind::convolution_direct)
-                    && expect_data_types(data_type::f32, data_type::f32,
-                            data_type::f32, data_type::f32, data_type::f32)
+                    && expect_data_types(
+                            src_type, wei_type, bia_type, dst_type, undef)
                     && !has_zero_dim_memory()
-                    && attr()->has_default_values(
-                            primitive_attr_t::skip_mask_t::post_ops)
+                    && attr()->has_default_values(smask_t::oscale
+                                    | smask_t::zero_points | smask_t::post_ops,
+                            dst_type)
+                    && output_scales_mask_ok() && zero_points_ok()
                     && post_ops_ok();
             if (!ok) return status::unimplemented;
 
-            auto conf_status = acl_gemm_convolution_utils::init_conf(acp_,
+            auto conf_status = acl_convolution_utils::init_conf_gemm(acp_,
                     src_md_, weights_md_, dst_md_, bias_md_, *desc(), *attr());
             if (conf_status != status::success) return status::unimplemented;
 
@@ -128,18 +114,32 @@ struct acl_gemm_convolution_fwd_t : public primitive_t {
             // Using user provided memory for the biases currently segfaults
             if (acp_.with_bias) {
                 auto scratchpad = scratchpad_registry().registrar();
-                const size_t bia_mem_sz_
-                        = acp_.bia_info.tensor_shape()[0] * sizeof(data_t);
-                scratchpad.template book<data_t>(
+                const size_t bia_mem_sz_ = acp_.bia_info.tensor_shape()[0];
+                scratchpad.template book<bia_data_t>(
                         memory_tracking::names::key_none, bia_mem_sz_);
             }
 
             return status::success;
         }
 
-        acl_conv_gemm_conf_t acp_;
+        acl_conv_conf_t acp_;
 
     protected:
+        bool output_scales_mask_ok() const {
+            using namespace data_type;
+            const auto &mask = attr()->output_scales_.mask_;
+            return IMPLICATION(!utils::one_of(src_type, s8, u8),
+                           attr()->output_scales_.has_default_values())
+                    // TODO: add support for per_channel quantization
+                    && mask == 0;
+        }
+
+        bool zero_points_ok() const {
+            using namespace data_type;
+            // TODO: add support for asymmetric quantization
+            return attr()->zero_points_.has_default_values();
+        }
+
         bool post_ops_ok() const {
             auto const &po = attr()->post_ops_;
             auto is_eltwise
@@ -149,7 +149,7 @@ struct acl_gemm_convolution_fwd_t : public primitive_t {
             // Compute Library supports only one eltwise post-op
             if (po.len() == 1 && is_eltwise(0)) {
                 const auto act_type = po.entry_[0].eltwise.alg;
-                eltwise_ok = acl_gemm_convolution_utils::acl_act_ok(act_type);
+                eltwise_ok = acl_convolution_utils::acl_act_ok(act_type);
             }
 
             return eltwise_ok || (po.len() == 0);
@@ -172,9 +172,10 @@ struct acl_gemm_convolution_fwd_t : public primitive_t {
         return st;
     }
 
-    ~acl_gemm_convolution_fwd_t() {}
-
-    typedef typename prec_traits<data_type::f32>::type data_t;
+    typedef typename prec_traits<src_type>::type src_data_t;
+    typedef typename prec_traits<wei_type>::type wei_data_t;
+    typedef typename prec_traits<dst_type>::type dst_data_t;
+    typedef typename prec_traits<bia_type>::type bia_data_t;
 
     status_t execute(const exec_ctx_t &ctx) const override {
         return execute_forward(ctx);

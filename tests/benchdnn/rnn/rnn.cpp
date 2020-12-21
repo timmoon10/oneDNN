@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "tests/test_thread.hpp"
 
@@ -107,6 +107,12 @@ int check_s8s8_reorder(const prb_t &prb, data_kind_t kind,
         const dnn_mem_t &mem_dt, const dnn_mem_t &mem_fp) {
     // TODO: enable for all cpu_kind when supported
     if (engine_tgt_kind != dnnl_cpu) return OK;
+
+#if DNNL_CPU_RUNTIME == DNNL_RUNTIME_DPCPP
+    // DPC++ does not provide a simple way to access the underlying
+    // buffer alignment.
+    return OK;
+#endif
 
     // In the main test, we fill buffers with f32 and reorder to s8
     // with quantization.
@@ -759,6 +765,11 @@ void check_known_skipped_case(const prb_t &prb, res_t *res) {
             res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
             return;
         }
+    }
+
+    if (is_nvidia_gpu()) {
+        res->state = SKIPPED, res->reason = CASE_NOT_SUPPORTED;
+        return;
     }
 }
 

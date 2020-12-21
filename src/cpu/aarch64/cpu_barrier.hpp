@@ -1,5 +1,5 @@
 /*******************************************************************************
-* Copyright 2017-2020 Intel Corporation
+* Copyright 2020 Intel Corporation
 * Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,15 +30,11 @@ namespace aarch64 {
 
 namespace simple_barrier {
 
-#ifdef _WIN32
-#define CTX_ALIGNMENT 64
-#else
 #define CTX_ALIGNMENT 4096
-#endif
 
 STRUCT_ALIGN(
         CTX_ALIGNMENT, struct ctx_t {
-            enum { CACHE_LINE_SIZE = 64 };
+            enum { CACHE_LINE_SIZE = 256 };
             volatile size_t ctr;
             char pad1[CACHE_LINE_SIZE - 1 * sizeof(size_t)];
             volatile size_t sense;
@@ -53,8 +49,8 @@ STRUCT_ALIGN(
  * Batch normalization (that creates C / simd_w barriers) degrades with page
  * alignment due to significant overhead of ctx_init in case of mb=1. */
 STRUCT_ALIGN(
-        64, struct ctx_64_t {
-            enum { CACHE_LINE_SIZE = 64 };
+        256, struct ctx_64_t {
+            enum { CACHE_LINE_SIZE = 256 };
             volatile size_t ctr;
             char pad1[CACHE_LINE_SIZE - 1 * sizeof(size_t)];
             volatile size_t sense;
@@ -74,7 +70,7 @@ void barrier(ctx_t *ctx, int nthr);
  *   reg_nnthr -- read-only register with the # of synchronizing threads
  */
 void generate(jit_generator &code, Xbyak_aarch64::XReg reg_ctx,
-        Xbyak_aarch64::XReg reg_nthr);
+        Xbyak_aarch64::XReg reg_nthr, bool usedAsFunc = false);
 
 } // namespace simple_barrier
 

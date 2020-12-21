@@ -33,16 +33,23 @@ namespace dnnl {
 namespace impl {
 namespace cpu {
 
+void set_reduction_buffers(
+        const dim_t work_amount, dim_t &group_size, dim_t &buf_size);
+dim_t get_scalar_scratchpad_offset(const std::size_t ithr,
+        const std::size_t nthr, const dim_t work_amount);
+
 template <data_type_t d_type>
 struct ref_prelu_fwd_t : public primitive_t {
     struct pd_t : public cpu_prelu_fwd_pd_t {
         using cpu_prelu_fwd_pd_t::cpu_prelu_fwd_pd_t;
 
-        DECLARE_COMMON_PD_T("prelu_ref:any", ref_prelu_fwd_t);
+        DECLARE_COMMON_PD_T("ref:any", ref_prelu_fwd_t);
 
         status_t init(engine_t *engine) {
             bool ok = is_fwd() && set_default_formats()
-                    && src_md(0)->data_type == d_type
+                    && utils::everyone_is(d_type, src_md(0)->data_type,
+                            weights_md(0)->data_type)
+                    && src_md(0)->ndims >= 3
                     && platform::has_data_type_support(d_type)
                     && attr()->has_default_values();
 
@@ -70,13 +77,14 @@ struct ref_prelu_bwd_t : public primitive_t {
     struct pd_t : public cpu_prelu_bwd_pd_t {
         using cpu_prelu_bwd_pd_t::cpu_prelu_bwd_pd_t;
 
-        DECLARE_COMMON_PD_T("prelu_ref:any", ref_prelu_bwd_t);
+        DECLARE_COMMON_PD_T("ref:any", ref_prelu_bwd_t);
 
         status_t init(engine_t *engine) {
             bool ok = !is_fwd() && set_default_formats()
                     && utils::everyone_is(d_type, src_md(0)->data_type,
                             weights_md(0)->data_type, diff_src_md(0)->data_type,
                             diff_weights_md(0)->data_type)
+                    && src_md(0)->ndims >= 3
                     && platform::has_data_type_support(d_type)
                     && attr()->has_default_values();
 
@@ -93,15 +101,39 @@ struct ref_prelu_bwd_t : public primitive_t {
             const memory_desc_wrapper data_md_d(data_md_);
             auto broadcast_strategy
                     = get_rhs_arg_broadcasting_strategy(weights_md_, data_md_d);
-            if (broadcast_strategy != broadcasting_strategy_t::no_broadcast) {
-                const int nscr = nstl::min(
-                        dnnl_get_max_threads(), (int)data_md_d.nelems());
-                const size_t work_amount = data_md_d.nelems();
-                dim_t group_size, buf_size;
-                set_reduction_buffers(work_amount, group_size, buf_size);
-                scratchpad.book(memory_tracking::names::key_prelu_reduction,
-                        nscr * (group_size * buf_size),
-                        types::data_type_size(dnnl_f32));
+            const size_t nscr = nstl::min(
+                    dnnl_get_max_threads(), (int)data_md_d.nelems());
+            size_t scratchpad_size, work_amount;
+
+            // Scratchpad is needed to correctly reduce calculated diff_weights
+            // in cases where broadcast is used.
+            //
+            // example: if data tensor size is NxCxW and weight tensor is 1xCx1,
+            // diff_weight tensor would also be of size 1xCx1 and thus each value
+            // along C axis would equal: results summed up over N and W for given C.
+            //
+            // In current implementation reduction is 2 step:
+            // results are first copied to buffer and reduced, result is then
+            // stored in group buffer. Values in group buffer are then reduced
+            // to obtain final value.
+            switch (broadcast_strategy) {
+                case broadcasting_strategy_t::no_broadcast: break;
+                case broadcasting_strategy_t::per_oc:
+                case broadcasting_strategy_t::per_oc_spatial:
+                    dim_t group_size, buf_size;
+                    work_amount = data_md_d.nelems() / C();
+                    set_reduction_buffers(work_amount, group_size, buf_size);
+                    scratchpad_size = nscr * (group_size + buf_size);
+                    scratchpad.book(memory_tracking::names::key_prelu_reduction,
+                            scratchpad_size, types::data_type_size(dnnl_f32));
+                    break;
+                case broadcasting_strategy_t::scalar:
+                    scratchpad_size = get_scalar_scratchpad_offset(
+                            nscr, nscr, data_md_d.nelems());
+                    scratchpad.book(memory_tracking::names::key_prelu_reduction,
+                            scratchpad_size, types::data_type_size(dnnl_f32));
+                    break;
+                default: assert(!"unsupported broadcast type");
             }
         }
     };

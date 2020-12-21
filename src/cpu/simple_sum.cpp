@@ -90,28 +90,37 @@ status_t simple_sum_t<src_data_type, dst_data_type>::execute(
         }
     };
 
-    parallel(0, [&](const int ithr, const int nthr) {
-        dim_t start {0}, end {0};
-        balance211(blocks_number, nthr, ithr, start, end);
+    if (nelems <= MAX_NUM_SINGLE_SUM) {
+        if (src_data_type == data_type::bf16)
+            sum_block_bf16(0, nelems, 0);
+        else
+            sum_block(0, nelems, 0);
+    } else {
+        int num_threads = std::min<long unsigned int>(dnnl_get_max_threads(),
+                ((nelems + MAX_NUM_SINGLE_SUM - 1) / MAX_NUM_SINGLE_SUM));
+        parallel(num_threads, [&](const int ithr, const int nthr) {
+            dim_t start {0}, end {0};
+            balance211(blocks_number, nthr, ithr, start, end);
 
-        for (dim_t nb = start; nb < end; ++nb) {
-            dim_t start_e = nb * block_size;
-            dim_t end_e = start_e + block_size;
-            if (src_data_type == data_type::bf16)
-                sum_block_bf16(start_e, end_e, ithr);
-            else
-                sum_block(start_e, end_e, ithr);
-        }
+            for (dim_t nb = start; nb < end; ++nb) {
+                dim_t start_e = nb * block_size;
+                dim_t end_e = start_e + block_size;
+                if (src_data_type == data_type::bf16)
+                    sum_block_bf16(start_e, end_e, ithr);
+                else
+                    sum_block(start_e, end_e, ithr);
+            }
 
-        if (tail != 0 && ithr == nthr - 1) {
-            dim_t start_e = nelems - tail;
-            dim_t end_e = nelems;
-            if (src_data_type == data_type::bf16)
-                sum_block_bf16(start_e, end_e, ithr);
-            else
-                sum_block(start_e, end_e, ithr);
-        }
-    });
+            if (tail != 0 && ithr == nthr - 1) {
+                dim_t start_e = nelems - tail;
+                dim_t end_e = nelems;
+                if (src_data_type == data_type::bf16)
+                    sum_block_bf16(start_e, end_e, ithr);
+                else
+                    sum_block(start_e, end_e, ithr);
+            }
+        });
+    }
 
     return status::success;
 }

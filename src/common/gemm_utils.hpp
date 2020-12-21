@@ -17,7 +17,7 @@
 #ifndef COMMON_GEMM_UTILS_HPP
 #define COMMON_GEMM_UTILS_HPP
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "common/c_types_map.hpp"
 #include "common/nstl.hpp"
@@ -123,7 +123,7 @@ static inline status_t create_gemm_pd(
     ++it;
     gemm_pd_.reset(it.fetch_once());
     if (!gemm_pd_) return status::unimplemented;
-    if (skip_ref && strstr(gemm_pd_.get()->name(), "ref") == NULL)
+    if (skip_ref && strstr(gemm_pd_.get()->name(), "ref") != NULL)
         return status::unimplemented;
 
     return status::success;

@@ -19,7 +19,7 @@
 
 #include <assert.h>
 
-#include "dnnl.h"
+#include "oneapi/dnnl/dnnl.h"
 
 #include "c_types_map.hpp"
 #include "primitive_desc.hpp"
@@ -98,6 +98,13 @@ struct matmul_pd_t : public primitive_desc_t {
     bool has_zero_dim_memory() const {
         return memory_desc_wrapper(dst_md(0)).has_zero_dim();
     }
+
+    bool has_runtime_dims_or_strides() const {
+        return memory_desc_wrapper(src_md_).has_runtime_dims_or_strides()
+                || memory_desc_wrapper(weights_md_)
+                           .has_runtime_dims_or_strides()
+                || memory_desc_wrapper(dst_md_).has_runtime_dims_or_strides();
+    };
 
     int ndims() const { return dst_md_.ndims; }
 

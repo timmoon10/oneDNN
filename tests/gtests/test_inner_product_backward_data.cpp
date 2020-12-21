@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 
 namespace dnnl {
 
@@ -96,12 +96,43 @@ class inner_product_test_bwd_data_t
 protected:
     void SetUp() override {
         auto p = ::testing::TestWithParam<inprod_test_params_t>::GetParam();
+        SKIP_IF_CUDA(!cuda_check_format_tags(p.diff_src_format,
+                             p.weights_format, p.diff_dst_format),
+                "Unsupported format tag");
+        SKIP_IF_CUDA(p.ndims > 5, "Unsupported number of dimensions");
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
 
-    void Test() {
+    bool cuda_check_format_tags(memory::format_tag diff_src_format,
+            memory::format_tag wei_format, memory::format_tag diff_dst_format) {
+        bool diff_src_ok = diff_src_format == memory::format_tag::ncdhw
+                || diff_src_format == memory::format_tag::ndhwc
+                || diff_src_format == memory::format_tag::nchw
+                || diff_src_format == memory::format_tag::nhwc
+                || diff_src_format == memory::format_tag::ncw
+                || diff_src_format == memory::format_tag::nwc
+                || diff_src_format == memory::format_tag::nc
+                || diff_src_format == memory::format_tag::any;
+        bool wei_ok = wei_format == memory::format_tag::oidhw
+                || wei_format == memory::format_tag::odhwi
+                || wei_format == memory::format_tag::dhwio
+                || wei_format == memory::format_tag::oihw
+                || wei_format == memory::format_tag::hwio
+                || wei_format == memory::format_tag::ohwi
+                || wei_format == memory::format_tag::oiw
+                || wei_format == memory::format_tag::owi
+                || wei_format == memory::format_tag::wio
+                || wei_format == memory::format_tag::io
+                || wei_format == memory::format_tag::oi
+                || wei_format == memory::format_tag::any;
+        bool diff_dst_ok = diff_dst_format == memory::format_tag::any
+                || diff_dst_format == memory::format_tag::nc;
 
+        return diff_src_ok && wei_ok && diff_dst_ok;
+    }
+
+    void Test() {
         auto p = ::testing::TestWithParam<inprod_test_params_t>::GetParam();
         test_inner_product_descr_t ipd = p.test_ipd;
         bool has_spatial = ipd.kh > 1 || ipd.kw > 1;
@@ -149,10 +180,14 @@ protected:
         ip_primitive_desc = inner_product_backward_data::primitive_desc(
                 ip_primitive_desc.get()); // test construction from a C pd
 
-        memory ip_diff_src(ip_primitive_desc.diff_src_desc(), eng);
-        memory ip_weights(ip_primitive_desc.weights_desc(), eng);
-        memory ip_diff_dst(ip_primitive_desc.diff_dst_desc(), eng);
-        memory diff_src_ref(ip_primitive_desc.diff_src_desc(), eng);
+        auto ip_diff_src
+                = test::make_memory(ip_primitive_desc.diff_src_desc(), eng);
+        auto ip_weights
+                = test::make_memory(ip_primitive_desc.weights_desc(), eng);
+        auto ip_diff_dst
+                = test::make_memory(ip_primitive_desc.diff_dst_desc(), eng);
+        auto diff_src_ref
+                = test::make_memory(ip_primitive_desc.diff_src_desc(), eng);
 
         fill_data<data_t>(ip_diff_dst.get_desc().get_size() / sizeof(data_t),
                 ip_diff_dst);

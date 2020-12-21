@@ -32,6 +32,9 @@ enum conv_version_t {
     ver_unused,
     ver_fma,
     ver_sve_512,
+    ver_avx512_core,
+    ver_4fma,
+    ver_vnni
 };
 enum conv_loop_order_t {
     loop_cgn,

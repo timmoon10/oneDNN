@@ -2,6 +2,7 @@
 
 #===============================================================================
 # Copyright 2019-2020 Intel Corporation
+# Copyright 2020 FUJITSU LIMITED
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +20,36 @@
 echo "Using clang-format version: $(clang-format --version)"
 echo "Starting format check..."
 
-for filename in $(find "$(pwd)" -type f | grep -P ".*\.(c|cpp|h|hpp|cl)$"); do clang-format -style=file -i $filename; done
+TMPFILE=$(mktemp)
+find "$(pwd)" -type f | grep -P ".*\.(c|cpp|h|hpp|cl)$" > ${TMPFILE}
+NUM_LINE=`wc -l ${TMPFILE} | cut -f 1 -d " "`
+TOTAL_I=0
+
+if [ "$(uname)" == "Linux" ]; then
+    NUM_CPU="$(grep -c processor /proc/cpuinfo)"
+else
+    NUM_CPU="$(sysctl -n hw.physicalcpu)"
+fi
+
+# Run clang-format in parallel
+while [ ${TOTAL_I} -lt ${NUM_LINE} ]
+do
+    LOCAL_I=0
+    ARRAY=()
+    while [ ${LOCAL_I} -lt ${NUM_CPU} ]
+    do
+#	echo "clang-format `sed -n $((${TOTAL_I}+1))p ${TMPFILE}`"
+	nohup clang-format -i -style=file `sed -n $((${TOTAL_I}+1))p ${TMPFILE}` &> /dev/null
+	ARRAY+=($!)
+	TOTAL_I=$((${TOTAL_I}+1))
+	LOCAL_I=$((${LOCAL_I}+1))
+
+	if [ ${TOTAL_I} -ge ${NUM_LINE} ] ; then
+	    break;
+	fi
+    done
+    wait ${ARRAY[@]}
+done
 
 RETURN_CODE=0
 echo $(git status) | grep "nothing to commit" > /dev/null

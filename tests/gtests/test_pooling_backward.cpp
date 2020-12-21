@@ -17,7 +17,7 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.hpp"
+#include "oneapi/dnnl/dnnl.hpp"
 namespace dnnl {
 
 struct test_pool_bwd_desc_t {
@@ -39,6 +39,19 @@ struct pool_bwd_test_params_t {
     bool expect_to_fail;
     dnnl_status_t expected_status;
 };
+
+bool cuda_check_format_tags(memory::format_tag format) {
+    bool format_ok = format == memory::format_tag::ncdhw
+            || format == memory::format_tag::ndhwc
+            || format == memory::format_tag::nchw
+            || format == memory::format_tag::nhwc
+            || format == memory::format_tag::ncw
+            || format == memory::format_tag::nwc
+            || format == memory::format_tag::any
+            || format == memory::format_tag::nCdhw4c;
+
+    return format_ok;
+}
 
 template <typename data_t>
 void check_pool_fwd(
@@ -266,6 +279,12 @@ private:
 protected:
     void SetUp() override {
         p = ::testing::TestWithParam<decltype(p)>::GetParam();
+        SKIP_IF_CUDA(!cuda_check_format_tags(p.diff_src_format),
+                "Unsupported format tag");
+        SKIP_IF_CUDA(!cuda_check_format_tags(p.diff_dst_format),
+                "Unsupported format tag");
+        SKIP_IF_CUDA(p.aalgorithm == algorithm::pooling_max,
+                "Unsupported algorithm MAX");
         catch_expected_failures(
                 [=]() { Test(); }, p.expect_to_fail, p.expected_status);
     }
@@ -331,8 +350,8 @@ protected:
     }
 
     void Forward() {
-        memory src(*src_desc, eng);
-        memory dst(*dst_desc, eng);
+        auto src = test::make_memory(*src_desc, eng);
+        auto dst = test::make_memory(*dst_desc, eng);
 
         fill_data<data_t>(src.get_desc().get_size() / sizeof(data_t), src);
         fill_data<data_t>(dst.get_desc().get_size() / sizeof(data_t), dst);
@@ -347,7 +366,7 @@ protected:
                     = pooling_forward::primitive_desc(pool_desc, eng);
 
             auto p_workspace_desc = prim_desc.pool_prim_desc.workspace_desc();
-            workspace = memory(p_workspace_desc, eng);
+            workspace = test::make_memory(p_workspace_desc, eng);
 
             pooling_forward(prim_desc.pool_prim_desc)
                     .execute(strm,
@@ -362,7 +381,7 @@ protected:
 
             auto p_workspace_desc
                     = prim_desc.pool_v2_prim_desc.workspace_desc();
-            workspace = memory(p_workspace_desc, eng);
+            workspace = test::make_memory(p_workspace_desc, eng);
 
             pooling_v2_forward(prim_desc.pool_v2_prim_desc)
                     .execute(strm,
@@ -376,8 +395,8 @@ protected:
     }
 
     void Backward() {
-        memory diff_src(*src_desc, eng);
-        memory diff_dst(*dst_desc, eng);
+        auto diff_src = test::make_memory(*src_desc, eng);
+        auto diff_dst = test::make_memory(*dst_desc, eng);
 
         fill_data<data_t>(
                 diff_dst.get_desc().get_size() / sizeof(data_t), diff_dst);

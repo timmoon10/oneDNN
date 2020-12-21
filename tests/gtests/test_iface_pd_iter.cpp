@@ -17,8 +17,8 @@
 #include "dnnl_test_common.hpp"
 #include "gtest/gtest.h"
 
-#include "dnnl.h"
-#include "dnnl_types.h"
+#include "oneapi/dnnl/dnnl.h"
+#include "oneapi/dnnl/dnnl_types.h"
 
 namespace dnnl {
 
@@ -68,6 +68,7 @@ TEST_F(pd_iter_test_t, TestReLUImpls) {
 }
 
 TEST(pd_next_impl, TestEltwiseImpl) {
+    SKIP_IF_CUDA(true, "Unsupported memory format for CUDA");
     auto eng = get_test_engine();
     memory::desc md(
             {8, 32, 4, 4}, memory::data_type::f32, memory::format_tag::nChw8c);
