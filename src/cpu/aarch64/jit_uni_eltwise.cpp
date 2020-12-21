@@ -267,17 +267,14 @@ status_t jit_uni_eltwise_fwd_t<isa, d_type>::execute(
     dst += data_d.offset0();
 
     if (nelems <= MAX_NUM_SINGLE_ELTWISE) {
-        jit_args args;
+        jit_args_t args;
         args.src = src;
         args.dst = dst;
         args.diff_dst = nullptr;
         args.work_amount = nelems;
-        if (args.work_amount) (*kernel_)(&args);
+        (*kernel_)(&args);
     } else {
-        int num_threads = std::min<long unsigned int>(dnnl_get_max_threads(),
-                ((nelems + MAX_NUM_SINGLE_ELTWISE - 1)
-                        / MAX_NUM_SINGLE_ELTWISE));
-        parallel(num_threads, [&](const int ithr, const int nthr) {
+        parallel(0, [&](const int ithr, const int nthr) {
             dim_t start {0}, end {0};
 
             balance211(utils::div_up(nelems, simd_w), nthr, ithr, start, end);
@@ -285,7 +282,7 @@ status_t jit_uni_eltwise_fwd_t<isa, d_type>::execute(
             end = nstl::min(nelems, end * simd_w);
             if (start == end) return;
 
-            jit_args args;
+            jit_args_t args;
             args.src = src + start;
             args.dst = dst + start;
             args.diff_dst = nullptr;
@@ -356,17 +353,14 @@ status_t jit_uni_eltwise_bwd_t<isa, d_type>::execute(
     diff_src += diff_data_d.offset0();
 
     if (nelems <= MAX_NUM_SINGLE_ELTWISE) {
-        jit_args args;
+        jit_args_t args;
         args.src = src;
         args.dst = diff_src;
         args.diff_dst = diff_dst;
         args.work_amount = nelems;
         if (args.work_amount) (*kernel_)(&args);
     } else {
-        int num_threads = std::min<long unsigned int>(dnnl_get_max_threads(),
-                ((nelems + MAX_NUM_SINGLE_ELTWISE - 1)
-                        / MAX_NUM_SINGLE_ELTWISE));
-        parallel(num_threads, [&](const int ithr, const int nthr) {
+        parallel(0, [&](const int ithr, const int nthr) {
             dim_t start {0}, end {0};
 
             balance211(utils::div_up(nelems, simd_w), nthr, ithr, start, end);
@@ -374,7 +368,7 @@ status_t jit_uni_eltwise_bwd_t<isa, d_type>::execute(
             end = nstl::min(nelems, end * simd_w);
             if (start == end) return;
 
-            jit_args args;
+            jit_args_t args;
             args.src = src + start;
             args.dst = diff_src + start;
             args.diff_dst = diff_dst + start;
