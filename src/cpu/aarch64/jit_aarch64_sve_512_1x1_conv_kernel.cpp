@@ -142,7 +142,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         int ofs = jcp.typesize_out * jcp.oc_block * i_load;
         if (ldr_imm_check(ofs)) {
             xa_->ldr(vreg_accum(i_load, i_ur),
-                    Xbyak_aarch64::ptr(reg_bias_data, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_bias_data, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             xa_->add_imm(reg_tmp_ofs, reg_bias_data, ofs, reg_tmp_imm);
             xa_->ldr(vreg_accum(i_load, i_ur), Xbyak_aarch64::ptr(reg_tmp_ofs));
@@ -170,7 +171,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         int tmp_ofs = ofs;
         if (ld1rw_imm_check(ofs)) {
             xa_->ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
-                    Xbyak_aarch64::ptr(aux_reg_bcast_data, static_cast<int32_t>(ofs)));
+                    Xbyak_aarch64::ptr(
+                            aux_reg_bcast_data, static_cast<int32_t>(ofs)));
         } else {
             if ((prev_ofs != -1) && ld1rw_imm_check(ofs - prev_ofs)) {
                 xa_->ld1rw(vreg_bcast_s(bcast_idx), reg_p_all_ones,
@@ -209,7 +211,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         if (ldr_imm_check(ofs)) {
             ofs = VL_OFS(ofs);
             xa_->ldr(vreg_load(i_load, i_fma),
-                    Xbyak_aarch64::ptr(aux_reg_load_data, static_cast<int32_t>(ofs)));
+                    Xbyak_aarch64::ptr(
+                            aux_reg_load_data, static_cast<int32_t>(ofs)));
         } else {
             xa_->add_imm(reg_tmp_ofs, aux_reg_load_data, ofs, reg_tmp_imm);
             xa_->ldr(vreg_load(i_load, i_fma), Xbyak_aarch64::ptr(reg_tmp_ofs));
@@ -239,8 +242,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         if (bwd_iload) xa_->mov(r, i_load);
         if (ldr_imm_check(ofs)) {
-            if (bwd_iload) xa_->madd(r, r, reg_output_stride, aux_reg_output_data);
-            xa_->ldr(vreg_sum(), Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
+            if (bwd_iload)
+                xa_->madd(r, r, reg_output_stride, aux_reg_output_data);
+            xa_->ldr(vreg_sum(),
+                    Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)
                     && (VL_OFS(ofs - prev_ofs) <= LDRMAX)) {
@@ -249,7 +254,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                 else
                     r = reg_prev_out_addr;
                 xa_->ldr(vreg_sum(),
-                        Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
+                        Xbyak_aarch64::ptr(r,
+                                static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
             } else {
                 if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)) {
                     ofs = ofs - prev_ofs;
@@ -287,7 +293,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         if (bwd_iload) xa_->mov(r, i_load);
         if (str_imm_check(ofs)) {
-            if (bwd_iload) xa_->madd(r, r, reg_output_stride, aux_reg_output_data);
+            if (bwd_iload)
+                xa_->madd(r, r, reg_output_stride, aux_reg_output_data);
             xa_->str(vreg_accum(i_load, i_ur),
                     Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
@@ -297,7 +304,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
                 else
                     r = reg_prev_out_addr;
                 xa_->str(vreg_accum(i_load, i_ur),
-                        Xbyak_aarch64::ptr(r, static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
+                        Xbyak_aarch64::ptr(r,
+                                static_cast<int32_t>(VL_OFS(ofs - prev_ofs))));
             } else {
                 if ((prev_ofs != -1) && ((ofs - prev_ofs) > 0)) {
                     ofs = ofs - prev_ofs;
@@ -500,10 +508,10 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
         fma_block(false);
         xa_->add_imm(aux_reg_bcast_data, aux_reg_bcast_data,
                 jcp.reduce_loop_bcast_step, reg_tmp_imm);
-        xa_->add_imm(aux_reg_load_data, aux_reg_load_data, jcp.reduce_loop_load_step,
-                reg_tmp_imm);
-        xa_->subs_imm(reduce_loop_iter, reduce_loop_iter, jcp.reduce_loop_unroll,
-                reg_tmp_imm);
+        xa_->add_imm(aux_reg_load_data, aux_reg_load_data,
+                jcp.reduce_loop_load_step, reg_tmp_imm);
+        xa_->subs_imm(reduce_loop_iter, reduce_loop_iter,
+                jcp.reduce_loop_unroll, reg_tmp_imm);
         xa_->b(GT, reduce_loop);
     }
 
@@ -520,26 +528,36 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
     xa_->ptrue(reg_p_all_ones.b);
 
     /* Pointers indicate weight, input, and output data */
-    xa_->ldr(reg_bcast_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bcast_data))); // Input
-    xa_->ldr(reg_load_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(load_data))); // Weight
-    xa_->ldr(reg_output_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(output_data))); // Output
+    xa_->ldr(reg_bcast_data,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(bcast_data))); // Input
+    xa_->ldr(reg_load_data,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(load_data))); // Weight
+    xa_->ldr(reg_output_data,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(output_data))); // Output
 
     /* Pointer indicates bias data if the layer has bias option */
-    if (jcp.with_bias) xa_->ldr(reg_bias_data, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bias_data)));
+    if (jcp.with_bias)
+        xa_->ldr(reg_bias_data,
+                Xbyak_aarch64::ptr(abi_param1, GET_OFF(bias_data)));
 
     /* Get workloads of each loop */
-    xa_->ldr(reg_load_loop_work, Xbyak_aarch64::ptr(abi_param1, GET_OFF(load_dim)));
-    xa_->ldr(reg_bcast_loop_work, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bcast_dim)));
-    xa_->ldr(reg_reduce_loop_work, Xbyak_aarch64::ptr(abi_param1, GET_OFF(reduce_dim)));
+    xa_->ldr(reg_load_loop_work,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(load_dim)));
+    xa_->ldr(reg_bcast_loop_work,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(bcast_dim)));
+    xa_->ldr(reg_reduce_loop_work,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(reduce_dim)));
 
     /* A flag for controlling reduce loop */
-    xa_->ldr(reg_reduce_pos_flag, Xbyak_aarch64::ptr(abi_param1, GET_OFF(first_last_flag)));
+    xa_->ldr(reg_reduce_pos_flag,
+            Xbyak_aarch64::ptr(abi_param1, GET_OFF(first_last_flag)));
 
     if (one_of(jcp.prop_kind, forward_training, forward_inference))
         xa_->mov(reg_relu_ns, reinterpret_cast<size_t>(&jcp.eltwise.alpha));
 
     if (jcp.prop_kind == backward_weights)
-        xa_->ldr(reg_output_stride, Xbyak_aarch64::ptr(abi_param1, GET_OFF(output_stride)));
+        xa_->ldr(reg_output_stride,
+                Xbyak_aarch64::ptr(abi_param1, GET_OFF(output_stride)));
 
     const int load_dim_tail = jcp.load_dim % jcp.load_block;
 
@@ -597,7 +615,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
                 break;
             case backward_weights:
                 for (int i_load = 0; i_load < load_loop_blk; i_load++)
-                    xa_->add(reg_output_data, reg_output_data, reg_output_stride);
+                    xa_->add(reg_output_data, reg_output_data,
+                            reg_output_stride);
                 break;
             default: assert(!"invalid prop_kind");
         }

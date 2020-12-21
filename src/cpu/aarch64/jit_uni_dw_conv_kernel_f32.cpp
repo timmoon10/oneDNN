@@ -98,7 +98,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
     L(kh_label);
     {
         if (jcp.is_fused_conv) {
-            xa_->ldr(aux_reg_input, Xbyak_aarch64::ptr(aux_reg_input_buffer_ptr));
+            xa_->ldr(aux_reg_input,
+                    Xbyak_aarch64::ptr(aux_reg_input_buffer_ptr));
             xa_->add(aux_reg_input, aux_reg_input, reg_iw_offset);
         }
         for (int ch = 0; ch < ur_ch_blocks; ch++) {
@@ -107,8 +108,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
 
                 ZReg zreg_ker = get_ker_reg(0);
                 ZRegS zregs_ker = get_ker_reg_s(0);
-                xa_->add_imm(reg_tmp_addr, aux_reg_kernel, ker_off * sizeof(float),
-                        reg_tmp_imm);
+                xa_->add_imm(reg_tmp_addr, aux_reg_kernel,
+                        ker_off * sizeof(float), reg_tmp_imm);
                 xa_->ldr(zreg_ker, Xbyak_aarch64::ptr(reg_tmp_addr));
 
                 int ow_start = get_ow_start(kw, pad_l);
@@ -131,8 +132,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
             }
         }
 
-        xa_->add_imm(aux_reg_kernel, aux_reg_kernel, jcp.kw * ch_blk * sizeof(float),
-                reg_tmp_imm);
+        xa_->add_imm(aux_reg_kernel, aux_reg_kernel,
+                jcp.kw * ch_blk * sizeof(float), reg_tmp_imm);
         if (jcp.is_fused_conv) {
             // Move to next row pointer in the buffer
             xa_->add_imm(aux_reg_input_buffer_ptr, aux_reg_input_buffer_ptr,
@@ -235,8 +236,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::compute_loop(
             xa_->add_imm(reg_output, reg_output, out_ch_stride, reg_tmp_imm);
             if (jcp.with_bias)
                 xa_->add_imm(reg_bias, reg_bias, bias_stride, reg_tmp_imm);
-            xa_->sub_imm(aux_reg_ch_blocks, aux_reg_ch_blocks, jcp.nb_ch_blocking,
-                    reg_tmp_imm);
+            xa_->sub_imm(aux_reg_ch_blocks, aux_reg_ch_blocks,
+                    jcp.nb_ch_blocking, reg_tmp_imm);
             xa_->cmp(aux_reg_ch_blocks, jcp.nb_ch_blocking);
             xa_->b(GE, ch_loop_label);
         }
@@ -310,7 +311,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::ow_loop(int ur_ch_blocks) {
                 {
                     compute_loop(ur_w, ur_ch_blocks, 0, 0);
                     xa_->add_imm(reg_input, reg_input, inp_shift, reg_tmp_imm);
-                    xa_->add_imm(reg_output, reg_output, out_shift, reg_tmp_imm);
+                    xa_->add_imm(
+                            reg_output, reg_output, out_shift, reg_tmp_imm);
 
                     xa_->add(reg_oi, reg_oi, 1);
                     xa_->cmp(reg_oi, n_oi);
@@ -334,7 +336,8 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     this->preamble(true);
     xa_->ptrue(reg_p_all_ones.b);
     if (jcp.is_fused_conv) {
-        xa_->ldr(reg_input_buffer_ptr, Xbyak_aarch64::ptr(abi_param1, GET_OFF(src)));
+        xa_->ldr(reg_input_buffer_ptr,
+                Xbyak_aarch64::ptr(abi_param1, GET_OFF(src)));
         /* In case of fused depthwise convolution, `param.src` is not a pointer
         to input, instead it points to a buffer containing pointers to
         consecutive rows of input in format Cwc with blocking nb_ch_blocking.
@@ -355,7 +358,9 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     }
     xa_->ldr(reg_output, Xbyak_aarch64::ptr(abi_param1, GET_OFF(dst)));
     xa_->ldr(reg_kernel, Xbyak_aarch64::ptr(abi_param1, GET_OFF(filt)));
-    if (jcp.with_bias) { xa_->ldr(reg_bias, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bias))); }
+    if (jcp.with_bias) {
+        xa_->ldr(reg_bias, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bias)));
+    }
     xa_->ldr(reg_kh, Xbyak_aarch64::ptr(abi_param1, GET_OFF(kh_padding)));
     xa_->ldr(reg_ch_blocks, Xbyak_aarch64::ptr(abi_param1, GET_OFF(ch_blocks)));
 
@@ -443,8 +448,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
                 ZReg zreg_ker = get_ker_reg(0);
                 ZRegS zregs_ker = get_ker_reg_s(0);
 
-                xa_->add_imm(reg_tmp_addr, aux1_reg_kernel, ker_off * sizeof(float),
-                        reg_tmp_imm);
+                xa_->add_imm(reg_tmp_addr, aux1_reg_kernel,
+                        ker_off * sizeof(float), reg_tmp_imm);
                 xa_->ldr(zreg_ker, Xbyak_aarch64::ptr(reg_tmp_addr)); // filter?
 
                 for (int w = 0; w < ur_str_w; w++) { // unrolling dst width?
@@ -454,7 +459,8 @@ inline void jit_uni_dw_conv_bwd_data_kernel_f32<isa>::apply_filter(
                     ZRegS zregs_src = get_src_reg_s(0);
                     xa_->add_imm(reg_tmp_addr, aux1_reg_ddst,
                             ddst_off * sizeof(float), reg_tmp_imm);
-                    xa_->ldr(zreg_src, Xbyak_aarch64::ptr(reg_tmp_addr)); // src?
+                    xa_->ldr(
+                            zreg_src, Xbyak_aarch64::ptr(reg_tmp_addr)); // src?
 
                     ZRegS zregs_acc = get_acc_reg_s(ch * ur_str_w + w);
                     xa_->fmla(zregs_acc, reg_p_all_ones, zregs_src, zregs_ker);
@@ -667,7 +673,8 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
         if (simd_w == 16) {
             xa_->ldr(zreg_output, Xbyak_aarch64::ptr(reg_tmp_addr));
         } else if (simd_w == 8) {
-            ld1w(zregs_output, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_addr));
+            ld1w(zregs_output, reg_p_all_ones,
+                    Xbyak_aarch64::ptr(reg_tmp_addr));
         } else {
             assert(!"Unsupport: simd_w != 16, 8");
         }
@@ -681,14 +688,15 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-                xa_->add_imm(reg_tmp_addr, reg_tmp_input, off_input * sizeof(float),
-                        reg_tmp_imm);
+                xa_->add_imm(reg_tmp_addr, reg_tmp_input,
+                        off_input * sizeof(float), reg_tmp_imm);
                 if (simd_w == 16) {
                     ZReg zreg_input = get_input_reg(c % jcp.kw);
                     xa_->ldr(zreg_input, Xbyak_aarch64::ptr(reg_tmp_addr));
                 } else if (simd_w == 8) {
                     ZRegS zregs_input = get_input_reg_s(c % jcp.kw);
-                    ld1w(zregs_input, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_addr));
+                    ld1w(zregs_input, reg_p_all_ones,
+                            Xbyak_aarch64::ptr(reg_tmp_addr));
                 } else {
                     assert(!"Unsupport: simd_w != 16, 8");
                 }
@@ -704,14 +712,15 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_ow_step_unroll(
                         && (overlap + c - pad_offset + r_pad > right_border);
                 if (over_steps_bdry) continue;
 
-                xa_->add_imm(reg_tmp_addr, reg_tmp_input, off_input * sizeof(float),
-                        reg_tmp_imm);
+                xa_->add_imm(reg_tmp_addr, reg_tmp_input,
+                        off_input * sizeof(float), reg_tmp_imm);
                 if (simd_w == 16) {
                     ZReg zreg_input = get_input_reg((overlap + c) % jcp.kw);
                     xa_->ldr(zreg_input, Xbyak_aarch64::ptr(reg_tmp_addr));
                 } else if (simd_w == 8) {
                     ZRegS zregs_input = get_input_reg_s((overlap + c) % jcp.kw);
-                    ld1w(zregs_input, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_addr));
+                    ld1w(zregs_input, reg_p_all_ones,
+                            Xbyak_aarch64::ptr(reg_tmp_addr));
                 } else {
                     assert(!"Unsupport: simd_w != 16, 8");
                 }
@@ -970,7 +979,8 @@ inline void jit_uni_dw_conv_bwd_weights_kernel_f32<isa>::compute_h_loop(
             xa_->cmp(reg_kh_count, jcp.kh);
             xa_->b(GE, skip_tpad_label);
 
-            xa_->add_imm(reg_kh_count, reg_kh_count, t_overlap_off, reg_tmp_imm);
+            xa_->add_imm(
+                    reg_kh_count, reg_kh_count, t_overlap_off, reg_tmp_imm);
             xa_->sub_imm(reg_tmp_filter, reg_tmp_filter,
                     t_overlap_off * jcp.kw * ch_offset * sizeof(float),
                     reg_tmp_imm);

@@ -259,8 +259,8 @@ struct rtus_driver_t : public jit_generator {
             xa_->b(LT, skip_h_step); //jl(skip_h_step);
 
             if (src_to_ws_) {
-                xa_->add_imm(reg_cur_src, reg_cur_src, (src_step_h_ - iw_) * vlen_,
-                        reg_tmp_imm);
+                xa_->add_imm(reg_cur_src, reg_cur_src,
+                        (src_step_h_ - iw_) * vlen_, reg_tmp_imm);
             } else {
                 xa_->mov(reg_cur_src_fin, reg_cur_src);
                 xa_->add_imm(reg_cur_src_fin, reg_cur_src_fin,

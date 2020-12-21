@@ -143,7 +143,8 @@ private:
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                xa_->prfm(op, Xbyak_aarch64::ptr(in, static_cast<int32_t>(ofs)));
+                xa_->prfm(
+                        op, Xbyak_aarch64::ptr(in, static_cast<int32_t>(ofs)));
             } else {
                 xa_->add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
                 xa_->prfm(op, Xbyak_aarch64::ptr(reg_tmp_ofs));
@@ -166,10 +167,12 @@ private:
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
                 xa_->prfw(op_sve, reg_p_all_ones,
-                        Xbyak_aarch64::ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                        Xbyak_aarch64::ptr(
+                                in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
                 xa_->add_imm(reg_tmp_ofs, in, ofs, reg_tmp_imm);
-                xa_->prfw(op_sve, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_ofs));
+                xa_->prfw(op_sve, reg_p_all_ones,
+                        Xbyak_aarch64::ptr(reg_tmp_ofs));
             }
         }
     }
