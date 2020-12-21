@@ -142,10 +142,10 @@ private:
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, Xbyak_aarch64::ptr(in, static_cast<int32_t>(ofs)));
             } else {
                 add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                prfm(op, ptr(reg_tmp_addr));
+                prfm(op, Xbyak_aarch64::ptr(reg_tmp_addr));
             }
         } else {
             PrfopSve op_sve = PLDL1KEEP_SVE;
@@ -165,10 +165,11 @@ private:
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
                 prfw(op_sve, reg_p_all_ones,
-                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                        Xbyak_aarch64::ptr(
+                                in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
                 add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                prfw(op_sve, reg_p_all_ones, ptr(reg_tmp_addr));
+                prfw(op_sve, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_addr));
             }
         }
     }
@@ -359,12 +360,14 @@ private:
 
             long long int tmp_ofs = ofs - prev_ofs;
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, Xbyak_aarch64::ptr(in, static_cast<int32_t>(ofs)));
             } else if ((tmp_ofs <= PRFMMAX) && (tmp_ofs >= 0)) {
-                prfm(op, ptr(reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
+                prfm(op,
+                        Xbyak_aarch64::ptr(
+                                reg_tmp_addr, static_cast<int32_t>(tmp_ofs)));
             } else {
                 add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                prfm(op, ptr(reg_tmp_addr));
+                prfm(op, Xbyak_aarch64::ptr(reg_tmp_addr));
                 prev_ofs = ofs;
             }
         } else {
@@ -386,15 +389,16 @@ private:
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
                 prfw(op_sve, reg_p_all_ones,
-                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                        Xbyak_aarch64::ptr(
+                                in, static_cast<int32_t>(VL_OFS(ofs))));
             } else if ((VL_OFS(tmp_ofs) <= PRFWMAX)
                     && (VL_OFS(tmp_ofs) >= (-1 * PRFWMAX - 1))) {
                 prfw(op_sve, reg_p_all_ones,
-                        ptr(reg_tmp_addr,
+                        Xbyak_aarch64::ptr(reg_tmp_addr,
                                 static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
                 add_imm(reg_tmp_addr, in, ofs, reg_tmp_imm);
-                prfw(op_sve, reg_p_all_ones, ptr(reg_tmp_addr));
+                prfw(op_sve, reg_p_all_ones, Xbyak_aarch64::ptr(reg_tmp_addr));
                 prev_ofs = ofs;
             }
         }
@@ -591,10 +595,10 @@ private:
             }
 
             if ((ofs <= PRFMMAX) && (ofs >= 0)) {
-                prfm(op, ptr(in, static_cast<int32_t>(ofs)));
+                prfm(op, Xbyak_aarch64::ptr(in, static_cast<int32_t>(ofs)));
             } else {
                 add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
-                prfm(op, ptr(reg_add_tmp));
+                prfm(op, Xbyak_aarch64::ptr(reg_add_tmp));
             }
         } else {
             PrfopSve op_sve;
@@ -614,10 +618,11 @@ private:
             if ((VL_OFS(ofs) <= PRFWMAX)
                     && (VL_OFS(ofs) >= (-1 * PRFWMAX - 1))) {
                 prfw(op_sve, reg_p_all_ones,
-                        ptr(in, static_cast<int32_t>(VL_OFS(ofs))));
+                        Xbyak_aarch64::ptr(
+                                in, static_cast<int32_t>(VL_OFS(ofs))));
             } else {
                 add_imm(reg_add_tmp, in, ofs, reg_tmp_imm);
-                prfw(op_sve, reg_p_all_ones, ptr(reg_add_tmp));
+                prfw(op_sve, reg_p_all_ones, Xbyak_aarch64::ptr(reg_add_tmp));
             }
         }
     }

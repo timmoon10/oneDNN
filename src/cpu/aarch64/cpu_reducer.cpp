@@ -202,10 +202,10 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
             uni_load(Vmm(cpu_isa_traits<isa>::n_vregs - 1), reg_src, off,
                     load_len);
             if (data_type == data_type::f32)
-                this->fadd(
+                this->xa_->fadd(
                         Vmm(i), Vmm(i), Vmm(cpu_isa_traits<isa>::n_vregs - 1));
             else
-                this->add(
+                this->xa_->add(
                         Vmm(i), Vmm(i), Vmm(cpu_isa_traits<isa>::n_vregs - 1));
         }
     }
@@ -223,12 +223,12 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
         else
             assert(!"Unsupported typesize");
 
-        this->mov(reg_x, reg_nx);
+        this->xa_->mov(reg_x, reg_nx);
 
         for (int id = 0; id < nbranches; ++id) {
             this->L(loop_x_label[id]);
 
-            this->cmp(reg_x, nloads[id] * load_len[id]);
+            this->xa_->cmp(reg_x, nloads[id] * load_len[id]);
             this->b(LT, loop_x_label[id + 1]);
 
             if (this->nullify_dst_)
@@ -238,7 +238,7 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
 
             if (nloads[id] > 1) {
                 Label loop_srcs;
-                this->mov_imm(reg_src_id, this->n_src_);
+                this->xa_->mov_imm(reg_src_id, this->n_src_);
                 this->L(loop_srcs);
 
                 accumulate(nloads[id], load_len[id], 0);
@@ -247,13 +247,13 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
 
                 //this->dec(reg_src_id);
                 //this->jnz(loop_srcs, this->T_NEAR);
-                this->subs(reg_src_id, reg_src_id, 1); // dec
+                this->xa_->subs(reg_src_id, reg_src_id, 1); // dec
                 this->b(NE, loop_srcs);
 
                 size_t base_off
                         = (size_t)this->n_src_ * this->src_ld_ * typesize;
                 //this->safe_sub(reg_src, base_off, reg_long_offt);
-                this->sub_imm(reg_src, reg_src, base_off, reg_tmp_imm);
+                this->xa_->sub_imm(reg_src, reg_src, base_off, reg_tmp_imm);
             } else {
                 for (int src_id = 0; src_id < this->n_src_; ++src_id) {
                     const size_t base_off
@@ -269,7 +269,8 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
             this->add_imm(
                     reg_dst, reg_dst, nloads[id] * load_len[id], reg_tmp_imm);
 
-            this->sub_imm(reg_x, reg_x, nloads[id] * load_len[id], reg_tmp_imm);
+            this->xa_->sub_imm(
+                    reg_x, reg_x, nloads[id] * load_len[id], reg_tmp_imm);
 
             this->b(loop_x_label[id]);
         }
@@ -277,8 +278,8 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
         this->L(loop_x_label[nbranches]);
 
         /* restore address registers */
-        this->sub(reg_src, reg_src, reg_nx);
-        this->sub(reg_dst, reg_dst, reg_nx);
+        this->xa_->sub(reg_src, reg_src, reg_nx);
+        this->xa_->sub(reg_dst, reg_dst, reg_nx);
     }
 
     void generate() override {
@@ -298,7 +299,7 @@ struct reducer_2d_driver_f_s_32_t : public reducer_2d_driver_t<data_type> {
         this->add_imm(
                 reg_src, reg_src, this->src_step_ * typesize, reg_tmp_imm);
 
-        this->subs(reg_ny, reg_ny, 1); //dec(reg_ny);
+        this->xa_->subs(reg_ny, reg_ny, 1); //dec(reg_ny);
         this->b(NE, ny_loop); // jnz
 
         this->postamble();

@@ -147,9 +147,11 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
         return ZRegS(idx);
     };
 
-    ldr(reg_channel, ptr(abi_param1, GET_OFF(flags)));
+    ldr(reg_channel, Xbyak_aarch64::ptr(abi_param1, GET_OFF(flags)));
 
-    if (jcp.with_bias) { ldr(reg_bias, ptr(abi_param1, GET_OFF(bias))); }
+    if (jcp.with_bias) {
+        ldr(reg_bias, Xbyak_aarch64::ptr(abi_param1, GET_OFF(bias)));
+    }
 
     if (!jcp.with_sum) {
         auto _jmp = [&](const Label &l) { return b(NE, l); };
@@ -169,22 +171,22 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             if (j == 0) {
                 add_imm(reg_out_ofs, reg_out, aux_output_offset, reg_tmp_imm);
                 prev_out_ofs = aux_output_offset;
-                ldr(zreg_tmp(idx), ptr(reg_out_ofs));
+                ldr(zreg_tmp(idx), Xbyak_aarch64::ptr(reg_out_ofs));
             } else if (ldr_imm_check(aux_output_offset - prev_out_ofs)) {
                 ldr(zreg_tmp(idx),
-                        ptr(reg_out_ofs,
+                        Xbyak_aarch64::ptr(reg_out_ofs,
                                 static_cast<int32_t>(VL_OFS(
                                         aux_output_offset - prev_out_ofs))));
             } else {
                 add_imm(reg_out_ofs, reg_out_ofs,
                         aux_output_offset - prev_out_ofs, reg_tmp_imm);
                 prev_out_ofs = aux_output_offset;
-                ldr(zreg_tmp(idx), ptr(reg_out_ofs));
+                ldr(zreg_tmp(idx), Xbyak_aarch64::ptr(reg_out_ofs));
             }
         }
         for (int j = 0; j < ur_w; j++) {
             int idx = reg_ofs + ((j + k * ur_w) % num_regs);
-            fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
+            xa_->fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
         }
     }
 
@@ -204,10 +206,11 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
             ldr(zreg_tmp(idx),
-                    ptr(reg_bias, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_bias, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             add_imm(reg_tmp_addr, reg_bias, ofs, reg_tmp_imm);
-            ldr(zreg_tmp(idx), ptr(reg_tmp_addr));
+            ldr(zreg_tmp(idx), Xbyak_aarch64::ptr(reg_tmp_addr));
         }
     };
 
@@ -218,7 +221,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             int idx = reg_ofs + (k % num_regs);
             bias_load(bias_offset, idx);
             for (int j = 0; j < ur_w; j++) {
-                fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
+                xa_->fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(idx));
             }
             int ofs = bias_offset + 256; // cache line size ?
             std::string op = "LD";
@@ -249,10 +252,11 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
 
         if (str_imm_check(ofs)) {
             str(zreg_out(j, k),
-                    ptr(reg_out, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_out, static_cast<int32_t>(VL_OFS(ofs))));
         } else if ((prev_out_ofs != -1) && str_imm_check(ofs - prev_out_ofs)) {
             str(zreg_out(j, k),
-                    ptr(reg_tmp_addr,
+                    Xbyak_aarch64::ptr(reg_tmp_addr,
                             static_cast<int32_t>(VL_OFS(ofs - prev_out_ofs))));
         } else {
             if (prev_out_ofs == -1)
@@ -260,7 +264,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::store_output(int ur_w) {
             else
                 add_imm(reg_tmp_addr, reg_tmp_addr, ofs - prev_out_ofs,
                         reg_tmp_imm);
-            str(zreg_out(j, k), ptr(reg_tmp_addr));
+            str(zreg_out(j, k), Xbyak_aarch64::ptr(reg_tmp_addr));
             prev_out_ofs = aux_output_offset;
         }
         return prev_out_ofs;
@@ -302,36 +306,36 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
             = jcp.typesize_in * (jcp.dilate_h + 1) * jcp.iw * inp_mul;
 
     if (one_of(jcp.ndims, 3, 4)) {
-        mov(aux_reg_inp, reg_inp);
+        xa_->mov(aux_reg_inp, reg_inp);
         add_imm(aux_reg_inp2, aux_reg_inp, 0x100, reg_tmp_imm);
         add_imm(aux_reg_inp3, aux_reg_inp2, 0x100, reg_tmp_imm);
-        mov(aux_reg_ker, reg_ker);
+        xa_->mov(aux_reg_ker, reg_ker);
     }
 
     if (jcp.ndims == 5) {
-        mov(reg_out_org, reg_out);
-        ldr(reg_ki, ptr(abi_param1, GET_OFF(kd_padding)));
+        xa_->mov(reg_out_org, reg_out);
+        ldr(reg_ki, Xbyak_aarch64::ptr(abi_param1, GET_OFF(kd_padding)));
         if (icb_loop_in_compute_function) {
             // need to continue with the same kernel pointer, but as
             // aux_reg_ker_d == reg_ker we need to save its value and restore
             // it after kd loop
-            mov(aux_reg_ker_d_org, aux_reg_ker_d);
+            xa_->mov(aux_reg_ker_d_org, aux_reg_ker_d);
         } else {
-            mov(aux_reg_ker_d, aux_reg_ker_d_org);
+            xa_->mov(aux_reg_ker_d, aux_reg_ker_d_org);
         }
-        mov(aux_reg_inp_d, reg_inp);
+        xa_->mov(aux_reg_inp_d, reg_inp);
 
         L(kd_label);
-        ldr(reg_kj, ptr(abi_param1, GET_OFF(kh_padding)));
+        ldr(reg_kj, Xbyak_aarch64::ptr(abi_param1, GET_OFF(kh_padding)));
     } else {
-        mov(reg_kj, reg_kh);
+        xa_->mov(reg_kj, reg_kh);
     }
 
     if (jcp.ndims == 5) {
-        mov(aux_reg_inp, aux_reg_inp_d);
+        xa_->mov(aux_reg_inp, aux_reg_inp_d);
         add_imm(aux_reg_inp2, aux_reg_inp, 0x100, reg_tmp_imm);
         add_imm(aux_reg_inp3, aux_reg_inp2, 0x100, reg_tmp_imm);
-        mov(aux_reg_ker, aux_reg_ker_d);
+        xa_->mov(aux_reg_ker, aux_reg_ker_d);
     }
 
     auto zreg_inp_s = [=](int i_ic, int nb_x_blocking) {
@@ -357,21 +361,22 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                               int prev_ofs) {
         if (ld1rw_imm_check(aux_input_offset)) {
             ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                    ptr(aux_reg_inp, static_cast<int32_t>(aux_input_offset)));
+                    Xbyak_aarch64::ptr(aux_reg_inp,
+                            static_cast<int32_t>(aux_input_offset)));
         } else if (ld1rw_imm_check(aux_input_offset - 0x100)) {
             ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                    ptr(aux_reg_inp2,
+                    Xbyak_aarch64::ptr(aux_reg_inp2,
                             static_cast<int32_t>(aux_input_offset - 0x100)));
         } else if (ld1rw_imm_check(aux_input_offset - 0x200)) {
             ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                    ptr(aux_reg_inp3,
+                    Xbyak_aarch64::ptr(aux_reg_inp3,
                             static_cast<int32_t>(aux_input_offset - 0x200)));
         } else {
             if ((prev_ofs != -1)
                     && ld1rw_imm_check(aux_input_offset - prev_ofs)) {
 
                 ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr,
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(
                                         aux_input_offset - prev_ofs)));
             } else {
@@ -386,7 +391,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                 }
 
                 ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr));
                 prev_ofs = aux_input_offset;
             }
         }
@@ -399,12 +404,13 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
 
         if (ldr_imm_check(ofs)) {
             ldr(zreg_wei(reg_idx),
-                    ptr(aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             int ofs_tmp = ofs - prev_ofs;
             if ((prev_ofs != -1) && ldr_imm_check(ofs_tmp)) {
                 ldr(zreg_wei(reg_idx),
-                        ptr(reg_prev_wei_addr,
+                        Xbyak_aarch64::ptr(reg_prev_wei_addr,
                                 static_cast<int32_t>(VL_OFS(ofs_tmp))));
             } else {
                 if ((prev_ofs != -1) && (ofs_tmp > 0)) {
@@ -415,7 +421,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                     add_imm(reg_prev_wei_addr, aux_reg_ker, ofs, reg_tmp_imm);
                 }
 
-                ldr(zreg_wei(reg_idx), ptr(reg_prev_wei_addr));
+                ldr(zreg_wei(reg_idx), Xbyak_aarch64::ptr(reg_prev_wei_addr));
                 prev_ofs = ofs;
             }
         }
@@ -515,8 +521,8 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
         add_imm(aux_reg_inp, aux_reg_inp, shift_input_ptr, reg_tmp_imm);
         add_imm(aux_reg_inp2, aux_reg_inp, 0x100, reg_tmp_imm);
         add_imm(aux_reg_inp3, aux_reg_inp2, 0x100, reg_tmp_imm);
-        sub(reg_kj, reg_kj, 1); //dec(reg_kj);
-        cmp(reg_kj, 0);
+        xa_->sub(reg_kj, reg_kj, 1); //dec(reg_kj);
+        xa_->cmp(reg_kj, 0);
         b(GT, kh_label);
     }
 
@@ -528,12 +534,13 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop_fma_core(
                 = typesize * jcp.kw * jcp.kh * jcp.oc_block * jcp.ic_block;
         add_imm(aux_reg_ker_d, aux_reg_ker_d, ker_shift, reg_tmp_imm);
 
-        sub(reg_ki, reg_ki, 1); //dec(reg_ki);
-        cmp(reg_ki, 0);
+        xa_->sub(reg_ki, reg_ki, 1); //dec(reg_ki);
+        xa_->cmp(reg_ki, 0);
         b(GT, kd_label);
 
-        if (icb_loop_in_compute_function) mov(aux_reg_ker_d, aux_reg_ker_d_org);
-        mov(reg_out, reg_out_org);
+        if (icb_loop_in_compute_function)
+            xa_->mov(aux_reg_ker_d, aux_reg_ker_d_org);
+        xa_->mov(reg_out, reg_out_org);
     }
 }
 
@@ -541,7 +548,7 @@ template <typename Vmm>
 void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop(
         int ur_w, int pad_l, int pad_r) {
 
-    if (jcp.ndims == 5) mov(reg_oi_org, reg_oi);
+    if (jcp.ndims == 5) xa_->mov(reg_oi_org, reg_oi);
 
     prepare_output(ur_w);
 
@@ -550,26 +557,26 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop(
         if ((jcp.dilate_d >= jcp.id)
                 || (jcp.kd - 1) * (jcp.dilate_d + 1)
                         < nstl::max(jcp.f_pad, jcp.back_pad)) {
-            ldr(reg_kj, ptr(abi_param1, GET_OFF(kd_padding)));
-            cmp(reg_kj, 0);
+            ldr(reg_kj, Xbyak_aarch64::ptr(abi_param1, GET_OFF(kd_padding)));
+            xa_->cmp(reg_kj, 0);
             b(LE, skip_compute_loop);
         }
     }
     if ((jcp.dilate_h >= jcp.ih)
             || (jcp.kh - 1) * (jcp.dilate_h + 1)
                     < nstl::max(jcp.t_pad, jcp.b_pad)) {
-        ldr(reg_kj, ptr(abi_param1, GET_OFF(kh_padding)));
-        cmp(reg_kj, 0);
+        ldr(reg_kj, Xbyak_aarch64::ptr(abi_param1, GET_OFF(kh_padding)));
+        xa_->cmp(reg_kj, 0);
         b(LE, skip_compute_loop);
     }
 
     Label ic_loop;
     const bool generate_icb_loop = jcp.nb_ic > 1 && is_src_layout_nxc();
     if (generate_icb_loop) {
-        mov(reg_inp_org, reg_inp);
-        mov(reg_ker_org, reg_ker);
+        xa_->mov(reg_inp_org, reg_inp);
+        xa_->mov(reg_ker_org, reg_ker);
 
-        ldr(reg_channel, ptr(param, GET_OFF(reduce_work)));
+        ldr(reg_channel, Xbyak_aarch64::ptr(param, GET_OFF(reduce_work)));
         L(ic_loop);
     }
 
@@ -594,13 +601,13 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::compute_loop(
         add_imm(reg_ker, reg_ker, ker_shift, reg_tmp_imm);
         sub_imm(reg_channel, reg_channel, jcp.ic_block, reg_tmp_imm);
         b(GT, ic_loop);
-        mov(reg_ker, reg_ker_org);
-        mov(reg_inp, reg_inp_org);
+        xa_->mov(reg_ker, reg_ker_org);
+        xa_->mov(reg_inp, reg_inp_org);
     }
 
     L(skip_compute_loop);
     store_output(ur_w);
-    if (jcp.ndims == 5) mov(reg_oi, reg_oi_org);
+    if (jcp.ndims == 5) xa_->mov(reg_oi, reg_oi_org);
 }
 
 template <typename Vmm>
@@ -624,11 +631,11 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
             * (is_dst_layout_nxc() ? jcp.ngroups * jcp.oc : jcp.oc_block);
 
     preamble();
-    ldr(reg_inp, ptr(abi_param1, GET_OFF(src)));
-    ldr(reg_out, ptr(abi_param1, GET_OFF(dst)));
-    ldr(reg_ker, ptr(abi_param1, GET_OFF(filt)));
-    ldr(reg_kh, ptr(abi_param1, GET_OFF(kh_padding)));
-    if (jcp.ndims == 5) mov(aux_reg_ker_d_org, reg_ker);
+    ldr(reg_inp, Xbyak_aarch64::ptr(abi_param1, GET_OFF(src)));
+    ldr(reg_out, Xbyak_aarch64::ptr(abi_param1, GET_OFF(dst)));
+    ldr(reg_ker, Xbyak_aarch64::ptr(abi_param1, GET_OFF(filt)));
+    ldr(reg_kh, Xbyak_aarch64::ptr(abi_param1, GET_OFF(kh_padding)));
+    if (jcp.ndims == 5) xa_->mov(aux_reg_ker_d_org, reg_ker);
 
     int r_pad = nstl::max(0, jcp.r_pad);
     int n_oi = ow / ur_w;
@@ -645,10 +652,10 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         if (r_pad1 > 0) n_oi--;
 
         if (ow == ur_w) {
-            ldr(reg_out_prf, ptr(abi_param1, GET_OFF(dst_prf)));
+            ldr(reg_out_prf, Xbyak_aarch64::ptr(abi_param1, GET_OFF(dst_prf)));
             compute_loop(ur_w, l_pad, r_pad);
         } else {
-            mov(reg_out_prf, reg_out);
+            xa_->mov(reg_out_prf, reg_out);
             if (n_oi == 0) {
                 add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                 compute_loop(ur_w, l_pad, r_pad1);
@@ -659,7 +666,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
                     compute_loop(ur_w_tail, 0, r_pad);
                 }
             } else {
-                mov(reg_oi, 0);
+                xa_->mov(reg_oi, 0);
                 if (l_pad > 0) {
                     add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
                     compute_loop(ur_w, l_pad, 0);
@@ -726,22 +733,22 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         else if (next_last_ow_block_padded)
             n_oi_next_last_ow_block--;
 
-        ldr(reg_owb, ptr(abi_param1, GET_OFF(owb)));
-        cmp(reg_owb, 0); // is that the first ow-block ?
+        ldr(reg_owb, Xbyak_aarch64::ptr(abi_param1, GET_OFF(owb)));
+        xa_->cmp(reg_owb, 0); // is that the first ow-block ?
         b(GT, middle_ow_blocks_label);
 
         // the first ow block, compute left padding
 
-        mov(reg_oi, n_oi_first_ow_block);
-        mov(reg_out_prf, reg_out);
+        xa_->mov(reg_oi, n_oi_first_ow_block);
+        xa_->mov(reg_out_prf, reg_out);
 
         if (l_pad > 0) {
             add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
             compute_loop(ur_w, l_pad, 0);
             add_imm(reg_inp, reg_inp, inp_shift_pad, reg_tmp_imm);
             add_imm(reg_out, reg_out, out_shift, reg_tmp_imm);
-            sub(reg_oi, reg_oi, 1); // decrement
-            cmp(reg_oi, 0);
+            xa_->sub(reg_oi, reg_oi, 1); // decrement
+            xa_->cmp(reg_oi, 0);
         }
         b(oi_loop_label);
 
@@ -756,31 +763,31 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
 
         // set number of iteration for oi-loop
         cmp_imm(reg_owb, jcp.nb_ow - 1, reg_tmp_imm); // last ow-block ?
-        mov(reg_oi, n_oi_last_ow_block);
+        xa_->mov(reg_oi, n_oi_last_ow_block);
         b(EQ, oi_loop_label);
         cmp_imm(reg_owb, jcp.nb_ow - 2, reg_tmp_imm); // next to last ow-block ?
-        mov(reg_oi, n_oi_next_last_ow_block);
+        xa_->mov(reg_oi, n_oi_next_last_ow_block);
         b(EQ, oi_loop_label);
-        mov(reg_oi, n_oi_not_last_ow_block); // other middle ow-blocks
+        xa_->mov(reg_oi, n_oi_not_last_ow_block); // other middle ow-blocks
 
         // oi loop w/o padding
         L(oi_loop_label);
         L(oi_loop_start_label);
-        cmp(reg_oi, 0);
+        xa_->cmp(reg_oi, 0);
         b(LE, oi_loop_end_label);
 
         add_imm(reg_out_prf, reg_out_prf, out_shift, reg_tmp_imm);
         compute_loop(ur_w, 0, 0);
         add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
         add_imm(reg_out, reg_out, out_shift, reg_tmp_imm);
-        sub(reg_oi, reg_oi, 1); // dec(reg_oi);
-        cmp(reg_oi, 0);
+        xa_->sub(reg_oi, reg_oi, 1); // dec(reg_oi);
+        xa_->cmp(reg_oi, 0);
         b(oi_loop_start_label);
         L(oi_loop_end_label);
 
-        ldr(reg_owb, ptr(abi_param1, GET_OFF(owb)));
+        ldr(reg_owb, Xbyak_aarch64::ptr(abi_param1, GET_OFF(owb)));
 
-        cmp(reg_owb, 0); // first ow-block ?
+        xa_->cmp(reg_owb, 0); // first ow-block ?
         if (first_ow_block_padded) {
             b(EQ, last_oi_label);
         } else {
@@ -803,7 +810,7 @@ void _jit_aarch64_sve_512_conv_fwd_kernel<Vmm>::generate() {
         add_imm(reg_inp, reg_inp, inp_shift, reg_tmp_imm);
         add_imm(reg_out, reg_out, out_shift, reg_tmp_imm);
 
-        ldr(reg_owb, ptr(abi_param1, GET_OFF(owb)));
+        ldr(reg_owb, Xbyak_aarch64::ptr(abi_param1, GET_OFF(owb)));
         cmp_imm(reg_owb, jcp.nb_ow - 1, reg_tmp_imm); // last ow_block?
         b(LT, end_label);
 
@@ -1249,18 +1256,20 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         int ofs = aux_output_offset;
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
-            ldr(zreg_tmp(idx), ptr(reg_src, static_cast<int32_t>(VL_OFS(ofs))));
+            ldr(zreg_tmp(idx),
+                    Xbyak_aarch64::ptr(
+                            reg_src, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             int tmp_ofs = aux_output_offset - prev_ofs;
 
             if (((tmp_ofs & 0x3f) == 0) && (VL_OFS(tmp_ofs) < LDRWMAX)
                     && (tmp_ofs >= 0)) {
                 ldr(zreg_tmp(idx),
-                        ptr(reg_tmp_addr,
+                        Xbyak_aarch64::ptr(reg_tmp_addr,
                                 static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
                 add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
-                ldr(zreg_tmp(idx), ptr(reg_tmp_addr));
+                ldr(zreg_tmp(idx), Xbyak_aarch64::ptr(reg_tmp_addr));
                 prev_ofs = ofs;
             }
         }
@@ -1273,18 +1282,19 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
             str(zreg_out(j, k),
-                    ptr(reg_src, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_src, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             int tmp_ofs = aux_output_offset - prev_ofs;
 
             if (((tmp_ofs & 0x3f) == 0) && (VL_OFS(tmp_ofs) < LDRWMAX)
                     && (tmp_ofs >= 0)) {
                 str(zreg_out(j, k),
-                        ptr(reg_tmp_addr,
+                        Xbyak_aarch64::ptr(reg_tmp_addr,
                                 static_cast<int32_t>(VL_OFS(tmp_ofs))));
             } else {
                 add_imm(reg_tmp_addr, reg_src, ofs, reg_tmp_imm);
-                str(zreg_out(j, k), ptr(reg_tmp_addr));
+                str(zreg_out(j, k), Xbyak_aarch64::ptr(reg_tmp_addr));
                 prev_ofs = ofs;
             }
         }
@@ -1293,8 +1303,8 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
 
     Label no_update_label;
 
-    ldr(reg_channel, ptr(param, GET_OFF(channel)));
-    cmp(reg_channel, 0);
+    ldr(reg_channel, Xbyak_aarch64::ptr(param, GET_OFF(channel)));
+    xa_->cmp(reg_channel, 0);
     b(EQ, no_update_label);
     int prev_ofs = 0;
     for (int k = 0; k < jcp.nb_ic_blocking; k++) {
@@ -1314,7 +1324,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::store_output(
                         * jcp.ic_block;
                 prev_ofs = out_load(aux_src_offset, j + num_ldr - 1, prev_ofs);
             }
-            fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(j));
+            xa_->fadd(zreg_out_s(j, k), zreg_out_s(j, k), zreg_tmp_s(j));
         }
     }
 
@@ -1378,22 +1388,26 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
         if (((aux_output_offset & 0x3) == 0) && (aux_output_offset < LDRWMAX)
                 && (aux_output_offset >= 0)) {
             ld1rw(ZRegS(zreg_idx), reg_p_all_ones,
-                    ptr(aux_reg_dst, static_cast<int32_t>(aux_output_offset)));
+                    Xbyak_aarch64::ptr(aux_reg_dst,
+                            static_cast<int32_t>(aux_output_offset)));
         } else {
             int ofs = aux_output_offset - prev_ofs;
             int ofs2 = aux_output_offset - (prev_ofs + 0x100);
             int ofs3 = aux_output_offset - (prev_ofs + 0x200);
             if (((ofs & 0x3) == 0) && (ofs < LDRWMAX) && (ofs >= 0)) {
                 ld1rw(ZRegS(zreg_idx), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr, static_cast<int32_t>(ofs)));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr,
+                                static_cast<int32_t>(ofs)));
             } else if (((ofs2 & 0x3) == 0) && (ofs2 < LDRWMAX) && (ofs2 >= 0)
                     && (prev_ofs != 0)) {
                 ld1rw(ZRegS(zreg_idx), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr2, static_cast<int32_t>(ofs2)));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr2,
+                                static_cast<int32_t>(ofs2)));
             } else if (((ofs3 & 0x3) == 0) && (ofs3 < LDRWMAX) && (ofs3 >= 0)
                     && (prev_ofs != 0)) {
                 ld1rw(ZRegS(zreg_idx), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr3, static_cast<int32_t>(ofs3)));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr3,
+                                static_cast<int32_t>(ofs3)));
             } else {
                 ofs = aux_output_offset;
                 add_imm(reg_prev_bcast_addr, aux_reg_dst, ofs, reg_tmp_imm);
@@ -1403,7 +1417,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                         reg_tmp_imm);
 
                 ld1rw(ZRegS(zreg_idx), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr));
                 prev_ofs = ofs;
             }
         }
@@ -1415,42 +1429,43 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))
                 && ((ofs & 0x3f) == 0)) {
             ldr(zreg_ker(i),
-                    ptr(aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             add_imm(reg_tmp_addr, aux_reg_ker, ofs, reg_tmp_imm);
-            ldr(zreg_ker(i), ptr(reg_tmp_addr));
+            ldr(zreg_ker(i), Xbyak_aarch64::ptr(reg_tmp_addr));
         }
     };
 
     if (one_of(jcp.ndims, 3, 4)) {
-        mov(aux_reg_dst, reg_dst);
-        mov(aux_reg_ker, reg_ker);
+        xa_->mov(aux_reg_dst, reg_dst);
+        xa_->mov(aux_reg_ker, reg_ker);
 
-        mov(aux_reg_dst_prf, reg_dst_prf);
-        mov(aux_reg_ker_prf, reg_ker_prf);
+        xa_->mov(aux_reg_dst_prf, reg_dst_prf);
+        xa_->mov(aux_reg_ker_prf, reg_ker_prf);
     }
 
     if (jcp.ndims == 5) {
-        mov(reg_src_prf_org, reg_src_prf);
-        mov(reg_src_org, reg_src);
+        xa_->mov(reg_src_prf_org, reg_src_prf);
+        xa_->mov(reg_src_org, reg_src);
 
-        ldr(reg_ki, ptr(param, GET_OFF(kd_padding)));
-        mov(aux_reg_dst_d, reg_dst);
-        ldr(aux_reg_ker_d, ptr(param, GET_OFF(filt)));
-        mov(aux_reg_dst_d_prf, reg_dst_prf);
-        mov(aux_reg_ker_d_prf, reg_ker_prf);
+        ldr(reg_ki, Xbyak_aarch64::ptr(param, GET_OFF(kd_padding)));
+        xa_->mov(aux_reg_dst_d, reg_dst);
+        ldr(aux_reg_ker_d, Xbyak_aarch64::ptr(param, GET_OFF(filt)));
+        xa_->mov(aux_reg_dst_d_prf, reg_dst_prf);
+        xa_->mov(aux_reg_ker_d_prf, reg_ker_prf);
 
         L(kd_label);
-        ldr(reg_kj, ptr(param, GET_OFF(kh_padding)));
+        ldr(reg_kj, Xbyak_aarch64::ptr(param, GET_OFF(kh_padding)));
     } else {
-        mov(reg_kj, reg_kh);
+        xa_->mov(reg_kj, reg_kh);
     }
 
     if (jcp.ndims == 5) {
-        mov(aux_reg_dst, aux_reg_dst_d);
-        mov(aux_reg_ker, aux_reg_ker_d);
-        mov(aux_reg_dst_prf, aux_reg_dst_d_prf);
-        mov(aux_reg_ker_prf, aux_reg_ker_d_prf);
+        xa_->mov(aux_reg_dst, aux_reg_dst_d);
+        xa_->mov(aux_reg_ker, aux_reg_ker_d);
+        xa_->mov(aux_reg_dst_prf, aux_reg_dst_d_prf);
+        xa_->mov(aux_reg_ker_prf, aux_reg_ker_d_prf);
     }
     int prev_ofs = 0;
     L(kh_label);
@@ -1544,8 +1559,8 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                 typesize * stride_h * kw * oc_block * ic_block, reg_tmp_imm);
         sub_imm(aux_reg_dst_prf, aux_reg_dst_prf,
                 typesize * (jcp.dilate_h + 1) * ow * oc_block, reg_tmp_imm);
-        sub(reg_kj, reg_kj, 1);
-        cmp(reg_kj, 0);
+        xa_->sub(reg_kj, reg_kj, 1);
+        xa_->cmp(reg_kj, 0);
         b(GT, kh_label); //jg(kh_label, T_NEAR);
     }
     if (jcp.ndims == 5) {
@@ -1562,14 +1577,14 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma(
                 typesize * jcp.stride_d * jcp.kw * jcp.kh * oc_block * ic_block,
                 reg_tmp_imm);
 
-        sub(reg_ki, reg_ki, 1);
-        cmp(reg_ki, 0);
+        xa_->sub(reg_ki, reg_ki, 1);
+        xa_->cmp(reg_ki, 0);
         b(GT, kd_label); //jg(kd_label, T_NEAR);
     }
 
     if (jcp.ndims == 5) {
-        mov(reg_src, reg_src_org);
-        mov(reg_src_prf, reg_src_prf_org);
+        xa_->mov(reg_src, reg_src_org);
+        xa_->mov(reg_src_prf, reg_src_prf_org);
     }
 }
 
@@ -1619,14 +1634,15 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
         if (((aux_output_offset & 0x3) == 0) && (aux_output_offset < LDRWMAX)
                 && (aux_output_offset >= 0)) {
             ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                    ptr(aux_reg_dst, static_cast<int32_t>(aux_output_offset)));
+                    Xbyak_aarch64::ptr(aux_reg_dst,
+                            static_cast<int32_t>(aux_output_offset)));
         } else {
             if ((prev_ofs > -1) && ((aux_output_offset - prev_ofs) > 0)
                     && ((aux_output_offset - prev_ofs) < LDRWMAX)
                     && (((aux_output_offset - prev_ofs) & 0x3) == 0)) {
 
                 ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr,
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(
                                         aux_output_offset - prev_ofs)));
 
@@ -1643,7 +1659,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                 }
 
                 ld1rw(zreg_inp_s(jj, nb_oc_block), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr));
                 prev_ofs = aux_output_offset;
             }
         }
@@ -1655,14 +1671,15 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
         if (((aux_output_offset & 0x3) == 0) && (aux_output_offset < LDRWMAX)
                 && (aux_output_offset >= 0)) {
             ld1rw(zreg_inp_s(jj % stride_w, nb_oc_block), reg_p_all_ones,
-                    ptr(aux_reg_dst, static_cast<int32_t>(aux_output_offset)));
+                    Xbyak_aarch64::ptr(aux_reg_dst,
+                            static_cast<int32_t>(aux_output_offset)));
         } else {
             if ((prev_ofs > -1) && ((aux_output_offset - prev_ofs) > 0)
                     && ((aux_output_offset - prev_ofs) < LDRWMAX)
                     && (((aux_output_offset - prev_ofs) & 0x3) == 0)) {
 
                 ld1rw(zreg_inp_s(jj % stride_w, nb_oc_block), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr,
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr,
                                 static_cast<int32_t>(
                                         aux_output_offset - prev_ofs)));
 
@@ -1679,7 +1696,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
                 }
 
                 ld1rw(zreg_inp_s(jj % stride_w, nb_oc_block), reg_p_all_ones,
-                        ptr(reg_prev_bcast_addr));
+                        Xbyak_aarch64::ptr(reg_prev_bcast_addr));
                 prev_ofs = aux_output_offset;
             }
         }
@@ -1691,35 +1708,36 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
 
         if ((VL_OFS(ofs) < LDRMAX) && (VL_OFS(ofs) >= (-1 * LDRMAX))) {
             ldr(zreg_wei(idx),
-                    ptr(aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            aux_reg_ker, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             add_imm(reg_tmp_addr, aux_reg_ker, ofs, reg_tmp_imm);
-            ldr(zreg_wei(idx), ptr(reg_tmp_addr));
+            ldr(zreg_wei(idx), Xbyak_aarch64::ptr(reg_tmp_addr));
         }
     };
 
     if (one_of(jcp.ndims, 3, 4)) {
-        mov(aux_reg_dst, reg_dst);
-        mov(aux_reg_ker, reg_ker);
+        xa_->mov(aux_reg_dst, reg_dst);
+        xa_->mov(aux_reg_ker, reg_ker);
     }
 
     if (jcp.ndims == 5) {
-        mov(reg_src_prf_org, reg_src_prf);
-        mov(reg_src_org, reg_src);
+        xa_->mov(reg_src_prf_org, reg_src_prf);
+        xa_->mov(reg_src_org, reg_src);
 
-        ldr(reg_ki, ptr(param, GET_OFF(kd_padding)));
-        mov(aux_reg_dst_d, reg_dst);
-        ldr(aux_reg_ker_d, ptr(param, GET_OFF(filt)));
+        ldr(reg_ki, Xbyak_aarch64::ptr(param, GET_OFF(kd_padding)));
+        xa_->mov(aux_reg_dst_d, reg_dst);
+        ldr(aux_reg_ker_d, Xbyak_aarch64::ptr(param, GET_OFF(filt)));
 
         L(kd_label);
-        ldr(reg_kj, ptr(param, GET_OFF(kh_padding)));
+        ldr(reg_kj, Xbyak_aarch64::ptr(param, GET_OFF(kh_padding)));
     } else {
-        mov(reg_kj, reg_kh);
+        xa_->mov(reg_kj, reg_kh);
     }
 
     if (jcp.ndims == 5) {
-        mov(aux_reg_dst, aux_reg_dst_d);
-        mov(aux_reg_ker, aux_reg_ker_d);
+        xa_->mov(aux_reg_dst, aux_reg_dst_d);
+        xa_->mov(aux_reg_ker, aux_reg_ker_d);
     }
 
     L(kh_label);
@@ -1792,8 +1810,8 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
         add_imm(aux_reg_ker, aux_reg_ker, shift_ker_ptr, reg_tmp_imm);
         assert(shift_dst_ptr >= 0);
         sub_imm(aux_reg_dst, aux_reg_dst, shift_dst_ptr, reg_tmp_imm);
-        sub(reg_kj, reg_kj, 1);
-        cmp(reg_kj, 0);
+        xa_->sub(reg_kj, reg_kj, 1);
+        xa_->cmp(reg_kj, 0);
         b(GT, kh_label);
     }
 
@@ -1804,39 +1822,39 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop_fma_core(
         add_imm(aux_reg_ker_d, aux_reg_ker_d,
                 typesize * jcp.kw * jcp.kh * oc_block * ic_block, reg_tmp_imm);
 
-        sub(reg_ki, reg_ki, 1);
-        cmp(reg_ki, 0);
+        xa_->sub(reg_ki, reg_ki, 1);
+        xa_->cmp(reg_ki, 0);
         b(GT, kd_label);
 
-        mov(reg_src, reg_src_org);
-        mov(reg_src_prf, reg_src_prf_org);
+        xa_->mov(reg_src, reg_src_org);
+        xa_->mov(reg_src_prf, reg_src_prf_org);
     }
 }
 
 template <typename Vmm>
 inline void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop(
         int ur_w, int l_overflow, int r_overflow, int k_offset) {
-    if (jcp.ndims == 5) mov(reg_oi_org, reg_oi);
+    if (jcp.ndims == 5) xa_->mov(reg_oi_org, reg_oi);
 
     prepare_output(ur_w);
 
     Label skip_compute_loop;
     if (jcp.ndims == 5) {
-        ldr(reg_kj, ptr(param, GET_OFF(kd_padding)));
-        cmp(reg_kj, 0);
+        ldr(reg_kj, Xbyak_aarch64::ptr(param, GET_OFF(kd_padding)));
+        xa_->cmp(reg_kj, 0);
         b(LE, skip_compute_loop);
     }
-    ldr(reg_kj, ptr(param, GET_OFF(kh_padding)));
-    cmp(reg_kj, 0);
+    ldr(reg_kj, Xbyak_aarch64::ptr(param, GET_OFF(kh_padding)));
+    xa_->cmp(reg_kj, 0);
     b(LE, skip_compute_loop);
 
     const bool generate_ocb_loop = jcp.nb_oc > 1 && is_ddst_layout_nxc();
     Label oc_loop;
     if (generate_ocb_loop) {
-        mov(reg_dst_org, reg_dst);
-        mov(reg_ker_org, reg_ker);
+        xa_->mov(reg_dst_org, reg_dst);
+        xa_->mov(reg_ker_org, reg_ker);
 
-        ldr(reg_channel, ptr(param, GET_OFF(reduce_work)));
+        ldr(reg_channel, Xbyak_aarch64::ptr(param, GET_OFF(reduce_work)));
         L(oc_loop);
     }
 
@@ -1857,13 +1875,13 @@ inline void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::compute_loop(
         sub_imm(reg_channel, reg_channel, jcp.oc_block, reg_tmp_imm);
         b(GT, oc_loop);
 
-        mov(reg_ker, reg_ker_org);
-        mov(reg_dst, reg_dst_org);
+        xa_->mov(reg_ker, reg_ker_org);
+        xa_->mov(reg_dst, reg_dst_org);
     }
 
     L(skip_compute_loop);
     store_output(ur_w);
-    if (jcp.ndims == 5) mov(reg_oi, reg_oi_org);
+    if (jcp.ndims == 5) xa_->mov(reg_oi, reg_oi_org);
 }
 
 template <typename Vmm>
@@ -1887,14 +1905,14 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
     preamble();
     ptrue(reg_p_all_ones.b);
 
-    ldr(reg_src, ptr(param, GET_OFF(src)));
-    ldr(reg_dst, ptr(param, GET_OFF(dst)));
-    ldr(reg_ker, ptr(param, GET_OFF(filt)));
+    ldr(reg_src, Xbyak_aarch64::ptr(param, GET_OFF(src)));
+    ldr(reg_dst, Xbyak_aarch64::ptr(param, GET_OFF(dst)));
+    ldr(reg_ker, Xbyak_aarch64::ptr(param, GET_OFF(filt)));
 
-    ldr(reg_kh, ptr(param, GET_OFF(kh_padding)));
-    ldr(reg_src_prf, ptr(param, GET_OFF(src_prf)));
-    ldr(reg_dst_prf, ptr(param, GET_OFF(dst_prf)));
-    ldr(reg_ker_prf, ptr(param, GET_OFF(filt_prf)));
+    ldr(reg_kh, Xbyak_aarch64::ptr(param, GET_OFF(kh_padding)));
+    ldr(reg_src_prf, Xbyak_aarch64::ptr(param, GET_OFF(src_prf)));
+    ldr(reg_dst_prf, Xbyak_aarch64::ptr(param, GET_OFF(dst_prf)));
+    ldr(reg_ker_prf, Xbyak_aarch64::ptr(param, GET_OFF(filt_prf)));
 
     int l_overflow = nstl::max(0, ((kw - 1) * dilate_w - jcp.l_pad) / stride_w);
     int r_overflow = nstl::max(
@@ -1927,7 +1945,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
     }
 
     if (!threaded) {
-        if (n_oi > 1) { mov_imm(reg_oi, n_oi); }
+        if (n_oi > 1) { xa_->mov_imm(reg_oi, n_oi); }
     } else {
         // Setup for threaded code generation, and jump into the correct
         // portion of code for execution.
@@ -1963,9 +1981,9 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
         n_oi = nstl::max(n_oi, pretail_n_oi);
 
         assert(iw_block % ur_w == 0);
-        ldr(reg_iwb, ptr(param, GET_OFF(iwb)));
+        ldr(reg_iwb, Xbyak_aarch64::ptr(param, GET_OFF(iwb)));
 
-        if (head_n_oi != 0) mov_imm(reg_oi, head_n_oi);
+        if (head_n_oi != 0) xa_->mov_imm(reg_oi, head_n_oi);
         cmp_imm(reg_iwb, head_thread, reg_tmp_imm);
         b(EQ, head_label);
 
@@ -1973,7 +1991,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
         if (pretail_n_oi == 0) {
             b(EQ, pretail_label);
         } else {
-            mov_imm(reg_oi, pretail_n_oi);
+            xa_->mov_imm(reg_oi, pretail_n_oi);
             b(EQ, body_label);
         }
         if (pretail_thread != tail_thread) {
@@ -1981,7 +1999,7 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
             b(EQ, tail_label);
         }
         if (body_n_oi != 0) {
-            mov_imm(reg_oi, body_n_oi);
+            xa_->mov_imm(reg_oi, body_n_oi);
             b(body_label);
         } else {
             b(end_label);
@@ -2016,14 +2034,14 @@ void _jit_aarch64_sve_512_conv_bwd_data_kernel_f32<Vmm>::generate() {
                 }
             }
             if (n_oi > 1) {
-                sub(reg_oi, reg_oi, 1);
-                cmp(reg_oi, 0);
+                xa_->sub(reg_oi, reg_oi, 1);
+                xa_->cmp(reg_oi, 0);
                 b(GT, ow_loop_label);
             }
         }
     }
     if (threaded) {
-        ldr(reg_iwb, ptr(param, GET_OFF(iwb)));
+        ldr(reg_iwb, Xbyak_aarch64::ptr(param, GET_OFF(iwb)));
         cmp_imm(reg_iwb, pretail_thread, reg_tmp_imm);
         b(NE, end_label);
     }
@@ -2461,7 +2479,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     Label kd_comeback_label;
 
     /* 'depth' loop count bound by 'kd_work_size' */
-    mov(kj, reg_kd_count);
+    xa_->mov(kj, reg_kd_count);
     L(kd_comeback_label);
     {
         int inp_mult = is_src_layout_nxc()
@@ -2475,8 +2493,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
                 jcp.typesize_out * jcp.kh * jcp.kw * jcp.ic_block
                         * jcp.oc_block,
                 reg_tmp_imm);
-        sub(kj, kj, 1);
-        cmp(kj, 0);
+        xa_->sub(kj, kj, 1);
+        xa_->cmp(kj, 0);
         b(GT, kd_comeback_label);
     }
 }
@@ -2484,7 +2502,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
         oh_step_comeback_pointers() {
     Label kh_comeback_label, kd_comeback_label;
-    mov(kj, reg_kh);
+    xa_->mov(kj, reg_kh);
     L(kh_comeback_label);
     {
         int inp_mult = is_src_layout_nxc()
@@ -2497,8 +2515,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
         sub_imm(reg_kernel, reg_kernel,
                 jcp.typesize_out * jcp.kw * jcp.ic_block * jcp.oc_block,
                 reg_tmp_imm);
-        sub(kj, kj, 1);
-        cmp(kj, 0);
+        xa_->sub(kj, kj, 1);
+        xa_->cmp(kj, 0);
         b(GT, kh_comeback_label);
     }
 }
@@ -2515,16 +2533,17 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     auto load_ker = [=](int zreg_idx, int ofs, int pre_offset_ker) {
         if (str_imm_check(ofs)) {
             ldr(ZReg(zreg_idx),
-                    ptr(reg_kernel, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_kernel, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             if (pre_offset_ker >= 0 && str_imm_check(ofs - pre_offset_ker)) {
                 ldr(ZReg(zreg_idx),
-                        ptr(reg_pre_addr_ker,
+                        Xbyak_aarch64::ptr(reg_pre_addr_ker,
                                 static_cast<int32_t>(
                                         VL_OFS(ofs - pre_offset_ker))));
             } else {
                 add_imm(reg_pre_addr_ker, reg_kernel, ofs, reg_tmp_imm);
-                ldr(ZReg(zreg_idx), ptr(reg_pre_addr_ker));
+                ldr(ZReg(zreg_idx), Xbyak_aarch64::ptr(reg_pre_addr_ker));
                 pre_offset_ker = ofs;
             }
         }
@@ -2563,22 +2582,24 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
             // i_offset is smaller than the maximum value of ld1rw imm
             ld1rw(ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
-                    ptr(reg_input, static_cast<int32_t>(i_offset)));
+                    Xbyak_aarch64::ptr(
+                            reg_input, static_cast<int32_t>(i_offset)));
 
         } else if ((pre_offset_input >= 0)
                 && ld1rw_imm_check(i_offset - pre_offset_input)) {
             // The offset from previous access address is smaller than the maximum value of ld1rw imm
             ld1rw(ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
-                    ptr(reg_pre_addr_input,
+                    Xbyak_aarch64::ptr(reg_pre_addr_input,
                             static_cast<int32_t>(i_offset - pre_offset_input)));
 
         } else if ((pre_offset_input >= 0) && (offset_diff_inp >= 0)
                 && (offset_diff_inp
                         == ((long long int)i_offset - pre_offset_input))) {
-            add(reg_pre_addr_input, reg_pre_addr_input, reg_addr_diff_input);
+            xa_->add(reg_pre_addr_input, reg_pre_addr_input,
+                    reg_addr_diff_input);
             ld1rw(ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
-                    reg_p_all_ones, ptr(reg_pre_addr_input));
+                    reg_p_all_ones, Xbyak_aarch64::ptr(reg_pre_addr_input));
             pre_offset_input = i_offset;
         } else if (ld1rw_imm_check(i_offset & IMM_MASK12)
                 && !(i_offset & ~IMM_MASK24)) {
@@ -2587,7 +2608,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     reg_tmp_imm);
             ld1rw(ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
-                    ptr(reg_pre_addr_input,
+                    Xbyak_aarch64::ptr(reg_pre_addr_input,
                             static_cast<int32_t>(i_offset & IMM_MASK12)));
             pre_offset_input = i_offset - (i_offset & IMM_MASK12);
 
@@ -2599,7 +2620,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                     (i_offset - pre_offset_input) & IMM_MASK24_12, reg_tmp_imm);
             ld1rw(ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
                     reg_p_all_ones,
-                    ptr(reg_pre_addr_input,
+                    Xbyak_aarch64::ptr(reg_pre_addr_input,
                             static_cast<int32_t>((i_offset - pre_offset_input)
                                     & IMM_MASK12)));
             pre_offset_input
@@ -2610,8 +2631,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
             if ((pre_offset_input >= 0)
                     && (((long long int)i_offset - pre_offset_input) >= 0)) {
                 if ((i_offset - pre_offset_input) > ADDMAX) {
-                    mov_imm(reg_addr_diff_input, i_offset - pre_offset_input);
-                    add(reg_pre_addr_input, reg_pre_addr_input,
+                    xa_->mov_imm(
+                            reg_addr_diff_input, i_offset - pre_offset_input);
+                    xa_->add(reg_pre_addr_input, reg_pre_addr_input,
                             reg_addr_diff_input);
                     offset_diff_inp = i_offset - pre_offset_input;
                 } else {
@@ -2622,7 +2644,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
                 add_imm(reg_pre_addr_input, reg_input, i_offset, reg_tmp_imm);
             }
             ld1rw(ZRegS(idata_reg_offset + (zreg_idx % num_zregs4idata)),
-                    reg_p_all_ones, ptr(reg_pre_addr_input));
+                    reg_p_all_ones, Xbyak_aarch64::ptr(reg_pre_addr_input));
             pre_offset_input = i_offset;
         }
         return;
@@ -2632,16 +2654,17 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     auto load_out = [&](int zreg_idx, int ofs) {
         if (ldr_imm_check(ofs)) {
             ldr(ZReg(zreg_idx),
-                    ptr(reg_output, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_output, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             if (pre_offset_out >= 0 && ldr_imm_check(ofs - pre_offset_out)) {
                 ldr(ZReg(zreg_idx),
-                        ptr(reg_pre_addr_out,
+                        Xbyak_aarch64::ptr(reg_pre_addr_out,
                                 static_cast<int32_t>(
                                         VL_OFS(ofs - pre_offset_out))));
             } else {
                 add_imm(reg_pre_addr_out, reg_output, ofs, reg_tmp_imm);
-                ldr(ZReg(zreg_idx), ptr(reg_pre_addr_out));
+                ldr(ZReg(zreg_idx), Xbyak_aarch64::ptr(reg_pre_addr_out));
                 pre_offset_out = ofs;
             }
         }
@@ -2763,16 +2786,17 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::compute_ic_block_step(
     auto store_ker = [=](int zreg_idx, int ofs, int pre_offset_ker) {
         if (str_imm_check(ofs)) {
             str(ZReg(zreg_idx),
-                    ptr(reg_kernel, static_cast<int32_t>(VL_OFS(ofs))));
+                    Xbyak_aarch64::ptr(
+                            reg_kernel, static_cast<int32_t>(VL_OFS(ofs))));
         } else {
             if (pre_offset_ker >= 0 && str_imm_check(ofs - pre_offset_ker)) {
                 str(ZReg(zreg_idx),
-                        ptr(reg_pre_addr_ker,
+                        Xbyak_aarch64::ptr(reg_pre_addr_ker,
                                 static_cast<int32_t>(
                                         VL_OFS(ofs - pre_offset_ker))));
             } else {
                 add_imm(reg_pre_addr_ker, reg_kernel, ofs, reg_tmp_imm);
-                str(ZReg(zreg_idx), ptr(reg_pre_addr_ker));
+                str(ZReg(zreg_idx), Xbyak_aarch64::ptr(reg_pre_addr_ker));
                 pre_offset_ker = ofs;
             }
         }
@@ -2807,20 +2831,20 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
 
     if (jcp.ndims == 5) {
         L(kd_label);
-        mov(reg_input, aux_reg_input);
-        mov(reg_kernel, aux_reg_kernel);
+        xa_->mov(reg_input, aux_reg_input);
+        xa_->mov(reg_kernel, aux_reg_kernel);
     }
 
     const int ic_tail = jcp.ic_tail;
     const bool generate_icb_loop = jcp.nb_ic_blocking_max > 1;
-    mov(kj, reg_kh);
+    xa_->mov(kj, reg_kh);
     L(kh_label);
     {
         Label icb_block_label, icb_block_label_cb, ic_tail_loop, ic_tail_label;
         if (generate_icb_loop || ic_tail) {
-            mov(reg_input_org, reg_input);
-            mov(reg_kernel_org, reg_kernel);
-            ldr(reg_icb, ptr(param, GET_OFF(reduce_work)));
+            xa_->mov(reg_input_org, reg_input);
+            xa_->mov(reg_kernel_org, reg_kernel);
+            ldr(reg_icb, Xbyak_aarch64::ptr(param, GET_OFF(reduce_work)));
         }
 
         if (ic_tail) {
@@ -2861,7 +2885,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
         if (ic_tail) {
             L(ic_tail_loop);
             Label skip_ic_tail;
-            cmp(reg_icb, 0);
+            xa_->cmp(reg_icb, 0);
             b(LE, skip_ic_tail);
             if (ic_tail_loop_work) {
                 cmp_imm(reg_icb, ic_tail_loop_work, reg_tmp_imm);
@@ -2876,7 +2900,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
 
             L(ic_tail_label);
             if (ic_tail % ic_block_step) {
-                cmp(reg_icb, 0);
+                xa_->cmp(reg_icb, 0);
                 b(LE, skip_ic_tail);
                 const int i_b_ic = ic_tail_loop_work;
                 const int input_offset = jcp.typesize_in * i_b_ic;
@@ -2888,8 +2912,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
         }
 
         if (generate_icb_loop || ic_tail) {
-            mov(reg_kernel, reg_kernel_org);
-            mov(reg_input, reg_input_org);
+            xa_->mov(reg_kernel, reg_kernel_org);
+            xa_->mov(reg_input, reg_input_org);
         }
 
         add_imm(reg_input, reg_input,
@@ -2932,19 +2956,19 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
 
     if (jcp.ndims == 5) {
         L(kd_label);
-        mov(reg_input, aux_reg_input);
-        mov(reg_kernel, aux_reg_kernel);
+        xa_->mov(reg_input, aux_reg_input);
+        xa_->mov(reg_kernel, aux_reg_kernel);
     }
 
     const bool generate_icb_loop = jcp.nb_ic_blocking_max > 1;
-    mov(kj, reg_kh);
+    xa_->mov(kj, reg_kh);
     L(kh_label);
     {
         Label icb_block_label;
         if (generate_icb_loop || ic_tail) {
-            mov(reg_input_org, reg_input);
-            mov(reg_kernel_org, reg_kernel);
-            ldr(reg_icb, ptr(param, GET_OFF(reduce_work)));
+            xa_->mov(reg_input_org, reg_input);
+            xa_->mov(reg_kernel_org, reg_kernel);
+            ldr(reg_icb, Xbyak_aarch64::ptr(param, GET_OFF(reduce_work)));
         }
 
         if (ic_tail) {
@@ -2954,7 +2978,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
 
         L(icb_block_label);
         Label icb_block_label_end;
-        mov(b_ic, ic_block);
+        xa_->mov(b_ic, ic_block);
         L(ic_block_label);
         {
             compute_ic_block_step(ow, l_pad, r_pad, ic_block_step, 0, 0, 0);
@@ -2997,9 +3021,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
             if (ic_tail) {
                 Label skip_ic_tail;
                 const int ic_tail_loop_work = rnd_dn(ic_tail, ic_block_step);
-                cmp(reg_icb, 0);
+                xa_->cmp(reg_icb, 0);
                 b(LE, skip_ic_tail);
-                mov(b_ic, reg_icb);
+                xa_->mov(b_ic, reg_icb);
                 if (ic_tail_loop_work) {
                     cmp_imm(reg_icb, ic_block_step, reg_tmp_imm);
                     b(GE, ic_block_label);
@@ -3015,7 +3039,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
 
                 L(ic_tail_label);
                 if (ic_tail % ic_block_step) {
-                    cmp(reg_icb, 0);
+                    xa_->cmp(reg_icb, 0);
                     b(LE, skip_ic_tail);
                     compute_ic_block_step(
                             ow, l_pad, r_pad, ic_tail % ic_block_step, 0, 0, 0);
@@ -3023,8 +3047,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
                 L(skip_ic_tail);
             }
 
-            mov(reg_kernel, reg_kernel_org);
-            mov(reg_input, reg_input_org);
+            xa_->mov(reg_kernel, reg_kernel_org);
+            xa_->mov(reg_input, reg_input_org);
 
             add_imm(reg_input, reg_input, input_shift, reg_tmp_imm);
             add_imm(reg_kernel, reg_kernel,
@@ -3117,7 +3141,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
 
         assert(IMPLICATION(l_pad_tail > 0, ur_w_blocks <= 1));
         if (ur_w_blocks > 0) {
-            mov(reg_ur_w_trips, 0);
+            xa_->mov(reg_ur_w_trips, 0);
             L(ow_block_label);
             {
                 compute_ic_block_step(
@@ -3146,19 +3170,19 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
 
     if (jcp.ndims == 5) {
         L(kd_label);
-        mov(reg_input, aux_reg_input);
-        mov(reg_kernel, aux_reg_kernel);
+        xa_->mov(reg_input, aux_reg_input);
+        xa_->mov(reg_kernel, aux_reg_kernel);
     }
 
-    mov(kj, reg_kh);
+    xa_->mov(kj, reg_kh);
     L(kh_label);
     {
         Label icb_block_label, icb_block_label_cb;
         if (generate_icb_loop || ic_tail) {
             // TODO: May be broadcast work?
-            mov(reg_input_org, reg_input);
-            mov(reg_kernel_org, reg_kernel);
-            ldr(reg_icb, ptr(param, GET_OFF(reduce_work)));
+            xa_->mov(reg_input_org, reg_input);
+            xa_->mov(reg_kernel_org, reg_kernel);
+            ldr(reg_icb, Xbyak_aarch64::ptr(param, GET_OFF(reduce_work)));
         }
 
         if (ic_tail) {
@@ -3167,7 +3191,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
         }
 
         L(icb_block_label);
-        mov(b_ic, ic_block);
+        xa_->mov(b_ic, ic_block);
         L(ic_block_label);
         Label ic_block_label_end;
         {
@@ -3213,9 +3237,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
             if (ic_tail) {
                 Label skip_ic_tail;
                 const int ic_tail_loop_work = rnd_dn(ic_tail, ic_block_step);
-                cmp(reg_icb, 0);
+                xa_->cmp(reg_icb, 0);
                 b(LE, skip_ic_tail);
-                mov(b_ic, reg_icb);
+                xa_->mov(b_ic, reg_icb);
                 if (ic_tail_loop_work) {
                     cmp_imm(reg_icb, ic_block_step, reg_tmp_imm);
                     b(GE, ic_block_label);
@@ -3231,15 +3255,15 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_common(
 
                 L(ic_tail_label);
                 if (ic_tail % ic_block_step) {
-                    cmp(reg_icb, 0);
+                    xa_->cmp(reg_icb, 0);
                     b(LE, skip_ic_tail);
                     ic_loop(ic_tail % ic_block_step);
                 }
                 L(skip_ic_tail);
             }
 
-            mov(reg_kernel, reg_kernel_org);
-            mov(reg_input, reg_input);
+            xa_->mov(reg_kernel, reg_kernel_org);
+            xa_->mov(reg_input, reg_input);
 
             add_imm(reg_input, reg_input, input_shift, reg_tmp_imm);
             add_imm(reg_kernel, reg_kernel,
@@ -3295,10 +3319,10 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_disp() {
     if (jcp.ndims == 5) {
         /* NOTE: reg_kd_count = aux_reg_input = r12. The following order of
          * 'movs' must be guaranteed. */
-        mov(ki, reg_kd_count);
-        mov(reg_kd_count_org, reg_kd_count);
-        mov(aux_reg_input, reg_input);
-        mov(aux_reg_kernel, reg_kernel);
+        xa_->mov(ki, reg_kd_count);
+        xa_->mov(reg_kd_count_org, reg_kd_count);
+        xa_->mov(aux_reg_input, reg_input);
+        xa_->mov(aux_reg_kernel, reg_kernel);
     }
 
     if (jcp.kw <= 3 && ow <= 16 && !too_large_to_unroll)
@@ -3309,9 +3333,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_disp() {
         compute_oh_step_common(ic_block_step, max_ur_w);
 
     if (jcp.ndims == 5) {
-        mov(reg_input, aux_reg_input);
-        mov(reg_kernel, aux_reg_kernel);
-        mov(reg_kd_count, reg_kd_count_org);
+        xa_->mov(reg_input, aux_reg_input);
+        xa_->mov(reg_kernel, aux_reg_kernel);
+        xa_->mov(reg_kd_count, reg_kd_count_org);
         od_step_comeback_pointers();
     } else {
         oh_step_comeback_pointers();
@@ -3321,8 +3345,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::compute_oh_step_disp() {
 void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
     Label skip_zeroing, zeroing_loop;
 
-    ldr(reg_tmp, ptr(param, GET_OFF(channel)));
-    cmp(reg_tmp, 0);
+    ldr(reg_tmp, Xbyak_aarch64::ptr(param, GET_OFF(channel)));
+    xa_->cmp(reg_tmp, 0);
     b(EQ, skip_zeroing);
 
     ZRegS zero = ZRegS(0);
@@ -3333,28 +3357,28 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
             * jcp.kw * jcp.kh * jcp.kd * jcp.typesize_out;
     Label icb_block_label, icb_block_label_cb;
     if (generate_icb_loop) {
-        mov(reg_kernel_org, reg_kernel);
+        xa_->mov(reg_kernel_org, reg_kernel);
 
-        ldr(reg_icb, ptr(param, GET_OFF(reduce_work)));
+        ldr(reg_icb, Xbyak_aarch64::ptr(param, GET_OFF(reduce_work)));
         L(icb_block_label);
     }
 
-    mov(reg_tmp, 0);
+    xa_->mov(reg_tmp, 0);
     L(zeroing_loop);
     {
         assert(jcp.oc_block * jcp.typesize_out
                 == cpu_isa_traits<sve_512>::vlen);
-        add(reg_ker_start_addr, reg_kernel, reg_tmp);
+        xa_->add(reg_ker_start_addr, reg_kernel, reg_tmp);
         for (int ic1 = 0; ic1 < jcp.ic_block; ic1++) {
             if (str_imm_check(ic1 * jcp.oc_block * jcp.typesize_out)) {
                 str(ZReg(0),
-                        ptr(reg_ker_start_addr,
+                        Xbyak_aarch64::ptr(reg_ker_start_addr,
                                 static_cast<int32_t>(VL_OFS(ic1 * jcp.oc_block
                                         * jcp.typesize_out))));
             } else {
                 add_imm(reg_add_tmp, reg_ker_start_addr,
                         ic1 * jcp.oc_block * jcp.typesize_out, reg_tmp_imm);
-                str(ZReg(0), ptr(reg_add_tmp));
+                str(ZReg(0), Xbyak_aarch64::ptr(reg_add_tmp));
             }
         }
 
@@ -3366,10 +3390,10 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::maybe_zero_kernel() {
     if (generate_icb_loop) {
         add_imm(reg_kernel, reg_kernel, kernel_block_bytes, reg_tmp_imm);
         sub_imm(reg_icb, reg_icb, jcp.ic_block, reg_tmp_imm);
-        cmp(reg_icb, 0);
+        xa_->cmp(reg_icb, 0);
         b(GT, icb_block_label);
 
-        mov(reg_kernel, reg_kernel_org);
+        xa_->mov(reg_kernel, reg_kernel_org);
     }
 
     L(skip_zeroing);
@@ -3379,27 +3403,27 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_2d() {
     assert(jcp.ndims == 4); // only supports 2d
     Label skip_bias, bias_loop;
 
-    ldr(reg_tmp, ptr(param, GET_OFF(flags)));
-    ldr(reg_bias, ptr(param, GET_OFF(bias)));
+    ldr(reg_tmp, Xbyak_aarch64::ptr(param, GET_OFF(flags)));
+    ldr(reg_bias, Xbyak_aarch64::ptr(param, GET_OFF(bias)));
     tst(reg_tmp, reg_tmp);
     b(NE, skip_bias);
 
-    ldr(ZReg(0), ptr(reg_bias));
+    ldr(ZReg(0), Xbyak_aarch64::ptr(reg_bias));
 
-    mov_imm(reg_oi, jcp.ow);
-    mov(reg_tmp, 0);
+    xa_->mov_imm(reg_oi, jcp.ow);
+    xa_->mov(reg_tmp, 0);
     L(bias_loop);
     {
-        add(reg_add_tmp, reg_output, reg_tmp);
-        ldr(ZReg(1), ptr(reg_add_tmp));
-        fadd(ZRegS(0), ZRegS(0), ZRegS(1));
+        xa_->add(reg_add_tmp, reg_output, reg_tmp);
+        ldr(ZReg(1), Xbyak_aarch64::ptr(reg_add_tmp));
+        xa_->fadd(ZRegS(0), ZRegS(0), ZRegS(1));
         const int oc_stride
                 = is_ddst_layout_nxc() ? jcp.ngroups * jcp.oc : jcp.oc_block;
         add_imm(reg_tmp, reg_tmp, jcp.typesize_out * oc_stride, reg_tmp_imm);
         subs(reg_oi, reg_oi, 1);
         b(GT, bias_loop);
     }
-    str(ZReg(0), ptr(reg_bias));
+    str(ZReg(0), Xbyak_aarch64::ptr(reg_bias));
 
     L(skip_bias);
 }
@@ -3408,42 +3432,42 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::bias_kernel_3d() {
     assert(jcp.ndims == 5); // only supports 3d
     Label skip_bias, bias_loop, skip_load_bias;
 
-    ldr(reg_tmp, ptr(param, GET_OFF(flags)));
+    ldr(reg_tmp, Xbyak_aarch64::ptr(param, GET_OFF(flags)));
     tst(reg_tmp, reg_tmp);
     b(NE, skip_bias);
 
-    ldr(reg_bias, ptr(param, GET_OFF(bias)));
-    ldr(reg_output, ptr(param, GET_OFF(dst)));
+    ldr(reg_bias, Xbyak_aarch64::ptr(param, GET_OFF(bias)));
+    ldr(reg_output, Xbyak_aarch64::ptr(param, GET_OFF(dst)));
     eor(ZRegS(1), reg_p_all_ones, ZRegS(1));
 
-    ldr(reg_tmp, ptr(param, GET_OFF(channel)));
-    cmp(reg_tmp, 0);
+    ldr(reg_tmp, Xbyak_aarch64::ptr(param, GET_OFF(channel)));
+    xa_->cmp(reg_tmp, 0);
     b(NE, skip_load_bias);
-    ldr(ZReg(1), ptr(reg_bias));
+    ldr(ZReg(1), Xbyak_aarch64::ptr(reg_bias));
 
     L(skip_load_bias);
 
-    ldr(reg_oi, ptr(param, GET_OFF(os_index_end)));
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(os_index_begin)));
+    ldr(reg_oi, Xbyak_aarch64::ptr(param, GET_OFF(os_index_end)));
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(os_index_begin)));
     subs(reg_oi, reg_oi, reg_tmp_imm);
     b(LE, skip_bias); // no iterations along depth dimension
 
     const size_t oc_mult
             = is_ddst_layout_nxc() ? jcp.ngroups * jcp.oc : jcp.oc_block;
-    mov_imm(reg_tmp, oc_mult * jcp.ow * jcp.oh * jcp.typesize_out);
-    mul(reg_oi, reg_oi, reg_tmp);
+    xa_->mov_imm(reg_tmp, oc_mult * jcp.ow * jcp.oh * jcp.typesize_out);
+    xa_->mul(reg_oi, reg_oi, reg_tmp);
 
-    mov(reg_tmp, 0);
+    xa_->mov(reg_tmp, 0);
     L(bias_loop);
     {
-        add(reg_add_tmp, reg_output, reg_tmp);
-        ldr(ZReg(0), ptr(reg_add_tmp));
-        fadd(ZRegS(1), ZRegS(1), ZRegS(0));
+        xa_->add(reg_add_tmp, reg_output, reg_tmp);
+        ldr(ZReg(0), Xbyak_aarch64::ptr(reg_add_tmp));
+        xa_->fadd(ZRegS(1), ZRegS(1), ZRegS(0));
         add_imm(reg_tmp, reg_tmp, oc_mult * jcp.typesize_out, reg_tmp_imm);
-        cmp(reg_tmp, reg_oi);
+        xa_->cmp(reg_tmp, reg_oi);
         b(LT, bias_loop);
     }
-    str(ZReg(1), ptr(reg_bias));
+    str(ZReg(1), Xbyak_aarch64::ptr(reg_bias));
 
     L(skip_bias);
 }
@@ -3477,15 +3501,15 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
             everyone_is(1, oh, stride_h, dilate_h)
                     && everyone_is(0, b_pad, t_pad)));
 
-    mov(reg_kh, kh);
-    mov(reg_oj, 0);
+    xa_->mov(reg_kh, kh);
+    xa_->mov(reg_oj, 0);
     /* Compute 'top' edge */
     if (t_pad > 0) {
         const int kh_range = 1 + (kh - 1) * dilate_h;
         const int overflow = nstl::max(0, kh - div_up(t_pad + ih, dilate_h));
         const int underflow = div_up(t_pad, dilate_h);
         const int initial_inp_ker_overlap = kh - overflow - underflow;
-        mov_imm(reg_kh, initial_inp_ker_overlap);
+        xa_->mov_imm(reg_kh, initial_inp_ker_overlap);
         add_imm(reg_kernel, reg_kernel,
                 jcp.typesize_out * underflow * kw * jcp.ic_block * jcp.oc_block,
                 reg_tmp_imm);
@@ -3494,7 +3518,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
             if (is_dilated) {
                 const int tail = t_pad % dilate_h;
                 const int shift = tail == 0 ? 0 : dilate_h - tail;
-                mov_imm(reg_tmp, shift);
+                xa_->mov_imm(reg_tmp, shift);
                 if (tail != 0)
                     add_imm(reg_input, reg_input,
                             jcp.typesize_in * shift * iw * inp_mult,
@@ -3516,7 +3540,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
                     sub_imm(reg_input, reg_input,
                             jcp.typesize_in * (dilate_h - 1) * iw * inp_mult,
                             reg_tmp_imm);
-                    mov(reg_tmp, 0);
+                    xa_->mov(reg_tmp, 0);
                 }
                 // kernel overlap only changes when (t_pad + oj) % dilate_h == 0
                 sub_imm(reg_kernel, reg_kernel,
@@ -3547,7 +3571,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
         if (kh_range
                 >= ih + (t_pad % stride_h == 0 ? stride_h : t_pad % stride_h)) {
             assert(!is_dilated);
-            mov_imm(reg_kh, ih);
+            xa_->mov_imm(reg_kh, ih);
             L(oh_tpad_tail_label);
             {
                 cmp_imm(reg_oj, oh, reg_tmp_imm);
@@ -3599,7 +3623,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
     b(GE, oh_label_end);
 
     /* Compute middle block(s) */
-    mov_imm(reg_kh, kh);
+    xa_->mov_imm(reg_kh, kh);
     L(oh_label);
     {
         compute_oh_step_disp();
@@ -3616,18 +3640,18 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
 
     /* Compute bottom edge */
     if (b_pad > 0) {
-        cmp(reg_oj, oh);
+        xa_->cmp(reg_oj, oh);
         b(GE, oh_bpad_label_end);
 
         if (is_dilated) {
-            mov_imm(reg_kh, kh - 1); // assumes unit stride for dilations
-            mov(reg_tmp, 0);
+            xa_->mov_imm(reg_kh, kh - 1); // assumes unit stride for dilations
+            xa_->mov(reg_tmp, 0);
         } else {
-            mov_imm(reg_kh, ihp - b_pad);
-            mov(reg_tmp, reg_oj);
-            mov_imm(reg_tmp_imm, stride_h);
-            mul(reg_tmp, reg_tmp, reg_tmp_imm);
-            sub(reg_kh, reg_kh, reg_tmp);
+            xa_->mov_imm(reg_kh, ihp - b_pad);
+            xa_->mov(reg_tmp, reg_oj);
+            xa_->mov_imm(reg_tmp_imm, stride_h);
+            xa_->mul(reg_tmp, reg_tmp, reg_tmp_imm);
+            xa_->sub(reg_kh, reg_kh, reg_tmp);
         }
         L(oh_bpad_label);
         {
@@ -3640,7 +3664,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32 ::
                 add_imm(reg_tmp, reg_tmp, 1, reg_tmp_imm);
                 cmp_imm(reg_tmp, dilate_h, reg_tmp_imm);
                 b(LT, oh_dilate_label_end);
-                mov(reg_tmp, 0);
+                xa_->mov(reg_tmp, 0);
             }
             subs_imm(reg_kh, reg_kh, stride_h, reg_tmp_imm);
             b(LE, oh_bpad_label_end);
@@ -3678,31 +3702,31 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
 
     if (jcp.with_bias) {
         Label skip_zero_bias;
-        ldr(reg_bias, ptr(param, GET_OFF(bias)));
-        ldr(reg_tmp, ptr(param, GET_OFF(channel)));
+        ldr(reg_bias, Xbyak_aarch64::ptr(param, GET_OFF(bias)));
+        ldr(reg_tmp, Xbyak_aarch64::ptr(param, GET_OFF(channel)));
         tst(reg_tmp, reg_tmp);
         b(EQ, skip_zero_bias);
-        ldr(reg_tmp, ptr(param, GET_OFF(flags)));
+        ldr(reg_tmp, Xbyak_aarch64::ptr(param, GET_OFF(flags)));
         tst(reg_tmp, reg_tmp);
         b(NE, skip_zero_bias);
         eor(ZRegS(1), reg_p_all_ones.b, ZRegS(1));
         str(ZReg(1),
-                ptr(reg_bias)); //vmovups(ptr[reg_bias], Zmm(1));
+                Xbyak_aarch64::ptr(reg_bias)); //vmovups(ptr[reg_bias], Zmm(1));
         L(skip_zero_bias);
     }
 
     /* Offset filter position to adjust for top padding */
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(kh_offset)));
-    add(reg_kernel, reg_kernel,
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(kh_offset)));
+    xa_->add(reg_kernel, reg_kernel,
             reg_tmp_imm); //add(reg_kernel, ptr[param + GET_OFF(kh_offset)]);
 
-    ldr(reg_oj, ptr(param, GET_OFF(os_index_begin)));
-    ldr(reg_kh, ptr(param, GET_OFF(kh_padding)));
+    ldr(reg_oj, Xbyak_aarch64::ptr(param, GET_OFF(os_index_begin)));
+    ldr(reg_kh, Xbyak_aarch64::ptr(param, GET_OFF(kh_padding)));
 
-    cmp(reg_kh, 0);
+    xa_->cmp(reg_kh, 0);
     b(LE, loop_end_label); // no iterations along kh
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(os_index_end)));
-    cmp(reg_oj,
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(os_index_end)));
+    xa_->cmp(reg_oj,
             reg_tmp_imm); //cmp(reg_oj, ptr[param + GET_OFF(os_index_end)]);
 
     b(GE, loop_end_label); // no iterations along height dimension
@@ -3728,8 +3752,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
 
         /* Final number of kernel elements that overlap with input */
         const int inp_ker_overlap = nstl::min(jcp.kh, jcp.ih);
-        mov_imm(reg_tmp_imm, inp_ker_overlap);
-        cmp(reg_kh, reg_tmp_imm);
+        xa_->mov_imm(reg_tmp_imm, inp_ker_overlap);
+        xa_->cmp(reg_kh, reg_tmp_imm);
 
         b(LE, common_block_label);
 
@@ -3751,7 +3775,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
         }
 
         /* Apply correction */
-        mov_imm(reg_kh, inp_ker_overlap);
+        xa_->mov_imm(reg_kh, inp_ker_overlap);
         b(common_block_label);
 
         L(top_padding_end_label);
@@ -3769,7 +3793,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
 
         /* Execute overlap correction between the filter and the initial
          * bottom padding region. */
-        mov_imm(reg_kh,
+        xa_->mov_imm(reg_kh,
                 jcp.ih + jcp.t_pad
                         - input_bottom_padding_overlap * jcp.stride_h);
         b(bottom_padding_end_label);
@@ -3789,8 +3813,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     add_imm(reg_output, reg_output, output_shift, reg_tmp_imm);
 
     add_imm(reg_oj, reg_oj, 1, reg_tmp_imm);
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(os_index_end)));
-    cmp(reg_oj,
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(os_index_end)));
+    xa_->cmp(reg_oj,
             reg_tmp_imm); //cmp(reg_oj, ptr[param + GET_OFF(os_index_end)]);
 
     b(LT, loop_begin_label);
@@ -3824,34 +3848,34 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     if (jcp.with_bias) bias_kernel_3d();
 
     /* initially offset 'kd' by f_pad */
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(kd_offset)));
-    add(reg_kernel, reg_kernel, reg_tmp_imm);
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(kd_offset)));
+    xa_->add(reg_kernel, reg_kernel, reg_tmp_imm);
 
-    ldr(reg_input_d, ptr(param, GET_OFF(src)));
-    ldr(reg_output_d, ptr(param, GET_OFF(dst)));
-    ldr(reg_d_index, ptr(param, GET_OFF(os_index_begin)));
-    ldr(reg_kd_count, ptr(param, GET_OFF(kd_padding)));
+    ldr(reg_input_d, Xbyak_aarch64::ptr(param, GET_OFF(src)));
+    ldr(reg_output_d, Xbyak_aarch64::ptr(param, GET_OFF(dst)));
+    ldr(reg_d_index, Xbyak_aarch64::ptr(param, GET_OFF(os_index_begin)));
+    ldr(reg_kd_count, Xbyak_aarch64::ptr(param, GET_OFF(kd_padding)));
 
-    cmp(reg_kd_count, 0);
+    xa_->cmp(reg_kd_count, 0);
     b(LE, loop_end_label); // no iterations along kd
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(os_index_end)));
-    cmp(reg_d_index, reg_tmp_imm);
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(os_index_end)));
+    xa_->cmp(reg_d_index, reg_tmp_imm);
     b(GE, loop_end_label); // no iterations along depth dimension
 
     L(d_loop_label);
 
-    mov(reg_input, reg_input_d);
-    mov(reg_output, reg_output_d);
+    xa_->mov(reg_input, reg_input_d);
+    xa_->mov(reg_output, reg_output_d);
 
-    mov(reg_input_d_org, reg_input_d);
-    mov(reg_output_d_org, reg_output_d);
-    mov(reg_d_index_org, reg_d_index);
+    xa_->mov(reg_input_d_org, reg_input_d);
+    xa_->mov(reg_output_d_org, reg_output_d);
+    xa_->mov(reg_d_index_org, reg_d_index);
 
     compute_oh_loop_common();
 
-    mov(reg_d_index, reg_d_index_org);
-    mov(reg_output_d, reg_output_d_org);
-    mov(reg_input_d, reg_input_d_org);
+    xa_->mov(reg_d_index, reg_d_index_org);
+    xa_->mov(reg_output_d, reg_output_d_org);
+    xa_->mov(reg_input_d, reg_input_d_org);
 
     /* Compute 'front' edge */
     if (jcp.f_pad > 0) {
@@ -3888,7 +3912,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
         }
 
         /* Apply correction */
-        mov_imm(reg_kd_count, inp_ker_overlap);
+        xa_->mov_imm(reg_kd_count, inp_ker_overlap);
         b(common_block_label);
 
         L(fpad_end_label);
@@ -3904,7 +3928,7 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
 
         /* Execute overlap correction between the filter and the initial
          * back_pad region. */
-        mov_imm(reg_kd_count,
+        xa_->mov_imm(reg_kd_count,
                 jcp.id + jcp.f_pad - input_backpad_overlap * jcp.stride_d);
         b(backpad_end_label);
 
@@ -3922,8 +3946,8 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::
     L(common_block_label);
     add_imm(reg_output_d, reg_output_d, output_shift, reg_tmp_imm);
     add_imm(reg_d_index, reg_d_index, 1, reg_tmp_imm);
-    ldr(reg_tmp_imm, ptr(param, GET_OFF(os_index_end)));
-    cmp(reg_d_index, reg_tmp_imm);
+    ldr(reg_tmp_imm, Xbyak_aarch64::ptr(param, GET_OFF(os_index_end)));
+    xa_->cmp(reg_d_index, reg_tmp_imm);
     b(LT, d_loop_label);
 
     L(loop_end_label);
@@ -3946,9 +3970,9 @@ void jit_aarch64_sve_512_conv_bwd_weights_kernel_f32::generate_kernel() {
     preamble();
     ptrue(reg_p_all_ones.b);
 
-    ldr(reg_input, ptr(param, GET_OFF(src)));
-    ldr(reg_output, ptr(param, GET_OFF(dst)));
-    ldr(reg_kernel, ptr(param, GET_OFF(filt)));
+    ldr(reg_input, Xbyak_aarch64::ptr(param, GET_OFF(src)));
+    ldr(reg_output, Xbyak_aarch64::ptr(param, GET_OFF(dst)));
+    ldr(reg_kernel, Xbyak_aarch64::ptr(param, GET_OFF(filt)));
 
     compute_loop();
 
