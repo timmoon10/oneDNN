@@ -108,6 +108,11 @@ struct jit_t : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_t)
 };
 
+void barrier(ctx_t *ctx, int nthr) {
+    static jit_t j; /* XXX: constructed on load ... */
+    j(ctx, nthr);
+}
+
 } // namespace simple_barrier
 
 } // namespace aarch64

@@ -94,6 +94,18 @@ private:
             + vreg_to_preserve * vreg_len_preserve;
 
 public:
+    enum {
+        _cmp_eq_oq = 0u,
+        _cmp_lt_os = 1u,
+        _cmp_le_os = 2u,
+        _cmp_neq_uq = 4u,
+        _cmp_nlt_us = 5u,
+        _cmp_nle_us = 6u,
+
+        _op_floor = 1u,
+        _op_mxcsr = 4u,
+    };
+
     const Xbyak_aarch64::WReg W_TMP_0 = w23;
     const Xbyak_aarch64::WReg W_TMP_1 = w24;
     const Xbyak_aarch64::WReg W_TMP_2 = w25;
@@ -114,6 +126,10 @@ public:
     const Xbyak_aarch64::PReg P_MSB_256 = p13;
     const Xbyak_aarch64::PReg P_MSB_384 = p14;
     const Xbyak_aarch64::PReg P_ALL_ONE = p15;
+
+    const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
+            = {X_TMP_0, X_TMP_1, X_TMP_2, X_TMP_3, X_TMP_4};
+    constexpr static int x_tmp_vec_size = 5;
 
     const Xbyak_aarch64::XReg param1 = abi_param1;
     constexpr static size_t translator_stack_offset = 1024 * 128;
@@ -287,8 +303,9 @@ public:
 
 public:
     jit_generator(void *code_ptr = nullptr, size_t code_size = MAX_CODE_SIZE,
-            bool use_autogrow = true)
-        : Xbyak_aarch64::CodeGenerator(code_size, code_ptr) {}
+            bool use_autogrow = true, cpu_isa_t max_cpu_isa = isa_all)
+        : Xbyak_aarch64::CodeGenerator(code_size, code_ptr)
+        , max_cpu_isa_(max_cpu_isa) {}
     virtual ~jit_generator() {}
 
     virtual const char *name() const = 0;
@@ -314,6 +331,7 @@ public:
     }
 
 private:
+    const cpu_isa_t max_cpu_isa_;
     const uint8_t *getCode() {
         this->ready();
         if (!is_initialized()) return nullptr;
