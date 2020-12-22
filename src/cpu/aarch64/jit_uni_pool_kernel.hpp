@@ -28,8 +28,6 @@
 #include "common/utils.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
-#include "cpu/aarch64/injectors/jit_uni_binary_injector.hpp"
-#include "cpu/aarch64/injectors/jit_uni_postops_injector.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
 #define IDX(a) static_cast<uint32_t>(a.getIdx())
@@ -204,14 +202,8 @@ private:
 
     void generate() override;
 
-    void apply_postops(int ur_bc, int ur_w, int c_block,
-            const std::function<bool(int)> &is_tail_predicate);
-
     static bool post_ops_ok(jit_pool_conf_t &jpp, const primitive_attr_t &attr,
             const memory_desc_wrapper &dst_d);
-
-    std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
-            postops_injector_;
 };
 
 } // namespace aarch64

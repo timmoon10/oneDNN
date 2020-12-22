@@ -75,10 +75,10 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     // maskmovdqu and maskmovq instructions which has its destination hardcoded in rdi.
     // Windows ABI: abi_param1 is rcx - nothing to do else
     // Unix ABI: abi_param1 is rdi - copy it to rcx and use it as abi_param1
-    XReg reg_param = x3; // Our "unified abi_param1"
+    XReg reg_param = x0; // Our "unified abi_param1"
     XReg reg_ptr_src_i8 = x4;
     XReg reg_ptr_dst_i8 = x5;
-    XReg reg_ptr_maskmovdqu_dst = x0; // store destination - must be rdi
+    XReg reg_ptr_maskmovdqu_dst = x3; // store destination - must be rdi
 
     XReg reg_kd_index
             = x0; // shared with reg_ptr_maskmovdqu_dst; only used before store
@@ -152,9 +152,9 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
             postops_injector_;
 
-    enum : int { max_vidx_base = 7 };
+    enum : int { max_vidx_base = 2 };
     //"avg" pool uses more registers for unrolling.
-    enum : int { avg_vidx_base = 4 };
+    enum : int { avg_vidx_base = 2 };
 
     TReg max_base_vr(int idx) const { return vreg(max_vidx_base + idx); }
     TReg avg_base_vr(int idx) const { return vreg(avg_vidx_base + idx); }
@@ -227,42 +227,7 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
             const jit_pool_conf_t &jpp_, const memory_desc_t *dst_md)
         : jit_generator(nullptr, MAX_CODE_SIZE, true, isa)
         , jpp(jpp_)
-        , postops_injector_(nullptr) {
-
-        if (jpp.with_postops) {
-
-            const int simd_w = cpu_isa_traits<isa>::vlen / sizeof(float);
-            const std::size_t c_tail_elems = jpp.c % simd_w;
-            post_op_tail_opmask_idx_ = 0;
-            if (c_tail_elems) {
-                for (int ll = max_num_ll - 1; ll >= 0; ll--) {
-                    if (jpp.tail[ll] != 0) {
-                        post_op_tail_opmask_idx_ = ll;
-                        break;
-                    }
-                }
-            };
-
-            static constexpr bool use_per_oc_spatial_strategy = false;
-            static constexpr bool preserve_gpr = true;
-            static constexpr bool preserve_vmm = true;
-            static constexpr bool use_exact_tail_scalar_bcast = false;
-            static constexpr std::size_t tmp_vmm_injector = 0u;
-
-            const binary_injector::rhs_arg_static_params_t rhs_sp {
-                    tmp_vmm_injector, x7, x14, preserve_gpr, preserve_vmm,
-                    GET_OFF(post_ops_binary_rhs_arg_vec),
-                    memory_desc_wrapper(*dst_md), c_tail_elems,
-                    mask(post_op_tail_opmask_idx_),
-                    use_exact_tail_scalar_bcast};
-            const binary_injector::static_params_t bsp {
-                    reg_param, use_per_oc_spatial_strategy, rhs_sp};
-
-            postops_injector_ = utils::make_unique<
-                    injector::jit_uni_postops_injector_t<isa>>(
-                    this, jpp.post_ops, bsp);
-        }
-    }
+        , postops_injector_(nullptr) {}
 };
 
 template <>
@@ -1091,17 +1056,7 @@ void jit_uni_i8i8_pooling_fwd_ker_t<isa>::generate() {
     ptrue(p_512.b);
     ptrue(p_256.b, VL32);
     ptrue(p_128.b, VL16);
-    if (cpu_isa_traits<isa>::vlen == 32) {
-        p_lsb = p_256;
-    } else if (cpu_isa_traits<isa>::vlen == 16) {
-        p_lsb = p_128;
-    }
 
-#if !defined(_WIN32)
-    // Always use rcx as abi_param1 -
-    // see the note about maskmovdqu/maskmovq near reg_param.
-    mov(XReg(3), XReg(0));
-#endif
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, src_i8), x_tmp_0);
     ldr(reg_ptr_src_i8, ptr(x_tmp_addr));
     add_imm(x_tmp_addr, reg_param, offsetof(call_params_t, dst_i8), x_tmp_0);
@@ -1251,30 +1206,7 @@ bool jit_uni_i8i8_pooling_fwd_ker_t<isa>::post_ops_ok(jit_pool_conf_t &jpp,
     jpp.with_eltwise = false;
     jpp.with_binary = false;
 
-    if (entries.empty()) return true;
-
-    for (const auto &entry : entries) {
-        if (entry.is_eltwise()) {
-            jpp.with_eltwise = true;
-        } else if (entry.is_binary()) {
-            if (isa != sve_512
-                    && entry.binary.src1_desc.data_type == data_type::bf16)
-                return false;
-            jpp.with_binary = true;
-        } else
-            return false;
-    }
-
-    jpp.with_postops = jpp.with_eltwise || jpp.with_binary;
-    jpp.post_ops = post_ops;
-
-    /*
-     * TODO Currently eltwise/binary injectors assumes that data in vmm has f32 dt.
-     * In max pooling data remains in i8 data type.
-     */
-    return IMPLICATION(jpp.with_postops, jpp.alg != pooling_max)
-            && binary_injector::binary_args_broadcast_supported(
-                    post_ops, dst_d);
+    return entries.empty() ? true : false;
 }
 
 template <cpu_isa_t isa>

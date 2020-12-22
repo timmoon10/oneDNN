@@ -550,8 +550,6 @@ void jit_uni_pooling_fwd_t<isa, d_type>::execute_forward(const data_t *src,
     const auto ind_dt_size
             = indices ? types::data_type_size(indices_d.data_type()) : 0;
     const auto &jpp = pd()->jpp_;
-    const auto post_ops_binary_rhs_arg_vec
-            = binary_injector::prepare_binary_args(jpp.post_ops, ctx);
 
     using wsp_data_t = typename prec_traits<wsp_dt_>::type;
     using namespace jit_uni_pooling_utils;
@@ -608,7 +606,6 @@ void jit_uni_pooling_fwd_t<isa, d_type>::execute_forward(const data_t *src,
                 - nstl::max(0, jpp.t_pad - oh * jpp.stride_h));
         arg.ur_bc = ur_bc;
         arg.b_c = b_c;
-        arg.post_ops_binary_rhs_arg_vec = post_ops_binary_rhs_arg_vec.data();
         arg.c_elem_off = c_elem_off;
         (*kernel_)(&arg);
     };
@@ -668,8 +665,6 @@ void jit_uni_pooling_fwd_t<isa, d_type>::execute_forward_3d(const data_t *src,
     const memory_desc_wrapper indices_d(pd()->workspace_md());
     const size_t ind_dt_size
             = indices ? types::data_type_size(indices_d.data_type()) : 0;
-    const auto post_ops_binary_rhs_arg_vec
-            = binary_injector::prepare_binary_args(jpp.post_ops, ctx);
 
     using wsp_data_t = typename prec_traits<wsp_dt_>::type;
     using namespace jit_uni_pooling_utils;
@@ -735,7 +730,6 @@ void jit_uni_pooling_fwd_t<isa, d_type>::execute_forward_3d(const data_t *src,
 
         arg.ur_bc = ur_bc;
         arg.b_c = b_c;
-        arg.post_ops_binary_rhs_arg_vec = post_ops_binary_rhs_arg_vec.data();
         arg.c_elem_off = jpp.c_block * b_c;
         (*kernel_)(&arg);
     };
