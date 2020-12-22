@@ -1,6 +1,7 @@
 /*******************************************************************************
 * Copyright 2017-2020 Intel Corporation
 * Copyright 2018 YANDEX LLC
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -92,10 +93,10 @@ private:
     }
 
     const std::vector<uint32_t> tmp_vec_idx = {4, 5, 6, 7};
-    ZReg z_tmp0 = ZReg(4);
-    ZReg z_tmp1 = ZReg(5);
-    ZReg z_tmp2 = ZReg(6);
-    ZReg z_tmp3 = ZReg(7);
+    ZReg z_tmp0 = z4;
+    ZReg z_tmp1 = z5;
+    ZReg z_tmp2 = z6;
+    ZReg z_tmp3 = z7;
 
     PReg k_c_tail_mask = p4;
     PReg k_mask_cvt = p5;
@@ -202,32 +203,6 @@ private:
     }
 
     void generate() override;
-
-    void avx_vpadd1(const ZReg &y0, const VReg &x1, const VReg &xtmp) {
-        assert(false /*function should not be used*/);
-    }
-
-    void avx_vpadd1(const VReg &x0, const VReg &x1, const VReg &) {
-        assert(false /*function should not be used*/);
-    }
-
-    void avx_pmovzxbd(const ZReg &y0, const VReg &x1, const VReg &xtmp) {
-        assert(false /*function should not be used*/);
-    }
-
-    void avx_pmovzxbd(const VReg &x0, const VReg &x1, const VReg &) {
-        assert(false /*function should not be used*/);
-    }
-
-    void avx_pcmpeqd(
-            const ZReg &y0, const ZReg &y1, const ZReg &y2, const VReg &xtmp) {
-        assert(false /*function should not be used*/);
-    }
-
-    void avx_pcmpeqd(
-            const VReg &x0, const VReg &x1, const VReg &, const VReg &) {
-        assert(false /*function should not be used*/);
-    }
 
     void apply_postops(int ur_bc, int ur_w, int c_block,
             const std::function<bool(int)> &is_tail_predicate);

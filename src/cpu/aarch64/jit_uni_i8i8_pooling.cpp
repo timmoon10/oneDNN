@@ -75,49 +75,49 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
     // maskmovdqu and maskmovq instructions which has its destination hardcoded in rdi.
     // Windows ABI: abi_param1 is rcx - nothing to do else
     // Unix ABI: abi_param1 is rdi - copy it to rcx and use it as abi_param1
-    XReg reg_param = XReg(3); // Our "unified abi_param1"
-    XReg reg_ptr_src_i8 = XReg(4);
-    XReg reg_ptr_dst_i8 = XReg(5);
-    XReg reg_ptr_maskmovdqu_dst = XReg(0); // store destination - must be rdi
+    XReg reg_param = x3; // Our "unified abi_param1"
+    XReg reg_ptr_src_i8 = x4;
+    XReg reg_ptr_dst_i8 = x5;
+    XReg reg_ptr_maskmovdqu_dst = x0; // store destination - must be rdi
 
-    XReg reg_kd_index = XReg(
-            0); // shared with reg_ptr_maskmovdqu_dst; only used before store
-    XReg reg_kh_index = XReg(11);
-    XReg reg_kw_index = XReg(10);
-    XReg reg_kd = XReg(14);
-    XReg reg_kh = XReg(13);
-    XReg reg_kw = XReg(12);
-    XReg c_iter = XReg(15); // shared with reg_mask; only used after mask init
+    XReg reg_kd_index
+            = x0; // shared with reg_ptr_maskmovdqu_dst; only used before store
+    XReg reg_kh_index = x11;
+    XReg reg_kw_index = x10;
+    XReg reg_kd = x14;
+    XReg reg_kh = x13;
+    XReg reg_kw = x12;
+    XReg c_iter = x15; // shared with reg_mask; only used after mask init
 
-    XReg aux_reg_src_d = XReg(
-            2); // shared with reg_tmp; loaded before each accum loop, unused during store
-    XReg aux_reg_src_h = XReg(7);
-    XReg aux_reg_src_w = XReg(1);
+    XReg aux_reg_src_d
+            = x2; // shared with reg_tmp; loaded before each accum loop, unused during store
+    XReg aux_reg_src_h = x7;
+    XReg aux_reg_src_w = x1;
 
-    XReg reg_tmp = XReg(2); // only used during mask init and store
-    XReg reg_src_safe_access = XReg(9);
-    XReg reg_dst_safe_access = XReg(1);
+    XReg reg_tmp = x2; // only used during mask init and store
+    XReg reg_src_safe_access = x9;
+    XReg reg_dst_safe_access = x1;
 
     XReg reg_mask = XReg(15); // only used during mask init
 
-    XReg X_TRANSLATOR_STACK = XReg(22);
-    XReg x_tmp_addr = XReg(28);
-    XReg x_tmp_0 = XReg(23);
+    XReg X_TRANSLATOR_STACK = x22;
+    XReg x_tmp_addr = x28;
+    XReg x_tmp_0 = x23;
 
-    PReg k_cmp_mask = PReg(7);
+    PReg k_cmp_mask = p7;
 
     PReg mask(int idx) { return PReg(6 - idx); } /* 6, 5, 4, 3 */
 
-    PReg p_256 = PReg(1);
-    PReg p_512 = PReg(2);
-    PReg p_tmp0 = PReg(8);
-    PReg p_128 = PReg(0);
-    PReg p_lsb = PReg(2);
-    PReg p_tmp1 = PReg(11);
-    PReg p_tmp2 = PReg(12);
-    PReg P_MSB_256 = PReg(13);
-    PReg P_MSB_384 = PReg(14);
-    PReg P_ALL_ONE = PReg(15);
+    PReg p_256 = p1;
+    PReg p_512 = p2;
+    PReg p_tmp0 = p8;
+    PReg p_128 = p0;
+    PReg p_lsb = p2;
+    PReg p_tmp1 = p11;
+    PReg p_tmp2 = p12;
+    PReg P_MSB_256 = p13;
+    PReg P_MSB_384 = p14;
+    PReg P_ALL_ONE = p15;
 
     // ref to any of XYZ-regs via xreg/yreg/vreg functions
     VReg xmm_tmp = xreg(0); // temp to init vreg_tmp
@@ -142,19 +142,19 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
 
     TReg vreg_mask_q = vreg(3); // "avg" - 1/4 part for non-zero tails
 
-    ZReg z_tmp0 = ZReg(24);
-    ZReg z_tmp1 = ZReg(25);
-    ZReg z_tmp2 = ZReg(26);
-    ZReg z_tmp3 = ZReg(27);
+    ZReg z_tmp0 = z24;
+    ZReg z_tmp1 = z25;
+    ZReg z_tmp2 = z26;
+    ZReg z_tmp3 = z27;
 
     int post_op_tail_opmask_idx_ = -1;
     jit_pool_conf_t jpp;
     std::unique_ptr<injector::jit_uni_postops_injector_t<isa>>
             postops_injector_;
 
-    enum : int { max_vidx_base = utils::one_of(isa, asimd, sve_256) ? 7 : 2 };
+    enum : int { max_vidx_base = 7 };
     //"avg" pool uses more registers for unrolling.
-    enum : int { avg_vidx_base = utils::one_of(isa, asimd, sve_256) ? 4 : 2 };
+    enum : int { avg_vidx_base = 4 };
 
     TReg max_base_vr(int idx) const { return vreg(max_vidx_base + idx); }
     TReg avg_base_vr(int idx) const { return vreg(avg_vidx_base + idx); }
@@ -250,8 +250,8 @@ struct jit_uni_i8i8_pooling_fwd_ker_t : public jit_generator {
             static constexpr std::size_t tmp_vmm_injector = 0u;
 
             const binary_injector::rhs_arg_static_params_t rhs_sp {
-                    tmp_vmm_injector, XReg(7), XReg(14), preserve_gpr,
-                    preserve_vmm, GET_OFF(post_ops_binary_rhs_arg_vec),
+                    tmp_vmm_injector, x7, x14, preserve_gpr, preserve_vmm,
+                    GET_OFF(post_ops_binary_rhs_arg_vec),
                     memory_desc_wrapper(*dst_md), c_tail_elems,
                     mask(post_op_tail_opmask_idx_),
                     use_exact_tail_scalar_bcast};

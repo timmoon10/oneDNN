@@ -1,5 +1,7 @@
 /*******************************************************************************
-*Copyright 2017 - 2020 Intel Corporation *
+* Copyright 2017 - 2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
+*
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
 * You may obtain a copy of the License at
@@ -12,6 +14,7 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 *******************************************************************************/
+
 #include <functional>
 #include <new>
 #include "dnnl_types.h"
@@ -21,7 +24,6 @@
 #include "common/nstl.hpp"
 #include "common/type_helpers.hpp"
 
-//#include "cpu/x64/jit_uni_pooling.hpp"
 #include "cpu/aarch64/jit_uni_pooling.hpp"
 
 namespace dnnl {
@@ -42,10 +44,7 @@ struct trans_wrapper_t {
         , nb_y_(ysize / 8)
         , x_tail_(xsize % 8)
         , y_tail_(ysize % 8) {
-        //using namespace cpu::x64::tr;
-        //using namespace cpu::aarch64;
         using namespace cpu::aarch64::tr;
-        //using namespace tr;
 
         auto create_ker = [=](dim_t ys, dim_t y_inp_str, dim_t y_out_str,
                                   dim_t xs, dim_t x_inp_str, dim_t x_out_str) {
@@ -1223,12 +1222,7 @@ void jit_uni_pooling_bwd_t<isa, d_type>::execute_backward_3d(
         }
     }
 }
-//template struct jit_uni_pooling_fwd_t<asimd, data_type::f32>;
-//template struct jit_uni_pooling_bwd_t<asimd, data_type::f32>;
-//template struct jit_uni_pooling_fwd_t<sve_128, data_type::f32>;
-//template struct jit_uni_pooling_bwd_t<sve_128, data_type::f32>;
-//template struct jit_uni_pooling_fwd_t<sve_256, data_type::f32>;
-//template struct jit_uni_pooling_bwd_t<sve_256, data_type::f32>;
+
 template struct jit_uni_pooling_fwd_t<sve_512, data_type::f32>;
 template struct jit_uni_pooling_bwd_t<sve_512, data_type::f32>;
 
