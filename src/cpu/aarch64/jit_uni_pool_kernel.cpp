@@ -97,11 +97,10 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
     jpp.ow = dst_d.dims()[ndims - 1];
     jpp.oh = (ndims == 3) ? 1 : dst_d.dims()[ndims - 2];
 
-    const bool is_avx512 = utils::one_of(isa, sve_512);
     jpp.ndims = ndims;
     jpp.mb = src_d.dims()[0];
     jpp.c_without_padding = src_d.dims()[1];
-    jpp.c_block = is_avx512 ? 16 : 8;
+    jpp.c_block = 16;
 
     jpp.alg = pd.alg_kind;
 
@@ -210,21 +209,21 @@ status_t jit_uni_pool_kernel<isa>::init_conf(jit_pool_conf_t &jpp,
 
     jpp.ur = 0;
     if (jpp.alg == pooling_max) {
-        jpp.ur = is_avx512 ? 16 : 4;
+        jpp.ur = 16;
 
         if ((isa == sve_128 || isa == sve_256) && jpp.c_tail > 0)
             // Additional register needed for tail mask
             jpp.ur -= 1;
 
         if (jpp.is_training)
-            jpp.ur = is_avx512 ? 9 : 3;
+            jpp.ur = 9;
         else if (jpp.is_backward)
-            jpp.ur = is_avx512 ? 6 : 3;
+            jpp.ur = 6;
     } else {
         if (jpp.is_backward)
-            jpp.ur = is_avx512 ? 12 : 6;
+            jpp.ur = 12;
         else
-            jpp.ur = is_avx512 ? 24 : 12;
+            jpp.ur = 24;
     }
     if (jpp.is_bf16) {
         jpp.ur = (!isa_has_bf16(jpp.isa))

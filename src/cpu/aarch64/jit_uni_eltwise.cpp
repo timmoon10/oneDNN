@@ -21,7 +21,6 @@
 #include "common/nstl.hpp"
 #include "common/utils.hpp"
 
-//#include "cpu/aarch64/jit_avx512_core_bf16cvt.hpp"
 #include "cpu/aarch64/jit_generator.hpp"
 
 #include "cpu/aarch64/injectors/jit_uni_eltwise_injector.hpp"
@@ -65,7 +64,6 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_kernel)
 
     jit_uni_kernel_t(const eltwise_pd_t *pd) : jit_uni_eltwise_kernel(pd) {
-
         const auto &desc = *pd_->desc();
         // there's no auxiliary vregs on fwd path
         const bool is_fwd = pd_->is_fwd();
@@ -80,7 +78,6 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         preamble();
 
         XReg param = param1;
-
         add_imm(X_TMP_0, param, GET_OFF(src), X_TMP_1);
         ldr(reg_src, ptr(X_TMP_0));
         add_imm(X_TMP_0, param, GET_OFF(dst), X_TMP_1);
@@ -91,16 +88,13 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         }
         add_imm(X_TMP_0, param, GET_OFF(work_amount), X_TMP_1);
         ldr(reg_work_amount, ptr(X_TMP_0));
-
         eltwise_injector_->load_table_addr();
-
         ptrue(p_512.b);
 
         Label reminder_loop_start, reminder_loop_end;
         Label vectorized_loop_start, vectorized_loop_end;
 
-        mov_imm(X_TMP_0, simd_w());
-        cmp(reg_work_amount, X_TMP_0);
+        cmp(reg_work_amount, simd_w());
         b(LT, reminder_loop_start);
 
         L(vectorized_loop_start);
@@ -115,58 +109,40 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         // there's a restriction on certain blocked layouts, when this behavior
         // can be relevantly easy controlled, this will cost much from code
         // perspective and will complicate the compute logic significantly.
-        if (true) {
-            ldr(ZReg(IDX(vmm_src)), ptr(reg_src));
-            eltwise_injector_->compute_vector(vmm_src.getIdx());
-            if (!is_fwd) {
-                ldr(ZReg(IDX(vmm_diff_dst)), ptr(reg_diff_dst));
-                fmul(vmm_src, vmm_src, vmm_diff_dst);
-            }
-            str(ZReg(IDX(vmm_src)), ptr(reg_dst));
+        ldr(vmm_src, ptr(reg_src));
+        eltwise_injector_->compute_vector(vmm_src.getIdx());
+        if (!is_fwd) {
+            ldr(ZReg(vmm_diff_dst.getIdx()), ptr(reg_diff_dst));
+            fmul(vmm_src.s, vmm_src.s, vmm_diff_dst);
         }
+        str(vmm_src, ptr(reg_dst));
 
-        const auto shift = vlen();
+        const auto shift = cpu_isa_traits<isa>::vlen;
         add_imm(reg_src, reg_src, shift, X_TMP_0);
         add_imm(reg_dst, reg_dst, shift, X_TMP_0);
         if (!is_fwd) add_imm(reg_diff_dst, reg_diff_dst, shift, X_TMP_0);
 
         sub_imm(reg_work_amount, reg_work_amount, simd_w(), X_TMP_0);
-        mov_imm(X_TMP_0, simd_w());
-        cmp(reg_work_amount, X_TMP_0);
+        cmp(reg_work_amount, simd_w());
         b(GE, vectorized_loop_start);
 
         L(vectorized_loop_end);
 
         L(reminder_loop_start);
 
-        mov_imm(X_TMP_0, 0);
-        cmp(reg_work_amount, X_TMP_0);
+        cmp(reg_work_amount, 0);
         b(LE, reminder_loop_end);
 
-        if (true) {
-            ptrue(PRegS(IDX(p_tmp0)), VL4);
-            ldr(W_TMP_0, ptr(reg_src));
-            mov(ZRegS(IDX(xmm_src)), p_tmp0 / T_m, 0);
-            ptrue(PRegS(IDX(p_tmp0)), VL1);
-            mov(ZRegS(IDX(xmm_src)), p_tmp0 / T_m, W_TMP_0);
+        ld1(xmm_src[0], ptr(reg_src));
+        eltwise_injector_->compute_vector(xmm_src.getIdx());
+        if (!is_fwd) {
+            ld1(xmm_diff_dst[0], ptr(reg_diff_dst));
 
-            eltwise_injector_->compute_vector(xmm_src.getIdx());
-
-            if (!is_fwd) {
-                ptrue(PRegS(IDX(p_tmp0)), VL4);
-                ldr(W_TMP_0, ptr(reg_diff_dst));
-                mov(ZRegS(IDX(xmm_diff_dst)), p_tmp0 / T_m, 0);
-                ptrue(PRegS(IDX(p_tmp0)), VL1);
-                mov(ZRegS(IDX(xmm_diff_dst)), p_tmp0 / T_m, W_TMP_0);
-
-                mov(ZRegD(IDX(X_TMP_0)), ZRegD(IDX(xmm_src)));
-                fmul(ZRegS(IDX(xmm_src)), ZRegS(IDX(xmm_src)),
-                        ZRegS(IDX(xmm_diff_dst)));
-                mov(ZRegS(IDX(xmm_src)), P_MSB_384 / T_m, ZRegS(IDX(X_TMP_0)));
-            }
-            ptrue(PRegS(IDX(p_tmp0)), VL1);
-            st1w(ZRegS(IDX(xmm_src)), p_tmp0, ptr(reg_dst));
+            mov(ZRegD(IDX(X_TMP_0)), vmm_src.d);
+            fmul(vmm_src.s, vmm_src.s, vmm_diff_dst);
+            mov(vmm_src.s, P_MSB_384 / T_m, ZRegS(IDX(X_TMP_0)));
         }
+        st1(xmm_src[0], ptr(reg_dst));
         add_imm(reg_src, reg_src, dtype_size(), X_TMP_0);
         add_imm(reg_dst, reg_dst, dtype_size(), X_TMP_0);
         if (!is_fwd) add_imm(reg_diff_dst, reg_diff_dst, dtype_size(), X_TMP_0);
@@ -182,13 +158,15 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
     }
 
 private:
+    using TReg = typename cpu_isa_traits<isa>::TReg;
     using TRegS = typename cpu_isa_traits<isa>::TRegS;
 
-    int vlen() {
-        int vlen = cpu_isa_traits<isa>::vlen;
-        return is_bf16() ? vlen / 2 : vlen;
+    int simd_w() {
+        int simd_w = cpu_isa_traits<isa>::vlen / dtype_size();
+        /* Return value is used for CMP (immediate). */
+        assert(simd_w < (1 << 12));
+        return simd_w;
     }
-    int simd_w() { return vlen() / dtype_size(); }
 
     XReg reg_src = x11;
     XReg reg_dst = x8;
@@ -199,7 +177,7 @@ private:
     PReg injector_mask = p1;
 
     VReg4S xmm_src {1};
-    TRegS vmm_src {1};
+    TReg vmm_src {1};
     VReg4S xmm_diff_dst {2};
     TRegS vmm_diff_dst {2};
     std::unique_ptr<jit_uni_eltwise_injector_f32<isa>> eltwise_injector_;
