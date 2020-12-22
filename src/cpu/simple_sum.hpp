@@ -24,6 +24,8 @@
 #include "cpu/cpu_sum_pd.hpp"
 #include "cpu/platform.hpp"
 
+#define MAX_NUM_SINGLE_SUM 4096
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
