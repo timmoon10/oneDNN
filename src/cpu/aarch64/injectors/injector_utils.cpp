@@ -17,24 +17,15 @@
 #include <numeric>
 #include "cpu/aarch64/injectors/injector_utils.hpp"
 
-#ifdef DNNL_AARCH64
-#define IDX(a) static_cast<uint32_t>(a.getIdx())
-#endif //#ifdef DNNL_AARCH64
-
 namespace dnnl {
 namespace impl {
 namespace cpu {
 namespace aarch64 {
 namespace injector_utils {
 
-namespace xa = Xbyak_aarch64;
-
 static std::size_t get_vmm_size_bytes(const Xbyak_aarch64::VReg &vmm) {
     static constexpr int byte_size_bits = 8;
-    if (mayiuse(sve_512))
-        return Xbyak_aarch64::ZReg(vmm.getIdx()).getBit() / byte_size_bits;
-    else
-        return vmm.getBit() / byte_size_bits;
+    return vmm.getBit() / byte_size_bits;
 }
 
 static std::size_t calc_vmm_to_preserve_size_bytes(
@@ -56,7 +47,7 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
               calc_vmm_to_preserve_size_bytes(vmm_to_preserve)) {
 
     for (const auto &reg : reg64_to_preserve)
-        host_->str(xa::XReg(reg), xa::pre_ptr(host_->X_TRANSLATOR_STACK, -8));
+        host_->str(reg, Xbyak_aarch64::pre_ptr(host_->X_TRANSLATOR_STACK, -8));
 
     if (!vmm_stack_.empty()) {
         host_->sub_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
@@ -64,15 +55,15 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
 
         auto stack_offset = vmm_to_preserve_size_bytes_;
         for (const auto &vmm : vmm_to_preserve) {
-            const auto idx = vmm.getIdx();
             stack_offset -= get_vmm_size_bytes(vmm);
+            const auto idx = vmm.getIdx();
 
-            if (mayiuse(sve_512)) {
-                host_->str(xa::ZReg(idx),
-                        xa::ptr(host_->X_SP, (int32_t)stack_offset));
+            if (vmm.getBit() > 16) {
+                host_->str(Xbyak_aarch64::ZReg(idx),
+                        Xbyak_aarch64::ptr(host_->X_SP, (int32_t)stack_offset));
             } else {
-                host_->str(xa::QReg(idx),
-                        xa::ptr(host_->X_SP, (int32_t)stack_offset));
+                host_->str(Xbyak_aarch64::QReg(idx),
+                        Xbyak_aarch64::ptr(host_->X_SP, (int32_t)stack_offset));
             }
         }
     }
@@ -81,30 +72,28 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
 register_preserve_guard_t::~register_preserve_guard_t() {
 
     auto tmp_stack_offset = 0;
-    int i = 0;
 
     while (!vmm_stack_.empty()) {
-        const xa::VReg &vmm = vmm_stack_.top();
+        const Xbyak_aarch64::VReg &vmm = vmm_stack_.top();
         const auto idx = vmm.getIdx();
-        if (mayiuse(sve_512))
-            host_->ldr(xa::ZReg(idx),
-                    xa::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
+        if (vmm.getBit() > 16)
+            host_->ldr(Xbyak_aarch64::ZReg(idx),
+                    Xbyak_aarch64::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
         else
-            host_->ldr(xa::QReg(idx),
-                    xa::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
+            host_->ldr(Xbyak_aarch64::QReg(idx),
+                    Xbyak_aarch64::ptr(host_->X_SP, (int32_t)tmp_stack_offset));
 
         tmp_stack_offset += get_vmm_size_bytes(vmm);
         vmm_stack_.pop();
     }
 
-    if (vmm_to_preserve_size_bytes_) {
+    if (vmm_to_preserve_size_bytes_)
         host_->add_imm(host_->X_SP, host_->X_SP, vmm_to_preserve_size_bytes_,
                 host_->X_TMP_0);
-    }
 
     while (!reg64_stack_.empty()) {
-        host_->ldr(xa::XReg(IDX(reg64_stack_.top())),
-                xa::post_ptr(host_->X_TRANSLATOR_STACK, 8));
+        host_->ldr(reg64_stack_.top(),
+                Xbyak_aarch64::post_ptr(host_->X_TRANSLATOR_STACK, 8));
         reg64_stack_.pop();
     }
 }
