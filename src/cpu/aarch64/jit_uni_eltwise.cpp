@@ -137,10 +137,7 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         eltwise_injector_->compute_vector(xmm_src.getIdx());
         if (!is_fwd) {
             ld1(xmm_diff_dst[0], ptr(reg_diff_dst));
-
-            mov(ZRegD(IDX(X_TMP_0)), vmm_src.d);
-            fmul(vmm_src.s, vmm_src.s, vmm_diff_dst);
-            mov(vmm_src.s, P_MSB_384 / T_m, ZRegS(IDX(X_TMP_0)));
+            fmul(xmm_src, xmm_src, xmm_diff_dst);
         }
         st1(xmm_src[0], ptr(reg_dst));
         add_imm(reg_src, reg_src, dtype_size(), X_TMP_0);
