@@ -22,6 +22,10 @@ file(GLOB SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/injectors/*.[ch]pp
     ${CMAKE_CURRENT_SOURCE_DIR}/jit_utils/*.[ch]
     ${CMAKE_CURRENT_SOURCE_DIR}/jit_utils/*.[ch]pp
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit_utils/linux_perf/*.[ch]
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit_utils/linux_perf/*.[ch]pp
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit_utils/jitprofiling/*.[ch]
+    ${CMAKE_CURRENT_SOURCE_DIR}/jit_utils/jitprofiling/*.[ch]pp
     )
 
 if(NOT DNNL_AARCH64_USE_ACL)
