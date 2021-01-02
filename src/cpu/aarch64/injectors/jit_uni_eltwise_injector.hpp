@@ -38,17 +38,23 @@ struct static_params_t {
 
     static_params_t(bool save_state = true,
             Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
-            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(0),
+            Xbyak_aarch64::PReg p_512 = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(2),
             bool is_fwd = true, bool use_dst = false)
         : save_state(save_state)
         , x_table(x_table)
         , p_mask(p_mask)
+        , p_512(p_512)
+        , p_tmp0(p_tmp0)
         , is_fwd(is_fwd)
         , use_dst(use_dst) {}
 
     bool save_state;
     Xbyak_aarch64::XReg x_table;
     Xbyak_aarch64::PReg p_mask;
+    Xbyak_aarch64::PReg p_512;
+    Xbyak_aarch64::PReg p_tmp0;
     bool is_fwd;
     bool use_dst;
 };
@@ -74,7 +80,9 @@ struct jit_uni_eltwise_injector_f32 {
     jit_uni_eltwise_injector_f32(jit_generator *host, alg_kind_t alg,
             float alpha, float beta, float scale, bool save_state = true,
             Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
-            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(0),
+            Xbyak_aarch64::PReg p_512 = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(2),
             bool is_fwd = true, bool use_dst = false)
         : alg_(alg)
         , alpha_(alpha)
@@ -84,6 +92,8 @@ struct jit_uni_eltwise_injector_f32 {
         , save_state_(save_state)
         , x_table(x_table)
         , p_mask(p_mask)
+        , p_512(p_512)
+        , p_tmp0(p_tmp0)
         , is_fwd_(is_fwd)
         , use_dst_(use_dst)
 
@@ -107,11 +117,13 @@ struct jit_uni_eltwise_injector_f32 {
             const post_ops_t::entry_t::eltwise_t &eltwise,
             bool save_state = true,
             Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
-            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(0),
+            Xbyak_aarch64::PReg p_512 = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(2),
             bool is_fwd = true, bool use_dst = false)
         : jit_uni_eltwise_injector_f32(host, eltwise.alg, eltwise.alpha,
-                eltwise.beta, eltwise.scale, save_state, x_table, p_mask,
-                is_fwd, use_dst) {}
+                eltwise.beta, eltwise.scale, save_state, x_table, p_mask, p_512,
+                p_tmp0, is_fwd, use_dst) {}
 
     void compute_vector_range(size_t start_idx, size_t end_idx);
     void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
@@ -130,6 +142,8 @@ private:
     const bool save_state_;
     const Xbyak_aarch64::XReg x_table;
     const Xbyak_aarch64::PReg p_mask;
+    const Xbyak_aarch64::PReg p_512;
+    const Xbyak_aarch64::PReg p_tmp0;
     const bool is_fwd_;
     const bool use_dst_;
 
@@ -167,13 +181,6 @@ private:
      This index is changed by assign_regs() in case of eltwise injection.
   */
     TRegS z_tmp {31};
-
-    /* Caution: Chose predicate registers not used by x64's implementation,
-       and register indices must be same as jit_uni_eltwise.cpp
-       and convolutions which uses eltwise_injector. */
-    Xbyak_aarch64::PReg p_lsb {7};
-    Xbyak_aarch64::PReg p_512 {7};
-    Xbyak_aarch64::PReg p_tmp0 {4};
 
     size_t aux_vecs_count();
     size_t aux_gprs_count();

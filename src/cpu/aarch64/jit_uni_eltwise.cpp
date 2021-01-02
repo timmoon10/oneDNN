@@ -71,7 +71,8 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         const bool save_state = is_fwd ? false : true;
         eltwise_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
                 desc.alg_kind, desc.alpha, desc.beta, 1.f, save_state,
-                reg_injector_table, injector_mask, is_fwd, pd_->use_dst()));
+                reg_injector_table, injector_mask, injector_512, injector_tmp0,
+                is_fwd, pd_->use_dst()));
     }
 
     void generate() override {
@@ -197,6 +198,8 @@ private:
     XReg reg_work_amount = x6;
     XReg imm_addr64 = x3;
     PReg injector_mask = p1;
+    PReg injector_512 = p2;
+    PReg injector_tmp0 = p3;
 
     VReg4S xmm_src {1};
     TRegS vmm_src {1};

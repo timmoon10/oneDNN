@@ -119,6 +119,8 @@ private:
     PReg P_MSB_256 = PReg(13);
     PReg P_MSB_384 = PReg(14);
     PReg P_ALL_ONE = PReg(15);
+    PReg p_injector = p0; // for injector
+    XReg x_table = x16; // for injector
 
     // Here be some (tame) dragons. This kernel does not follow the regular
     // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu

@@ -40,8 +40,8 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         if (post_op.is_eltwise()) {
             alg_to_eltwise_injector_.emplace(post_op.eltwise.alg,
                     jit_uni_eltwise_injector_f32<isa>(host_, post_op.eltwise,
-                            esp.save_state, esp.x_table, esp.p_mask, esp.is_fwd,
-                            esp.use_dst));
+                            esp.save_state, esp.x_table, esp.p_mask, esp.p_512,
+                            esp.p_tmp0, esp.is_fwd, esp.use_dst));
         } else if (post_op.is_binary()) {
             is_binary = true;
         }

@@ -93,7 +93,12 @@ struct jit_softmax_base_t : public jit_generator {
     WReg reg_tmp = w13;
 #endif
 
-    PReg injector_mask = PReg(1);
+    // PReg(2) is used by jit_softmax_t
+    const PReg p_512 = p3;
+    const PReg p_shuff0 = p11;
+    const PReg p_shuff1 = p5;
+    const PReg injector_mask = p1;
+    const PReg injector_tmp = p6;
 
     ZReg vtmp = ZReg(27); // assigned at placed where used
     ZReg tail_vmask = ZReg(0);
@@ -118,7 +123,6 @@ struct jit_softmax_base_t : public jit_generator {
     size_t axis_stride_;
 
     /* Caution: Chose predicate registers not used by x64's implementation. */
-    PReg p_512 {3};
     ZReg z_tmp0 = z23;
 
     void compute_predefined_variables() {
@@ -284,6 +288,35 @@ struct jit_softmax_base_t : public jit_generator {
         compute_diff_src();
     }
 
+    void prepare_mask() {
+        if (isa == sve_512) {
+            xa_->sub_imm(
+                    X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 64 * 3, X_TMP_0);
+            xa_->str(p_512, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 0, MUL_VL));
+            xa_->str(p_shuff0,
+                    Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 1, MUL_VL));
+            xa_->str(p_shuff1,
+                    Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 2, MUL_VL));
+            ptrue(p_512.b);
+            xa_->not_(P_TMP_1.b, P_ALL_ONE, P_ALL_ONE.b);
+            trn1(p_shuff0.d, P_ALL_ONE.d, P_TMP_1.d);
+            trn1(p_shuff0.d, p_shuff0.d, p_shuff0.d);
+            trn1(p_shuff1.s, P_ALL_ONE.s, P_TMP_1.s);
+        }
+    }
+
+    void restore_mask() {
+        if (isa == sve_512) {
+            xa_->ldr(p_512, Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 0, MUL_VL));
+            xa_->ldr(p_shuff0,
+                    Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 1, MUL_VL));
+            xa_->ldr(p_shuff1,
+                    Xbyak_aarch64::ptr(X_TRANSLATOR_STACK, 2, MUL_VL));
+            xa_->add_imm(
+                    X_TRANSLATOR_STACK, X_TRANSLATOR_STACK, 64 * 3, X_TMP_0);
+        }
+    }
+
     // either this stub or duplication at each jit_binary_t ctor due to methods
     // that are participated are not defined at the moment of base ctor
     // initialization.
@@ -291,18 +324,20 @@ struct jit_softmax_base_t : public jit_generator {
         if (pd_->is_fwd() || is_logsoftmax_)
             exp_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
                     alg_kind::eltwise_exp, 0.0f, 0.0f, 1.0f, true,
-                    reg_exp_injector_table, injector_mask));
+                    reg_exp_injector_table, injector_mask, p_512,
+                    injector_tmp));
         if (pd_->is_fwd() && is_logsoftmax_) {
             log_injector_.reset(new jit_uni_eltwise_injector_f32<isa>(this,
                     alg_kind::eltwise_log, 0.0f, 0.0f, 1.0f, true,
-                    reg_log_injector_table, injector_mask));
+                    reg_log_injector_table, injector_mask, p_512,
+                    injector_tmp));
         }
 
         compute_predefined_variables();
         preamble(true);
         initialization_hook();
 
-        if (isa == sve_512) ptrue(p_512.b);
+        prepare_mask();
 
         if (exp_injector_) exp_injector_->load_table_addr();
         if (log_injector_) log_injector_->load_table_addr();
@@ -313,6 +348,8 @@ struct jit_softmax_base_t : public jit_generator {
             forward();
         else
             backward();
+
+        restore_mask();
         postamble();
         if (exp_injector_) { exp_injector_->prepare_table(); }
         if (log_injector_) { log_injector_->prepare_table(); }
@@ -376,22 +413,18 @@ struct jit_softmax_t<sve_512> : public jit_softmax_base_t<sve_512> {
         xa_->mov(ZRegS(IDX(vtmp)), P_ALL_ONE, ZRegS(IDX(v)));
         ext(ZRegB(IDX(vtmp)), ZRegB(IDX(v)), 32);
         perform_op(v, vtmp, op);
-        xa_->not_(P_TMP_1.b, P_ALL_ONE, P_ALL_ONE.b);
-        trn1(P_TMP_0.d, P_ALL_ONE.d, P_TMP_1.d);
-        trn1(P_TMP_0.d, P_TMP_0.d, P_TMP_0.d);
         xa_->mov(ZRegS(IDX(vtmp)), P_ALL_ONE, ZRegS(IDX(v)));
         xa_->mov(z_tmp0.s, P_ALL_ONE, ZRegS(IDX(v)));
         ext(z_tmp0.b, ZRegB(IDX(v)), 48);
         ext(ZRegB(IDX(vtmp)), ZRegB(IDX(v)), 16);
-        xa_->mov(ZRegD(IDX(vtmp)), P_TMP_0 / Xbyak_aarch64::T_m, z_tmp0.d);
+        xa_->mov(ZRegD(IDX(vtmp)), p_shuff0 / Xbyak_aarch64::T_m, z_tmp0.d);
         perform_op(v, vtmp, op);
         uzp2(z_tmp0.d, ZRegD(IDX(v)), ZRegD(IDX(v)));
         trn1(ZRegD(IDX(vtmp)), z_tmp0.d, ZRegD(IDX(v)));
         perform_op(v, vtmp, op);
-        trn1(P_TMP_0.s, P_ALL_ONE.s, P_TMP_1.s);
         trn1(ZRegS(IDX(vtmp)), ZRegS(IDX(v)), ZRegS(IDX(v)));
         trn2(z_tmp0.s, ZRegS(IDX(v)), ZRegS(IDX(v)));
-        xa_->mov(ZRegS(IDX(vtmp)), P_TMP_0 / Xbyak_aarch64::T_m, z_tmp0.s);
+        xa_->mov(ZRegS(IDX(vtmp)), p_shuff1 / Xbyak_aarch64::T_m, z_tmp0.s);
         perform_op(v, vtmp, op);
     }
 
