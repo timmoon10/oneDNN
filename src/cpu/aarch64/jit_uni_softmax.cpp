@@ -178,11 +178,41 @@ struct jit_softmax_base_t : public jit_generator {
 
     void uni_fmax(const ZReg &dst, const ZReg &src, const ZReg &src2,
             const PReg &mask) {
-        xa_->mov(z_tmp0.s, P_ALL_ONE, ZRegS(IDX(src2)));
-        fmaxnm(z_tmp0.s, p_512, ZRegS(IDX(src)));
-        fmax(z_tmp0.s, p_512, ZRegS(IDX(src)));
-        xa_->mov(ZRegS(IDX(dst)), PReg(IDX(mask)) / Xbyak_aarch64::T_m,
-                z_tmp0.s);
+        const uint32_t idxDst = dst.getIdx();
+        const uint32_t idxSrc = src.getIdx();
+        const uint32_t idxSrc2 = src2.getIdx();
+        uint32_t pattern = 0;
+
+        pattern += (idxDst == idxSrc) ? (1 << 2) : 0;
+        pattern += (idxDst == idxSrc2) ? (1 << 1) : 0;
+        pattern += (idxSrc == idxSrc2) ? 1 : 0;
+
+        switch (pattern) {
+            case 0x4: /* dst = src && dst != src2 && src != src2
+		   This is the most popular case. */
+                fmax(dst.s, mask / Xbyak_aarch64::T_m, src2.s);
+                break;
+            default: assert(!"Unreachable!"); break;
+        }
+    }
+
+    void uni_fmax(const ZReg &dst, const ZReg &src, const ZReg &src2) {
+        const uint32_t idxDst = dst.getIdx();
+        const uint32_t idxSrc = src.getIdx();
+        const uint32_t idxSrc2 = src2.getIdx();
+        uint32_t pattern = 0;
+
+        pattern += (idxDst == idxSrc) ? (1 << 2) : 0;
+        pattern += (idxDst == idxSrc2) ? (1 << 1) : 0;
+        pattern += (idxSrc == idxSrc2) ? 1 : 0;
+
+        switch (pattern) {
+            case 0x4: /* dst = src && dst != src2 && src != src2
+		   This is the most popular case. */
+                fmax(dst.s, p_512 / Xbyak_aarch64::T_m, src2.s);
+                break;
+            default: assert(!"Unreachable!"); break;
+        }
     }
 
 #if 1
@@ -224,7 +254,7 @@ struct jit_softmax_base_t : public jit_generator {
 
     void perform_op(ZReg v, ZReg vtmp, op_t op) {
         if (op == op_t::max)
-            uni_fmax(v, v, vtmp, P_ALL_ONE);
+            uni_fmax(v, v, vtmp);
         else if (op == op_t::sum)
             xa_->fadd(ZRegS(IDX(v)), ZRegS(IDX(v)), ZRegS(IDX(vtmp)));
     }
@@ -439,7 +469,7 @@ struct jit_softmax_t<sve_512> : public jit_softmax_base_t<sve_512> {
                 if (tail)
                     uni_fmax(vmax, vmax, vreg_tmp_src, tail_opmask);
                 else
-                    uni_fmax(vmax, vmax, vreg_tmp_src, P_ALL_ONE);
+                    uni_fmax(vmax, vmax, vreg_tmp_src);
             }
         });
 
