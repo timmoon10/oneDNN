@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2018-2020 Intel Corporation
-* Copyright 2020 FUJITSU LIMITED
+* Copyright 2018-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -783,8 +783,16 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
                     assert(count <= z_tmp_vec_size);
                     /* Firstly, data is loaded. */
                     for (int i = 0; i < count; i++) {
-                        ldr(QReg(tmp_vec_idx[i]),
-                                Xbyak_aarch64::ptr(x_tmp_vec[i]));
+
+                        if (prb_.otype == f32 || prb_.otype == s32) {
+                            ldr(QReg(tmp_vec_idx[i]),
+                                    Xbyak_aarch64::ptr(x_tmp_vec[i])); // bug
+                        } else if (prb_.otype == data_type::s8
+                                || prb_.otype == u8) {
+                            ldr(SReg(tmp_vec_idx[i]),
+                                    Xbyak_aarch64::ptr(x_tmp_vec[i])); // bug
+                        } else
+                            assert(!"unreachable");
                     }
 
                     /* Secondly, it is added. */
@@ -1091,14 +1099,17 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
     }
 
     void cvt_z_b_s(const int startIdx, const int regNum) {
-        dup(z_tmp0.b, 0);
+        assert(z_tmp7.getIdx() < startIdx
+                || startIdx + regNum - 1 < z_tmp7.getIdx());
+
+        dup(z_tmp7.b, 0);
         for (int i = startIdx; i < startIdx + regNum; i++) {
             ZRegB tmp(i);
-            zip1(tmp, tmp, z_tmp0.b);
+            zip1(tmp, tmp, z_tmp7.b);
         }
         for (int i = startIdx; i < startIdx + regNum; i++) {
             ZRegH tmp(i);
-            zip1(tmp, tmp, z_tmp0.h);
+            zip1(tmp, tmp, z_tmp7.h);
         }
     }
 
@@ -1112,7 +1123,10 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
     }
 
     void cvt_z_s32_s8(const int startIdx, const int regNum) {
-        dup(z_tmp0.s, 0);
+        assert(z_tmp7.getIdx() < startIdx
+                || startIdx + regNum - 1 < z_tmp7.getIdx());
+
+        dup(z_tmp7.s, 0);
 
         for (int i = startIdx; i < startIdx + regNum; i++) {
             smin(ZRegS(i), 127);
@@ -1122,11 +1136,11 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
         }
         for (int i = startIdx; i < startIdx + regNum; i++) {
             ZRegH z(i);
-            uzp1(z, z, z_tmp0.h);
+            uzp1(z, z, z_tmp7.h);
         }
         for (int i = startIdx; i < startIdx + regNum; i++) {
             ZRegB z(i);
-            uzp1(z, z, z_tmp0.b);
+            uzp1(z, z, z_tmp7.b);
         }
     }
 
@@ -1150,13 +1164,15 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
     }
 
     void cvt_z_s32_u8(const int startIdx, const int regNum) {
-        dupm(z_tmp0.s, 255);
+        assert(z_tmp7.getIdx() < startIdx
+                || startIdx + regNum - 1 < z_tmp7.getIdx());
+        dupm(z_tmp7.s, 255);
 
         for (int i = startIdx; i < startIdx + regNum; i++)
             smax(ZRegS(i), 0);
 
         for (int i = startIdx; i < startIdx + regNum; i++)
-            smin(ZRegS(i), p_512 / T_m, z_tmp0.s);
+            smin(ZRegS(i), p_512 / T_m, z_tmp7.s);
 
         for (int i = startIdx; i < startIdx + regNum; i++) {
             ZRegH z(i);
@@ -1186,11 +1202,10 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
         preamble();
 #define PARAM(x) offsetof(call_param_t, x)
         if (prb_.scale_type == scale_type_t::COMMON) {
-            auto reg_ptr_scale_tmp = reg_ptr_in;
-            add_imm(X_TMP_0, abi_param1, PARAM(scale), X_TMP_1);
-            ldr(reg_ptr_scale_tmp, Xbyak_aarch64::ptr(X_TMP_0));
-            ldr(W_TMP_0, Xbyak_aarch64::ptr(reg_ptr_scale_tmp));
-            dup(xmm_scale, W_TMP_0);
+            add_imm(X_DEFAULT_ADDR, abi_param1, PARAM(scale), X_TMP_1);
+            ldr(X_TMP_0, Xbyak_aarch64::ptr(X_DEFAULT_ADDR));
+            ldr(W_TMP_1, Xbyak_aarch64::ptr(X_TMP_0));
+            dup(xmm_scale, W_TMP_1);
         } else if (prb_.scale_type == scale_type_t::MANY) {
             add_imm(X_DEFAULT_ADDR, abi_param1, PARAM(scale), X_TMP_0);
             ldr(reg_ptr_scale, Xbyak_aarch64::ptr(X_DEFAULT_ADDR));
