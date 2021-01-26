@@ -33,14 +33,14 @@ using namespace Xbyak_aarch64;
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
-        const injector_utils::vmm_index_set_t &vmm_idxs) {
+        const injector_utils::treg_index_set_t &treg_idxs) {
     using namespace alg_kind;
     using namespace Xbyak_aarch64::util;
     preserved_vecs_count = 0;
     vecs_to_preserve = aux_vecs_count();
-    const auto start_idx = *(vmm_idxs.begin());
-    const auto end_idx = *(vmm_idxs.rbegin()) + 1;
-    start_idx_tail = vmm_idxs.begin();
+    const auto start_idx = *(treg_idxs.begin());
+    const auto end_idx = *(treg_idxs.rbegin()) + 1;
+    start_idx_tail = treg_idxs.begin();
 
     for (size_t idx = preserved_vecs_count; idx < vecs_count; idx++) {
         if (preserved_vecs_count >= vecs_to_preserve) break;
@@ -104,7 +104,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
-        const injector_utils::vmm_index_set_iterator_t start_idx_it) {
+        const injector_utils::treg_index_set_iterator_t start_idx_it) {
     size_t tail_vecs_to_preserve = std::distance(start_idx_it, start_idx_tail);
     if (tail_vecs_to_preserve == 0) return;
 
@@ -975,13 +975,13 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     assert(it != entry_map_.end());
     const auto table_start_idx = (*it).second.off;
 
-    auto gather_table_values = [&](const TRegS &vmm_dst, const TRegS &vmm_idxs,
+    auto gather_table_values = [&](const TRegS &vmm_dst, const TRegS &treg_idxs,
                                        size_t offt = 0) {
         h->ptrue(PRegS(IDX(p_mask)), VL16);
         h->add_imm(
                 h->X_DEFAULT_ADDR, x_table, table_start_idx + offt, h->X_TMP_1);
 
-        h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_idxs)));
+        h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(treg_idxs)));
         h->mul(z_tmp, 4);
 
         h->ld1w(z_tmp, p_mask / T_z, ptr(h->X_DEFAULT_ADDR, z_tmp, SXTW));
@@ -1558,8 +1558,8 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::compute_body(
-        const injector_utils::vmm_index_set_iterator_t &start_idx_it,
-        const injector_utils::vmm_index_set_iterator_t &end_idx_it) {
+        const injector_utils::treg_index_set_iterator_t &start_idx_it,
+        const injector_utils::treg_index_set_iterator_t &end_idx_it) {
     using namespace alg_kind;
     std::for_each(start_idx_it, end_idx_it, [&](size_t idx) {
         if (is_fwd_) {
@@ -1659,21 +1659,21 @@ void jit_uni_eltwise_injector_f32<isa>::compute_body(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::compute_vector_range(
         size_t start_idx, size_t end_idx) {
-    injector_utils::vmm_index_set_t vmm_idxs;
+    injector_utils::treg_index_set_t treg_idxs;
     for (size_t i = start_idx; i < end_idx; i++)
-        vmm_idxs.emplace(i);
-    compute_vector_range(vmm_idxs);
+        treg_idxs.emplace(i);
+    compute_vector_range(treg_idxs);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::compute_vector_range(
-        const injector_utils::vmm_index_set_t &vmm_idxs) {
-    const auto &start_idx_it = vmm_idxs.begin();
-    const auto &end_idx_it = vmm_idxs.end();
-    assert(*start_idx_it < *vmm_idxs.rbegin() + 1
-            && *vmm_idxs.rbegin() <= vecs_count);
+        const injector_utils::treg_index_set_t &treg_idxs) {
+    const auto &start_idx_it = treg_idxs.begin();
+    const auto &end_idx_it = treg_idxs.end();
+    assert(*start_idx_it < *treg_idxs.rbegin() + 1
+            && *treg_idxs.rbegin() <= vecs_count);
 
-    injector_preamble(vmm_idxs);
+    injector_preamble(treg_idxs);
     compute_body(start_idx_tail, end_idx_it);
     injector_preamble_tail(start_idx_it);
     compute_body(start_idx_it, start_idx_tail);
