@@ -18,6 +18,7 @@
 #define CPU_AARCH64_JIT_INJECTOR_UTILS_HPP
 
 #include <set>
+#include <stack>
 
 #include "cpu/aarch64/jit_generator.hpp"
 
@@ -27,8 +28,57 @@ namespace cpu {
 namespace aarch64 {
 namespace injector_utils {
 
-using vmm_index_set_t = typename std::set<size_t>;
-using vmm_index_set_iterator_t = typename std::set<size_t>::iterator;
+using treg_index_set_t = typename std::set<size_t>;
+using treg_index_set_iterator_t = typename std::set<size_t>::iterator;
+template <typename TReg>
+struct treg_size_t;
+
+template <>
+struct treg_size_t<Xbyak_aarch64::ZReg> {
+    static constexpr std::size_t bytes = 64u;
+};
+
+template <>
+struct treg_size_t<Xbyak_aarch64::VReg> {
+    static constexpr std::size_t bytes = 16u;
+};
+
+/*
+ * Scope guard for general purpouse register and vector registers preservation.
+ * Pushes registers to stack during construction and pops during destruction.
+ */
+template <typename TReg>
+class register_preserve_guard_t {
+
+public:
+    register_preserve_guard_t(jit_generator *host,
+            std::initializer_list<Xbyak_aarch64::XReg> reg_to_preserve,
+            std::initializer_list<TReg> treg_to_preserve = {});
+    register_preserve_guard_t(register_preserve_guard_t &&other) = default;
+    register_preserve_guard_t &operator=(register_preserve_guard_t &&other)
+            = default;
+    DNNL_DISALLOW_COPY_AND_ASSIGN(register_preserve_guard_t);
+    ~register_preserve_guard_t();
+    size_t stack_space_occupied() const;
+
+private:
+    jit_generator *host_;
+    std::stack<Xbyak_aarch64::XReg> reg_stack_;
+    std::stack<TReg> treg_stack_;
+    size_t treg_to_preserve_size_bytes_;
+    bool isStackZReg = false;
+};
+
+template <typename TReg>
+class conditional_register_preserve_guard_t
+    : public register_preserve_guard_t<TReg> {
+public:
+    conditional_register_preserve_guard_t(bool condition_to_be_met,
+            jit_generator *host,
+            std::initializer_list<Xbyak_aarch64::XReg> reg_to_preserve,
+            std::initializer_list<TReg> treg_to_preserve = {});
+    DNNL_DISALLOW_COPY_AND_ASSIGN(conditional_register_preserve_guard_t);
+};
 
 } // namespace injector_utils
 } // namespace aarch64

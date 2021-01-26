@@ -58,6 +58,38 @@ struct static_params_t {
     bool is_fwd;
     bool use_dst;
 };
+
+/*
+ * Checks if isa is supported by binary injector.
+ */
+constexpr bool is_isa_supported(cpu_isa_t isa) {
+    return utils::one_of(isa, sve_512);
+}
+
+/*
+ * Checks if eltwise algorithm is supported by eltwise injector.
+ */
+constexpr bool is_alg_supported(alg_kind_t alg) {
+    using namespace alg_kind;
+    return utils::one_of(alg, eltwise_relu, eltwise_tanh, eltwise_elu,
+            eltwise_square, eltwise_abs, eltwise_sqrt, eltwise_linear,
+            eltwise_bounded_relu, eltwise_soft_relu, eltwise_logistic,
+            /* eltwise_logsigmoid,*/ eltwise_mish, eltwise_exp,
+            eltwise_gelu_tanh, eltwise_hardswish, eltwise_swish, eltwise_log,
+            eltwise_clip, eltwise_clip_v2, /* eltwise_pow,*/ eltwise_gelu_erf,
+            eltwise_round, eltwise_relu_use_dst_for_bwd,
+            eltwise_tanh_use_dst_for_bwd, eltwise_elu_use_dst_for_bwd,
+            eltwise_sqrt_use_dst_for_bwd, eltwise_logistic_use_dst_for_bwd,
+            eltwise_exp_use_dst_for_bwd, eltwise_clip_v2_use_dst_for_bwd);
+}
+
+/*
+ * Checks if eltwise injection for given args is supported.
+ */
+constexpr bool is_supported(cpu_isa_t isa, alg_kind_t alg) {
+    return is_isa_supported(isa) && is_alg_supported(alg);
+}
+
 } // namespace eltwise_injector
 
 template <cpu_isa_t isa>
@@ -125,7 +157,8 @@ struct jit_uni_eltwise_injector_f32 {
                 p_tmp0, p_all, is_fwd, use_dst) {}
 
     void compute_vector_range(size_t start_idx, size_t end_idx);
-    void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
+    void compute_vector_range(
+            const injector_utils::treg_index_set_t &treg_idxs);
     void compute_vector(size_t idx) { compute_vector_range(idx, idx + 1); }
     void prepare_table(bool gen_table = true);
     void load_table_addr() { h->adr(x_table, l_table); }
@@ -170,7 +203,7 @@ private:
     size_t preserved_vecs_count = 0;
     size_t preserved_vec_idxs[preserved_vecs_max] = {0};
     size_t preserved_gpr_idxs[preserved_gprs_max] = {0};
-    injector_utils::vmm_index_set_iterator_t start_idx_tail;
+    injector_utils::treg_index_set_iterator_t start_idx_tail;
 
     /* These vector register must be assigned proper index. */
     TRegS vmm_mask {0}, vmm_aux0 {0}, vmm_aux1 {0}, vmm_aux2 {0}, vmm_aux3 {0},
@@ -185,11 +218,11 @@ private:
     size_t aux_gprs_count();
 
     void compute_body(
-            const injector_utils::vmm_index_set_iterator_t &start_idx_it,
-            const injector_utils::vmm_index_set_iterator_t &end_idx_it);
-    void injector_preamble(const injector_utils::vmm_index_set_t &vmm_idxs);
+            const injector_utils::treg_index_set_iterator_t &start_idx_it,
+            const injector_utils::treg_index_set_iterator_t &end_idx_it);
+    void injector_preamble(const injector_utils::treg_index_set_t &vmm_idxs);
     void injector_preamble_tail(
-            const injector_utils::vmm_index_set_iterator_t start_idx_it);
+            const injector_utils::treg_index_set_iterator_t start_idx_it);
     void injector_postamble();
     void assign_regs();
     void compute_cmp_mask(
