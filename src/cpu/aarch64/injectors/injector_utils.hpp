@@ -28,18 +28,18 @@ namespace cpu {
 namespace aarch64 {
 namespace injector_utils {
 
-using treg_index_set_t = typename std::set<size_t>;
-using treg_index_set_iterator_t = typename std::set<size_t>::iterator;
+using vmm_index_set_t = typename std::set<size_t>;
+using vmm_index_set_iterator_t = typename std::set<size_t>::iterator;
 template <typename TReg>
-struct treg_size_t;
+struct vmm_size_t;
 
 template <>
-struct treg_size_t<Xbyak_aarch64::ZReg> {
+struct vmm_size_t<Xbyak_aarch64::ZReg> {
     static constexpr std::size_t bytes = 64u;
 };
 
 template <>
-struct treg_size_t<Xbyak_aarch64::VReg> {
+struct vmm_size_t<Xbyak_aarch64::VReg> {
     static constexpr std::size_t bytes = 16u;
 };
 
