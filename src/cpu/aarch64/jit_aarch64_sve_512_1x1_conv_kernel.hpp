@@ -23,10 +23,7 @@
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
-#define DISABLE_ELTWISE
-#ifndef DISABLE_ELTWISE
-#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
-#endif
+#include "cpu/aarch64/injectors/jit_uni_eltwise_injector.hpp"
 
 #define PRFMMIN 0
 #define PRFWMAX 31
@@ -49,26 +46,14 @@ namespace aarch64 {
 struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
     jit_aarch64_sve_512_1x1_conv_kernel(
             const jit_1x1_conv_conf_t &ajcp, const primitive_attr_t &attr)
-        : jcp(ajcp)
-        , attr_(attr)
-#ifndef DISABLE_ELTWISE
-        , eltwise_injector_(nullptr) {
-#else
-    {
-#endif
+        : jcp(ajcp), attr_(attr), eltwise_injector_(nullptr) {
         if (jcp.with_eltwise) {
-#ifndef DISABLE_ELTWISE
-            eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
+            eltwise_injector_ = new jit_uni_eltwise_injector_f32<sve_512>(
                     this, jcp.eltwise);
-#endif
         }
     }
 
-    ~jit_aarch64_sve_512_1x1_conv_kernel() {
-#ifndef DISABLE_ELTWISE
-        delete eltwise_injector_;
-#endif
-    }
+    ~jit_aarch64_sve_512_1x1_conv_kernel() { delete eltwise_injector_; }
 
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_aarch64_sve_512_1x1_conv_kernel)
 
@@ -89,7 +74,7 @@ struct jit_aarch64_sve_512_1x1_conv_kernel : public jit_generator {
 
 private:
     using reg64_t = const XReg;
-    const PReg reg_p_all_ones = p2;
+    const PReg reg_p_all_ones = p7;
 
     /* Flags and loop variables */
     reg64_t reg_reduce_pos_flag = x1;
@@ -177,9 +162,7 @@ private:
         }
     }
 
-#ifndef DISABLE_ELTWISE
-    jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
-#endif
+    jit_uni_eltwise_injector_f32<sve_512> *eltwise_injector_;
     void bcast_loop(int load_loop_blk);
     void reduce_loop(int load_loop_blk, int ur, int substep, bool wraparound);
 
