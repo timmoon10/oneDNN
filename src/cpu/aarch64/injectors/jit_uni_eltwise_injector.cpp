@@ -107,6 +107,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     }
 
     assign_regs();
+    set_coef_to_regs();
 }
 
 template <cpu_isa_t isa>
@@ -165,6 +166,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
     }
 
     assign_regs();
+    set_coef_to_regs();
 }
 
 template <cpu_isa_t isa>
@@ -213,6 +215,70 @@ void jit_uni_eltwise_injector_f32<isa>::assign_regs() {
     vmm_aux7 = TRegS(preserved_vec_idxs[8]);
 }
 
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
+    using namespace alg_kind;
+
+    if (is_fwd_) {
+        switch (alg_) {
+            case eltwise_relu_use_dst_for_bwd: break;
+            case eltwise_relu:
+                if (alpha_ == 0.f)
+                    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                break;
+            case eltwise_elu_use_dst_for_bwd:
+            case eltwise_elu:
+            case eltwise_tanh_use_dst_for_bwd:
+            case eltwise_tanh:
+            case eltwise_square:
+            case eltwise_abs:
+            case eltwise_sqrt_use_dst_for_bwd:
+            case eltwise_sqrt:
+            case eltwise_swish:
+            case eltwise_linear:
+            case eltwise_bounded_relu:
+            case eltwise_soft_relu:
+            case eltwise_logistic_use_dst_for_bwd:
+            case eltwise_logistic:
+            case eltwise_exp_use_dst_for_bwd:
+            case eltwise_exp:
+            case eltwise_gelu_tanh:
+            case eltwise_log:
+            case eltwise_clip:
+            case eltwise_pow:
+            case eltwise_gelu_erf:
+            case eltwise_round:
+            default: assert(!"unsupported eltwise algorithm");
+        }
+    } else {
+        switch (alg_) {
+            case eltwise_relu_use_dst_for_bwd:
+            case eltwise_relu:
+            case eltwise_elu_use_dst_for_bwd:
+            case eltwise_elu:
+            case eltwise_tanh_use_dst_for_bwd:
+            case eltwise_tanh:
+            case eltwise_square:
+            case eltwise_abs:
+            case eltwise_sqrt_use_dst_for_bwd:
+            case eltwise_sqrt:
+            case eltwise_linear:
+            case eltwise_bounded_relu:
+            case eltwise_soft_relu:
+            case eltwise_logistic_use_dst_for_bwd:
+            case eltwise_logistic:
+            case eltwise_exp_use_dst_for_bwd:
+            case eltwise_exp:
+            case eltwise_gelu_tanh:
+            case eltwise_swish:
+            case eltwise_log:
+            case eltwise_clip:
+            case eltwise_pow:
+            case eltwise_gelu_erf: break;
+            default: assert(!"unsupported eltwise algorithm");
+        }
+    }
+}
 // Uses injector masks objects: k_mask (>= avx512_common) or vmm_mask (<= avx2).
 // Stores a mask by applying cmpps on two inputs w/ a given predicate.
 template <cpu_isa_t isa>
@@ -458,11 +524,7 @@ void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_zero_ns_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->xa_->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->fmaxnm(vmm_src, p_tmp0, 0.f);
 }
 
 template <cpu_isa_t isa>
