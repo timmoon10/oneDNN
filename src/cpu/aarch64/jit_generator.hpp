@@ -1208,7 +1208,9 @@ public:
 public:
     jit_generator(void *code_ptr = nullptr, size_t code_size = MAX_CODE_SIZE,
             bool use_autogrow = true, cpu_isa_t max_cpu_isa = isa_all)
-        : Xbyak::CodeGenerator(code_size, code_ptr)
+        : Xbyak::CodeGenerator(code_size,
+                (code_ptr == nullptr && use_autogrow) ? Xbyak::AutoGrow
+                                                      : code_ptr)
         , max_cpu_isa_(max_cpu_isa) {}
     virtual ~jit_generator() {}
 
