@@ -292,7 +292,7 @@ private:
         return te.off + key_off_val_shift * scale;
     }
 
-    TRegS table_val(key_t key, size_t key_off_val_shift = 0) {
+    TRegS table_val(key_t key, TRegS zreg, size_t key_off_val_shift = 0) {
         Xbyak_aarch64::XReg x_addr(h->X_DEFAULT_ADDR);
         auto off = table_off(key, key_off_val_shift);
 
@@ -302,8 +302,8 @@ private:
             x_addr = x_table;
         }
 
-        h->ldr(TReg(z_tmp.getIdx()), ptr(x_addr));
-        return z_tmp;
+        h->ldr(TReg(zreg.getIdx()), ptr(x_addr));
+        return zreg;
     }
 
     // we accept only 32bit hexadecimal table values to avoid any rounding
