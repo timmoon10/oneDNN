@@ -23,10 +23,7 @@
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
-#define DISABLE_ELTWISE
-#ifndef DISABLE_ELTWISE
-#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
-#endif
+#include "cpu/aarch64/injectors/jit_uni_eltwise_injector.hpp"
 
 using namespace Xbyak_aarch64;
 
@@ -40,28 +37,19 @@ struct jit_uni_dw_conv_fwd_kernel_f32 : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_uni_dw_conv_fwd_kernel_f32)
 
     jit_uni_dw_conv_fwd_kernel_f32(jit_conv_conf_t ajcp)
-        : jcp(ajcp)
-#ifndef DISABLE_ELTWISE
-        , eltwise_injector_(nullptr) {
+        : jcp(ajcp), eltwise_injector_(nullptr) {
         if (jcp.with_eltwise)
-            eltwise_injector_ = new jit_uni_eltwise_injector_f32<avx512_common>(
+            eltwise_injector_ = new jit_uni_eltwise_injector_f32<sve_512>(
                     this, jcp.eltwise);
-#else
-    {
-#endif
     }
 
-    ~jit_uni_dw_conv_fwd_kernel_f32() {
-#ifndef DISABLE_ELTWISE
-        delete eltwise_injector_;
-#endif
-    }
+    ~jit_uni_dw_conv_fwd_kernel_f32() { delete eltwise_injector_; }
 
     jit_conv_conf_t jcp;
 
 private:
     using reg64_t = const XReg;
-    const PReg reg_p_all_ones = p2;
+    const PReg reg_p_all_ones = p7;
     const int vlen = cpu_isa_traits<isa>::vlen;
 
     // dw convolution
@@ -144,9 +132,8 @@ private:
         return utils::one_of(jcp.dst_tag, format_tag::ndhwc, format_tag::nhwc,
                 format_tag::nwc);
     }
-#ifndef DISABLE_ELTWISE
-    jit_uni_eltwise_injector_f32<avx512_common> *eltwise_injector_;
-#endif
+
+    jit_uni_eltwise_injector_f32<sve_512> *eltwise_injector_;
     void generate() override;
 };
 

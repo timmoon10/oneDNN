@@ -154,11 +154,9 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_filter_unrolled(
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::apply_activation(
         int ur_ch_blocks, int ur_w) {
-#ifndef DISABLE_ELTWISE
     if (this->jcp.with_eltwise) {
         eltwise_injector_->compute_vector_range(4, ur_w * ur_ch_blocks + 4);
     }
-#endif
 }
 template <cpu_isa_t isa>
 void jit_uni_dw_conv_fwd_kernel_f32<isa>::store_dst(
@@ -390,12 +388,10 @@ void jit_uni_dw_conv_fwd_kernel_f32<isa>::generate() {
     }
 
     this->postamble();
-#ifndef DISABLE_ELTWISE
     if (jcp.with_eltwise) {
         eltwise_injector_->prepare_table();
         binCommit();
     }
-#endif
 }
 
 template struct jit_uni_dw_conv_fwd_kernel_f32<sve_512>;
