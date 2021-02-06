@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2019-2020 Intel Corporation
-* Copyright 2020 FUJITSU LIMITED
+* Copyright 2019-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -221,10 +221,10 @@ void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
 
     if (is_fwd_) {
         switch (alg_) {
-            case eltwise_relu_use_dst_for_bwd: break;
+            case eltwise_relu_use_dst_for_bwd:
             case eltwise_relu:
-                if (alpha_ == 0.f)
-                    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                if (alpha_ != 0.f) table_val(alpha);
                 break;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu:
@@ -513,12 +513,14 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
-    blend_with_mask(vmm_src, vmm_aux1);
+    /* Negative values are multiplied by alpha.
+     Positive values are not modified. */
+    h->xa_->mov(ZRegD(vmm_aux0.getIdx()), ZRegD(vmm_src.getIdx()));
+    h->fminnm(vmm_src, p_tmp0, 0.f);
+    h->fmaxnm(vmm_aux0, p_tmp0, 0.f);
+    /* alpha is set to z_tmp in set_coef_to_regs(). */
+    h->xa_->fmul(vmm_src, vmm_src, z_tmp);
+    h->xa_->fadd(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
@@ -1759,7 +1761,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     if (is_fwd_) {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return (alpha_ == 0.f) ? 1 : 3;
+            case eltwise_relu: return (alpha_ == 0.f) ? 0 : 2;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu: return 5; /* = exp + 1 */
             case eltwise_tanh_use_dst_for_bwd:
