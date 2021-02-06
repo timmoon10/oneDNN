@@ -458,13 +458,11 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     // get mask of values lower than log(FLT_MIN) to zero them in the output
     compute_cmp_mask(vmm_src, table_val(exp_ln_flt_min_f, z_tmp), _cmp_lt_os);
 
-    h->xa_->mov(
-            ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(exp_ln_flt_max_f, z_tmp))));
+    table_val(exp_ln_flt_max_f, z_tmp);
     h->fminnm(z_tmp, p_512, vmm_src);
     h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
-    h->xa_->mov(
-            ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(exp_ln_flt_min_f, z_tmp))));
+    table_val(exp_ln_flt_min_f, z_tmp);
     h->fmaxnm(z_tmp, p_512, vmm_src);
     h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
@@ -476,7 +474,6 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     h->xa_->fadd(vmm_src, p_512 / T_m, 0.5f);
 
     // tmp = floorf(fx)
-
     h->frintm(vmm_aux2, p_512 / T_m, vmm_src);
 
     // keep vmm_src = fx for further computations
@@ -497,9 +494,7 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     h->fcvtzs(vmm_aux2, p_512 / T_m, vmm_aux2);
     h->xa_->add(
             vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(exponent_bias, z_tmp))));
-    h->lsl(vmm_aux2, vmm_aux2,
-
-            n_mantissa_bits); //TRegS(6) = 2^-fx
+    h->lsl(vmm_aux2, vmm_aux2, n_mantissa_bits); //TRegS(6) = 2^-fx
 
     // use vmm_src as tmp vmm_zero when applying mask
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)));
@@ -702,9 +697,7 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     blend_with_mask(vmm_dst, vmm_src);
 
     // We reapply the sign and return
-    h->eor(ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
-
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)));
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
 }
 
 template <cpu_isa_t isa>
