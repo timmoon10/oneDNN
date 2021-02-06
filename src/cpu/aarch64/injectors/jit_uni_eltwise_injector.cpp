@@ -254,6 +254,9 @@ void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
             case eltwise_relu:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                table_val(alpha);
+                break;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu:
             case eltwise_tanh_use_dst_for_bwd:
@@ -1369,14 +1372,9 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_bwd(
         const TRegS &vmm_src) {
-    // invariant to whether `s` or `d` is passed.
-    // get mask of `s` > 0
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    // fill with alpha, then blend with 1.f
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
-    h->xa_->mov(vmm_src, p_tmp0 / T_m, 0);
-    blend_with_mask(vmm_src, table_val(one));
+    h->fcmgt(p_mask.s, p_tmp0 / T_z, vmm_src, 0.f);
+    h->xa_->mov(ZRegD(vmm_src.getIdx()), ZRegD(z_tmp.getIdx()));
+    h->xa_->fmov(vmm_src, p_mask / T_m, 1.f);
 }
 
 template <cpu_isa_t isa>
@@ -1789,7 +1787,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     } else {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return 2;
+            case eltwise_relu: return 1;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu: return 4; /* = exp */
             case eltwise_tanh_use_dst_for_bwd: return 2;
