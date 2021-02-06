@@ -230,8 +230,10 @@ void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
             case eltwise_elu:
             case eltwise_tanh_use_dst_for_bwd:
             case eltwise_tanh:
-            case eltwise_square:
+            case eltwise_square: break;
             case eltwise_abs:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                break;
             case eltwise_sqrt_use_dst_for_bwd:
             case eltwise_sqrt:
             case eltwise_swish:
@@ -245,8 +247,10 @@ void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
             case eltwise_gelu_tanh:
             case eltwise_log:
             case eltwise_clip:
-            case eltwise_pow:
+            case eltwise_pow: break;
             case eltwise_gelu_erf:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                break;
             case eltwise_round:
             default: assert(!"unsupported eltwise algorithm");
         }
@@ -763,9 +767,7 @@ void jit_uni_eltwise_injector_f32<isa>::square_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::abs_compute_vector_fwd(
         const TRegS &vmm_src) {
-    // compute abs(x) = _mm_and_ps(x, 01111..111));
-    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask))));
+    h->xa_->fabs(vmm_src, p_tmp0 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
@@ -1316,38 +1318,27 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_fwd(
             ZRegD(IDX(table_val(sign_mask))));
 
     // get sign
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux3)));
-    h->xa_->mov(vmm_aux0, p_tmp0 / T_m, 0);
     h->xa_->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
             ZRegD(IDX(table_val(sign_mask))));
 
     // abs(x)
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux3)));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
     abs_compute_vector_fwd(vmm_aux1);
 
     // t = 1 / (p*x + 1)
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(
             ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->xa_->mov(vmm_aux2, p_tmp0 / T_m, 0);
     h->fmad(vmm_aux2, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
 
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->xa_->mov(vmm_aux4, p_tmp0 / T_m, 0);
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
     h->xa_->fdiv(vmm_aux4, p_tmp0, vmm_aux2);
 
     // -exp(-x*x)*t
     h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomialial r
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
 
     h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 3))));
@@ -1693,24 +1684,17 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
     abs_compute_vector_fwd(vmm_aux1);
 
     // W = 1 / (p * s + 1)
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(
             ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->xa_->mov(vmm_aux3, p_tmp0 / T_m, 0);
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->xa_->mov(vmm_aux4, p_tmp0 / T_m, 0);
     h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1, vmm_aux4);
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
     h->xa_->fdiv(vmm_aux4, p_tmp0, vmm_aux3);
 
     // Q * W
     h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomial r
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
     h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 3))));
     h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
@@ -1727,11 +1711,8 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
     // P = T + 0.5
     h->xa_->fadd(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(half))));
     // res = P + 0.5 * erf
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->fmla(vmm_aux2, p_tmp0 / T_m, vmm_src, ZRegS(IDX(table_val(half))));
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-    h->xa_->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
