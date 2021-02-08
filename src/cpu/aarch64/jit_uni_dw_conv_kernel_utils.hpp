@@ -28,9 +28,7 @@
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_uni_dw_conv_kernel_f32.hpp"
 
-#ifndef DISABLE_ELTWISE
-#include "cpu/aarch64/jit_uni_eltwise_injector.hpp"
-#endif
+#include "cpu/aarch64/injectors/jit_uni_eltwise_injector.hpp"
 
 namespace dnnl {
 namespace impl {
@@ -219,9 +217,8 @@ status_t jit_uni_dw_conv_fwd_kernel<isa, kernel_dt>::init_conf(
     jcp.with_sum = p.find(primitive_kind::sum) != -1;
     const int eltwise_ind = p.find(primitive_kind::eltwise);
     jcp.with_eltwise = eltwise_ind != -1;
-#ifdef DISABLE_ELTWISE
+
     if (jcp.with_eltwise) return status::unimplemented; // TODO
-#endif
     if (jcp.with_eltwise) { jcp.eltwise = p.entry_[eltwise_ind].eltwise; }
     bool ok_to_pad_channels = true && jcp.oc == jcp.ngroups
             && jcp.ic == jcp.ngroups && isa == sve_512;

@@ -193,6 +193,7 @@ private:
             const injector_utils::vmm_index_set_iterator_t start_idx_it);
     void injector_postamble();
     void assign_regs();
+    void set_coef_to_regs();
     void compute_cmp_mask(
             const TRegS &vmm_src, const TRegS &vmm_cmpare, int cmp_predicate);
     void blend_with_mask(const TRegS &vmm_dst, const TRegS &src);

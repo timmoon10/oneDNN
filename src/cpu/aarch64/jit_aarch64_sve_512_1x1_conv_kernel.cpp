@@ -402,15 +402,11 @@ void jit_aarch64_sve_512_1x1_conv_kernel::reduce_loop(
 
         L(store_noadd);
         if (jcp.with_eltwise) {
-#ifndef DISABLE_ELTWISE
             Label store_noeltwise;
             tst(reg_reduce_pos_flag, FLAG_REDUCE_LAST);
             xa_->b(EQ, store_noeltwise);
             eltwise_injector_->compute_vector_range(0, ur * load_loop_blk);
             L(store_noeltwise);
-#else
-            assert(!"fused eltwise error!");
-#endif
         }
 
         prev_ofs = -1;
@@ -674,12 +670,8 @@ void jit_aarch64_sve_512_1x1_conv_kernel::generate() {
 
     postamble();
     if (jcp.with_eltwise) {
-#ifndef DISABLE_ELTWISE
         eltwise_injector_->prepare_table();
         binCommit();
-#else
-        assert(!"fused eltwise error");
-#endif
     }
 }
 
@@ -778,14 +770,10 @@ status_t jit_aarch64_sve_512_1x1_conv_kernel::init_conf(
     const int eltwise_ind = p.find(primitive_kind::eltwise, 0, dw_conv_ind);
     jcp.with_eltwise = eltwise_ind != -1;
     if (jcp.with_eltwise) {
-#ifndef DISABLE_ELTWISE
         jcp.eltwise = p.entry_[eltwise_ind].eltwise;
         if (jcp.eltwise.alg == alg_kind::eltwise_pow)
             return status::unimplemented;
         if (dst_d.data_type() == data_type::s32) return status::unimplemented;
-#else
-        return status::unimplemented;
-#endif
     }
 
     /* Data format check */

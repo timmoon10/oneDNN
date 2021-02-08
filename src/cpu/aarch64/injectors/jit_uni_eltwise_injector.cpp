@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2019-2020 Intel Corporation
-* Copyright 2020 FUJITSU LIMITED
+* Copyright 2019-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -107,6 +107,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     }
 
     assign_regs();
+    set_coef_to_regs();
 }
 
 template <cpu_isa_t isa>
@@ -165,6 +166,7 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
     }
 
     assign_regs();
+    set_coef_to_regs();
 }
 
 template <cpu_isa_t isa>
@@ -213,6 +215,77 @@ void jit_uni_eltwise_injector_f32<isa>::assign_regs() {
     vmm_aux7 = TRegS(preserved_vec_idxs[8]);
 }
 
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
+    using namespace alg_kind;
+
+    if (is_fwd_) {
+        switch (alg_) {
+            case eltwise_relu_use_dst_for_bwd:
+            case eltwise_relu:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                if (alpha_ != 0.f) table_val(alpha);
+                break;
+            case eltwise_elu_use_dst_for_bwd:
+            case eltwise_elu:
+            case eltwise_tanh_use_dst_for_bwd:
+            case eltwise_tanh:
+            case eltwise_square: break;
+            case eltwise_abs:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                break;
+            case eltwise_sqrt_use_dst_for_bwd:
+            case eltwise_sqrt:
+            case eltwise_swish:
+            case eltwise_linear:
+            case eltwise_bounded_relu:
+            case eltwise_soft_relu:
+            case eltwise_logistic_use_dst_for_bwd:
+            case eltwise_logistic:
+            case eltwise_exp_use_dst_for_bwd:
+            case eltwise_exp:
+            case eltwise_gelu_tanh:
+            case eltwise_log:
+            case eltwise_clip:
+            case eltwise_pow: break;
+            case eltwise_gelu_erf:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                break;
+            case eltwise_round:
+            default: assert(!"unsupported eltwise algorithm");
+        }
+    } else {
+        switch (alg_) {
+            case eltwise_relu_use_dst_for_bwd:
+            case eltwise_relu:
+                h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
+                table_val(alpha);
+                break;
+            case eltwise_elu_use_dst_for_bwd:
+            case eltwise_elu:
+            case eltwise_tanh_use_dst_for_bwd:
+            case eltwise_tanh:
+            case eltwise_square:
+            case eltwise_abs:
+            case eltwise_sqrt_use_dst_for_bwd:
+            case eltwise_sqrt:
+            case eltwise_linear:
+            case eltwise_bounded_relu:
+            case eltwise_soft_relu:
+            case eltwise_logistic_use_dst_for_bwd:
+            case eltwise_logistic:
+            case eltwise_exp_use_dst_for_bwd:
+            case eltwise_exp:
+            case eltwise_gelu_tanh:
+            case eltwise_swish:
+            case eltwise_log:
+            case eltwise_clip:
+            case eltwise_pow:
+            case eltwise_gelu_erf: break;
+            default: assert(!"unsupported eltwise algorithm");
+        }
+    }
+}
 // Uses injector masks objects: k_mask (>= avx512_common) or vmm_mask (<= avx2).
 // Stores a mask by applying cmpps on two inputs w/ a given predicate.
 template <cpu_isa_t isa>
@@ -447,22 +520,20 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
-    blend_with_mask(vmm_src, vmm_aux1);
+    /* Negative values are multiplied by alpha.
+     Positive values are not modified. */
+    h->xa_->mov(ZRegD(vmm_aux0.getIdx()), ZRegD(vmm_src.getIdx()));
+    h->fminnm(vmm_src, p_tmp0, 0.f);
+    h->fmaxnm(vmm_aux0, p_tmp0, 0.f);
+    /* alpha is set to z_tmp in set_coef_to_regs(). */
+    h->xa_->fmul(vmm_src, vmm_src, z_tmp);
+    h->xa_->fadd(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_zero_ns_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->xa_->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->fmaxnm(vmm_src, p_tmp0, 0.f);
 }
 
 template <cpu_isa_t isa>
@@ -696,9 +767,7 @@ void jit_uni_eltwise_injector_f32<isa>::square_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::abs_compute_vector_fwd(
         const TRegS &vmm_src) {
-    // compute abs(x) = _mm_and_ps(x, 01111..111));
-    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask))));
+    h->xa_->fabs(vmm_src, p_tmp0 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
@@ -1249,38 +1318,27 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_fwd(
             ZRegD(IDX(table_val(sign_mask))));
 
     // get sign
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux3)));
-    h->xa_->mov(vmm_aux0, p_tmp0 / T_m, 0);
     h->xa_->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
             ZRegD(IDX(table_val(sign_mask))));
 
     // abs(x)
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux3)));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
     abs_compute_vector_fwd(vmm_aux1);
 
     // t = 1 / (p*x + 1)
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(
             ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->xa_->mov(vmm_aux2, p_tmp0 / T_m, 0);
     h->fmad(vmm_aux2, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
 
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->xa_->mov(vmm_aux4, p_tmp0 / T_m, 0);
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
     h->xa_->fdiv(vmm_aux4, p_tmp0, vmm_aux2);
 
     // -exp(-x*x)*t
     h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomialial r
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
 
     h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 3))));
@@ -1305,14 +1363,9 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_bwd(
         const TRegS &vmm_src) {
-    // invariant to whether `s` or `d` is passed.
-    // get mask of `s` > 0
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    // fill with alpha, then blend with 1.f
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
-    h->xa_->mov(vmm_src, p_tmp0 / T_m, 0);
-    blend_with_mask(vmm_src, table_val(one));
+    h->fcmgt(p_mask.s, p_tmp0 / T_z, vmm_src, 0.f);
+    h->xa_->mov(ZRegD(vmm_src.getIdx()), ZRegD(z_tmp.getIdx()));
+    h->xa_->fmov(vmm_src, p_mask / T_m, 1.f);
 }
 
 template <cpu_isa_t isa>
@@ -1631,24 +1684,17 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
     abs_compute_vector_fwd(vmm_aux1);
 
     // W = 1 / (p * s + 1)
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(
             ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->xa_->mov(vmm_aux3, p_tmp0 / T_m, 0);
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->xa_->mov(vmm_aux4, p_tmp0 / T_m, 0);
     h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1, vmm_aux4);
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
     h->xa_->fdiv(vmm_aux4, p_tmp0, vmm_aux3);
 
     // Q * W
     h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomial r
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
     h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
             ZRegS(IDX(table_val(gelu_erf_pol, 3))));
     h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
@@ -1665,11 +1711,8 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
     // P = T + 0.5
     h->xa_->fadd(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(half))));
     // res = P + 0.5 * erf
-    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
     h->fmla(vmm_aux2, p_tmp0 / T_m, vmm_src, ZRegS(IDX(table_val(half))));
-    h->xa_->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_512)));
     h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-    h->xa_->mov(vmm_src, p_tmp0 / T_m, 0);
 }
 
 template <cpu_isa_t isa>
@@ -1697,7 +1740,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     if (is_fwd_) {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return (alpha_ == 0.f) ? 1 : 3;
+            case eltwise_relu: return (alpha_ == 0.f) ? 0 : 2;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu: return 5; /* = exp + 1 */
             case eltwise_tanh_use_dst_for_bwd:
@@ -1725,7 +1768,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     } else {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return 2;
+            case eltwise_relu: return 1;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu: return 4; /* = exp */
             case eltwise_tanh_use_dst_for_bwd: return 2;
