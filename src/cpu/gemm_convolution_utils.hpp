@@ -53,7 +53,7 @@ struct conv_gemm_conf_t {
     int nthr;
     ptrdiff_t im2col_sz;
     bool need_wei_reduction;
-    bool signed_input;
+    bool compensation_input;
     int oh_block;
     int ow_block;
     int os_block, os_nb_block;

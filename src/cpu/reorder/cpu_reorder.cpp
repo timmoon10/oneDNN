@@ -37,7 +37,7 @@ std::map<reorder_impl_key_t, const void *> regular_impl_list_map {
 };
 
 /* conv reorders w/ compensation */
-std::map<reorder_impl_key_t, const void *> comp_s8s8_impl_list_map {
+std::map<reorder_impl_key_t, const void *> comp_u8s8_impl_list_map {
         {{f32, s8, 0}, &comp_f32_s8_impl_list_map},
         {{bf16, s8, 0}, &comp_bf16_s8_impl_list_map},
         {{s8, s8, 0}, &comp_s8_s8_impl_list_map},
@@ -46,10 +46,10 @@ std::map<reorder_impl_key_t, const void *> comp_s8s8_impl_list_map {
 const rpd_create_f *cpu_engine_impl_list_t::get_reorder_implementation_list(
         const memory_desc_t *src_md, const memory_desc_t *dst_md) {
     reorder_impl_key_t dt_pair {src_md->data_type, dst_md->data_type, 0};
-    const bool do_comp_s8s8 = dst_md->extra.flags
-            & (memory_extra_flags::compensation_conv_s8s8
+    const bool do_comp_u8s8 = dst_md->extra.flags
+            & (memory_extra_flags::compensation_conv_u8s8
                     | memory_extra_flags::compensation_conv_asymmetric_src);
-    auto &map = do_comp_s8s8 ? comp_s8s8_impl_list_map : regular_impl_list_map;
+    auto &map = do_comp_u8s8 ? comp_u8s8_impl_list_map : regular_impl_list_map;
     const impl_list_map_t *p_impl_list = (const impl_list_map_t *)map[dt_pair];
 
     static const rpd_create_f empty_list[] = {nullptr};

@@ -35,8 +35,8 @@ const char *alg2str(alg_t alg);
 
 enum flag_t {
     FLAG_NONE = 0x0U,
-    FLAG_CONV_S8S8 = 0x1U,
-    FLAG_GCONV_S8S8 = 0x2U,
+    FLAG_CONV_U8S8 = 0x1U,
+    FLAG_GCONV_U8S8 = 0x2U,
     FLAG_CONV_ZP_COMP = 0x4U,
     FLAG_GCONV_ZP_COMP = 0x8U,
 };

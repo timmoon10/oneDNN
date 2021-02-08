@@ -170,7 +170,7 @@ struct jit_conv_conf_t {
     // large spatial
     int h_blk_size, oh_blk_size;
     // s8s8 convolution
-    bool signed_input;
+    bool compensation_input;
     bool need_saturation;
     float wei_adj_scale;
     // zero-point compensation

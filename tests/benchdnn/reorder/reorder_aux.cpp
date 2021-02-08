@@ -39,8 +39,8 @@ const char *alg2str(alg_t alg) {
 
 uint64_t str2flag(const char *str) {
     uint64_t flag = FLAG_NONE;
-    if (!strcasecmp("conv_s8s8", str)) flag |= FLAG_CONV_S8S8;
-    if (!strcasecmp("gconv_s8s8", str)) flag |= FLAG_GCONV_S8S8;
+    if (!strcasecmp("conv_u8s8", str)) flag |= FLAG_CONV_U8S8;
+    if (!strcasecmp("gconv_u8s8", str)) flag |= FLAG_GCONV_U8S8;
     if (!strcasecmp("conv_zp_comp", str)) flag |= FLAG_CONV_ZP_COMP;
     if (!strcasecmp("gconv_zp_comp", str)) flag |= FLAG_GCONV_ZP_COMP;
     if (strcasecmp("none", str) && flag == FLAG_NONE) assert(!"unknown flag");
@@ -60,8 +60,8 @@ std::string flag2str(uint64_t flag) {
             mult_entry = true; \
         } \
     } while (0)
-    CASE(FLAG_CONV_S8S8, conv_s8s8);
-    CASE(FLAG_GCONV_S8S8, gconv_s8s8);
+    CASE(FLAG_CONV_U8S8, conv_u8s8);
+    CASE(FLAG_GCONV_U8S8, gconv_u8s8);
     CASE(FLAG_CONV_ZP_COMP, conv_zp_comp);
     CASE(FLAG_GCONV_ZP_COMP, gconv_zp_comp);
 #undef CASE

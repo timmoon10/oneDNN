@@ -99,7 +99,9 @@ struct memory_desc_wrapper : public c_compatible {
 
     /** return the size of data type of additional buffer */
     size_t additional_buffer_data_size(uint64_t flag_select) const {
-        if (flag_select & memory_extra_flags::compensation_conv_s8s8)
+        if (flag_select
+                & (memory_extra_flags::compensation_conv_s8s8
+                        | memory_extra_flags::compensation_conv_u8s8))
             return sizeof(int32_t);
         if (flag_select & memory_extra_flags::rnn_u8s8_compensation)
             return sizeof(float);
@@ -112,7 +114,8 @@ struct memory_desc_wrapper : public c_compatible {
     bool is_additional_buffer() const {
         using namespace memory_extra_flags;
         return (extra().flags
-                & (compensation_conv_s8s8 | rnn_u8s8_compensation
+                & (compensation_conv_s8s8 | compensation_conv_u8s8
+                        | rnn_u8s8_compensation
                         | compensation_conv_asymmetric_src));
     }
 
@@ -130,8 +133,8 @@ struct memory_desc_wrapper : public c_compatible {
         };
 
         size_t buff_size = 0;
-        const uint64_t comp_flags
-                = compensation_conv_s8s8 | rnn_u8s8_compensation;
+        const uint64_t comp_flags = compensation_conv_s8s8
+                | compensation_conv_u8s8 | rnn_u8s8_compensation;
         if (extra().flags & comp_flags) {
             buff_size += calculate_size(extra().compensation_mask,
                     additional_buffer_data_size(comp_flags));

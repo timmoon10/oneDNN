@@ -537,6 +537,8 @@
 #define mkldnn_memory_extra_desc_t dnnl_memory_extra_desc_t
 #define mkldnn_memory_extra_flag_compensation_conv_s8s8 \
     dnnl_memory_extra_flag_compensation_conv_s8s8
+#define mkldnn_memory_extra_flag_compensation_conv_u8s8 \
+    dnnl_memory_extra_flag_compensation_conv_u8s8
 #define mkldnn_memory_extra_flag_none dnnl_memory_extra_flag_none
 #define mkldnn_memory_extra_flag_scale_adjust \
     dnnl_memory_extra_flag_scale_adjust

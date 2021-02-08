@@ -88,8 +88,8 @@ bool zero_points_valid(const primitive_attr_t *attr,
 
 void set_zp_src_comp_flags(memory_desc_t &weights_md, bool with_groups);
 const int32_t *get_src_zp_comp_from_wei(const int8_t *weights,
-        const memory_desc_wrapper &weights_md, bool signed_input, dim_t ngroups,
-        dim_t oc);
+        const memory_desc_wrapper &weights_md, bool compensation_input,
+        dim_t ngroups, dim_t oc);
 
 } // namespace cpu
 } // namespace impl

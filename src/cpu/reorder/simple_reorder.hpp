@@ -144,7 +144,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         const int g = w_groups ? (input_d.dims()[0]) : 1;
 
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
         const bool req_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
 
@@ -190,7 +190,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         const size_t D_mask = utils::array_product(input_d.dims(),
                 math::ilog2q(pd->attr()->output_scales_.mask_ + 1));
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
         const bool has_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
 
@@ -304,7 +304,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         const int g = w_groups ? input_d.dims()[0] : 1;
 
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
         const bool req_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
 
@@ -374,7 +374,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         const size_t D_mask = utils::array_product(input_d.dims(),
                 math::ilog2q(pd->attr()->output_scales_.mask_ + 1));
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
         const bool has_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
 
@@ -484,7 +484,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         // support s8 instructions, hence, there is no need for signed
         // compensation.
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
 
         const bool req_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
@@ -631,7 +631,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         // support s8 instructions, hence, there is no need for signed
         // compensation.
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
 
         const bool req_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
@@ -784,7 +784,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
         const dim_t ic = input_d.dims()[2];
 
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
         const bool req_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
 
@@ -825,7 +825,7 @@ struct simple_reorder_impl<SIMPLE_REORDER_TEMPL_CALL,
                 math::ilog2q(pd->attr()->output_scales_.mask_ + 1));
         const float *scales = pd->attr()->output_scales_.scales_;
         const bool req_comp = output_d.extra().flags
-                & memory_extra_flags::compensation_conv_s8s8;
+                & memory_extra_flags::compensation_conv_u8s8;
         const bool has_asymmetric_comp = output_d.extra().flags
                 & memory_extra_flags::compensation_conv_asymmetric_src;
 

@@ -125,12 +125,12 @@ void set_zp_src_comp_flags(memory_desc_t &weights_md, bool with_groups) {
 }
 
 const int32_t *get_src_zp_comp_from_wei(const int8_t *weights,
-        const memory_desc_wrapper &weights_md, bool signed_input, dim_t ngroups,
-        dim_t oc) {
+        const memory_desc_wrapper &weights_md, bool compensation_input,
+        dim_t ngroups, dim_t oc) {
 
     const auto comp_offset
             = weights_md.size() - weights_md.additional_buffer_size();
-    const auto src_zp_com_offset = signed_input ? ngroups * oc : 0;
+    const auto src_zp_com_offset = compensation_input ? ngroups * oc : 0;
     return reinterpret_cast<const int32_t *>(&weights[comp_offset])
             + src_zp_com_offset;
 }

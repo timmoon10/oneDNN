@@ -866,6 +866,8 @@ namespace memory_extra_flags {
 const memory_extra_flags_t none = dnnl_memory_extra_flag_none;
 const memory_extra_flags_t compensation_conv_s8s8
         = dnnl_memory_extra_flag_compensation_conv_s8s8;
+const memory_extra_flags_t compensation_conv_u8s8
+        = dnnl_memory_extra_flag_compensation_conv_u8s8;
 const memory_extra_flags_t scale_adjust = dnnl_memory_extra_flag_scale_adjust;
 const memory_extra_flags_t rnn_u8s8_compensation
         = dnnl_memory_extra_flag_rnn_u8s8_compensation;

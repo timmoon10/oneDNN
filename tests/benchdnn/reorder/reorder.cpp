@@ -109,9 +109,9 @@ int fill_memory_extra(const prb_t *prb, dnnl_memory_extra_desc_t &extra) {
 
     if (prb->is_reorder_with_compensation()) {
         int with_groups
-                = (prb->oflag & (FLAG_GCONV_S8S8 | FLAG_GCONV_ZP_COMP)) ? 1 : 0;
-        if (prb->oflag & (FLAG_CONV_S8S8 | FLAG_GCONV_S8S8)) {
-            extra.flags = dnnl_memory_extra_flag_compensation_conv_s8s8;
+                = (prb->oflag & (FLAG_GCONV_U8S8 | FLAG_GCONV_ZP_COMP)) ? 1 : 0;
+        if (prb->oflag & (FLAG_CONV_U8S8 | FLAG_GCONV_U8S8)) {
+            extra.flags = dnnl_memory_extra_flag_compensation_conv_u8s8;
             extra.compensation_mask = (1 << 0) + with_groups * (1 << 1);
         }
         if (prb->oflag & (FLAG_CONV_ZP_COMP | FLAG_GCONV_ZP_COMP)) {

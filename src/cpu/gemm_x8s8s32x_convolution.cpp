@@ -80,8 +80,8 @@ static zero_point_call_params_t prepare_zp_params(const conv_gemm_conf_t &jcp,
     const int32_t *zp_src_comp = nullptr;
 
     if (jcp.zp.src_exists) {
-        const int32_t *zp_src_comp_from_wei = get_src_zp_comp_from_wei(
-                weights, weights_md, jcp.signed_input, jcp.ngroups, jcp.oc);
+        const int32_t *zp_src_comp_from_wei = get_src_zp_comp_from_wei(weights,
+                weights_md, jcp.compensation_input, jcp.ngroups, jcp.oc);
         int32_t *zp_src_comp_scratch
                 = scratchpad.get<int32_t>(key_conv_gemm_zp_src_comp);
         static constexpr auto cache_line_size
@@ -186,7 +186,7 @@ _gemm_x8s8s32x_convolution_fwd_t<src_type, dst_type>::execute_forward_thr(
             + (ptrdiff_t)ithr * jcp.oh_block * jcp.ow_block * jcp.oc;
 
     const int32_t *_wei_comp
-            = jcp.signed_input ? get_wei_comp(wei_base, wei_md) : nullptr;
+            = jcp.compensation_input ? get_wei_comp(wei_base, wei_md) : nullptr;
 
     const bool should_apply_zp_src_comp_pad = jcp.zp.src_exists
             && jit_gemm_convolution_utils::padding_exists(jcp);
@@ -210,7 +210,7 @@ _gemm_x8s8s32x_convolution_fwd_t<src_type, dst_type>::execute_forward_thr(
     const size_t work_amount = (size_t)jcp.ngroups * jcp.mb * nb_oh * nb_ow;
     balance211(work_amount, nthr, ithr, start, end);
     nd_iterator_init(start, n, jcp.mb, g, jcp.ngroups, ohb, nb_oh, owb, nb_ow);
-    const uint8_t shift = jcp.signed_input ? 128 : 0;
+    const uint8_t shift = jcp.compensation_input ? 128 : 0;
     parallel_nd(jcp.im2col_sz, [&](ptrdiff_t i) { col[i] = shift; });
 
     status_t st = status::success;
@@ -253,10 +253,11 @@ _gemm_x8s8s32x_convolution_fwd_t<src_type, dst_type>::execute_forward_thr(
             const float onef = 1.f, zerof = 0.f;
             const src_data_t *__restrict src_od
                     = src + od * jcp.oh * jcp.ow * jcp.ngroups * jcp.ic;
-            st = gemm_s8x8s32("N", BT, jcp.signed_input ? "C" : "F", &M, &N, &K,
-                    &onef, wei, &LDA, &off_a,
+            st = gemm_s8x8s32("N", BT, jcp.compensation_input ? "C" : "F", &M,
+                    &N, &K, &onef, wei, &LDA, &off_a,
                     jcp.im2col_sz ? col : (uint8_t *)src_od, &LDB, &off_b,
-                    &zerof, acc, &M, jcp.signed_input ? wei_comp : &off_c);
+                    &zerof, acc, &M,
+                    jcp.compensation_input ? wei_comp : &off_c);
 
             if (st != status::success) return st;
 

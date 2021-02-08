@@ -235,7 +235,8 @@ template void im2col_3d(const conv_gemm_conf_t &jcp, const bfloat16_t *im,
 template <typename T>
 void transpose_dt(const conv_gemm_conf_t &jcp, const T *__restrict im,
         T *__restrict imtr) {
-    uint8_t shift = jcp.signed_input ? 128 : 0;
+    //    uint8_t shift = jcp.signed_input ? 128 : 0;
+    uint8_t shift = jcp.compensation_input ? 128 : 0;
     const int ic_stride = jcp.id * jcp.ih * jcp.iw;
     const int IC = jcp.ngroups * jcp.ic;
     const int IHW = jcp.ih * jcp.iw;
@@ -253,11 +254,11 @@ void transpose_dt(const conv_gemm_conf_t &jcp, const T *__restrict im,
                 T *__restrict imtr_icb = imtr_w + icb * ic_block * ic_stride;
                 PRAGMA_OMP_SIMD()
                 for (int ic = 0; ic < ic_block; ic++) {
-                    imtr_icb[ic * ic_stride] = im_icb[ic] + shift;
+                    imtr_icb[ic * ic_stride] = im_icb[ic] - shift;
                 }
             }
             for (int ic = ic_blocked; ic < jcp.ic; ic++) {
-                imtr_w[ic * ic_stride] = im_w[ic] + shift;
+                imtr_w[ic * ic_stride] = im_w[ic] - shift;
             }
         }
     });
@@ -289,7 +290,7 @@ void im2col_dt_3d(const conv_gemm_conf_t &jcp,
             = reinterpret_cast<const im_dt *__restrict>(_imtr);
     col_dt *__restrict col = reinterpret_cast<col_dt *__restrict>(_col);
 
-    col_dt shift = static_cast<col_dt>(jcp.signed_input ? 128 : 0);
+    col_dt shift = static_cast<col_dt>(jcp.compensation_input ? 128 : 0);
     const int dd = 1 + jcp.dilate_d;
     const int dh = 1 + jcp.dilate_h;
     const int dw = 1 + jcp.dilate_w;
@@ -314,7 +315,7 @@ void im2col_dt_3d(const conv_gemm_conf_t &jcp,
                     const int id = od - fp + kd;
                     if (id < 0 || id >= jcp.id) {
                         for (ptrdiff_t i = 0; i < OHW; i++)
-                            col_loc[i] = shift;
+                            col_loc[i] = -shift;
                         return;
                     }
                     const im_dt *__restrict imtr_loc
@@ -341,7 +342,7 @@ void im2col_dt_3d(const conv_gemm_conf_t &jcp,
                     const int id = od * 2 - fp + kd;
                     if (id < 0 || id >= jcp.id) {
                         for (ptrdiff_t i = 0; i < OHW; i++)
-                            col_loc[i] = shift;
+                            col_loc[i] = -shift;
                         return;
                     }
                     const im_dt *__restrict imtr_loc
@@ -372,7 +373,7 @@ void im2col_dt_3d(const conv_gemm_conf_t &jcp,
                     const int id = od * sd - fp + kd * dd;
                     if (id < 0 || id >= jcp.id) {
                         for (ptrdiff_t i = 0; i < OHW; i++)
-                            col_loc[i] = shift;
+                            col_loc[i] = -shift;
                         return;
                     }
                     const im_dt *__restrict imtr_loc
@@ -591,7 +592,7 @@ void im2col_dt(const conv_gemm_conf_t &jcp, const orig_im_dt *__restrict _im,
     im_dt *__restrict imtr = reinterpret_cast<im_dt *__restrict>(_imtr);
     col_dt *__restrict col = reinterpret_cast<col_dt *__restrict>(_col);
 
-    col_dt shift = static_cast<col_dt>(jcp.signed_input ? 128 : 0);
+    col_dt shift = static_cast<col_dt>(jcp.compensation_input ? 128 : 0);
     const int dh = 1 + jcp.dilate_h;
     const int dw = 1 + jcp.dilate_w;
     const int sh = jcp.stride_h;
@@ -649,23 +650,23 @@ void im2col_dt(const conv_gemm_conf_t &jcp, const orig_im_dt *__restrict _im,
                     for (int oh = 0; oh < oh_start; oh++) {
                         const ptrdiff_t col_idx_oh = col_idx_ic + oh * wb;
                         for (int ow = 0; ow < wb; ++ow)
-                            col[col_idx_oh + ow] = shift;
+                            col[col_idx_oh + ow] = -shift;
                     }
                     for (int oh = oh_start; oh < oh_end; oh++) {
                         const ptrdiff_t col_idx_oh = col_idx_ic + oh * wb;
                         const ptrdiff_t imtr_idx_oh = imtr_idx_ic + oh * iwb;
                         for (int ow = 0; ow < ow_start; ++ow)
-                            col[col_idx_oh + ow] = shift;
+                            col[col_idx_oh + ow] = -shift;
                         for (int ow = ow_start; ow < ow_end; ++ow)
                             col[col_idx_oh + ow]
-                                    = imtr[imtr_idx_oh + ow] + shift;
+                                    = imtr[imtr_idx_oh + ow] - shift;
                         for (int ow = ow_end; ow < wb; ++ow)
-                            col[col_idx_oh + ow] = shift;
+                            col[col_idx_oh + ow] = -shift;
                     }
                     for (int oh = oh_end; oh < hb; oh++) {
                         const ptrdiff_t col_idx_oh = col_idx_ic + oh * wb;
                         for (int ow = 0; ow < wb; ++ow)
-                            col[col_idx_oh + ow] = shift;
+                            col[col_idx_oh + ow] = -shift;
                     }
                 }
             }
@@ -680,7 +681,7 @@ void im2col_dt(const conv_gemm_conf_t &jcp, const orig_im_dt *__restrict _im,
                             * wb;
                     if (ih < 0 || ih >= jcp.ih)
                         for (int ow = 0; ow < wb; ow++)
-                            col[col_idx_base + ow] = shift;
+                            col[col_idx_base + ow] = -shift;
                     else {
                         const int wp = lp - kw * dw;
                         const int ow_start
@@ -688,17 +689,17 @@ void im2col_dt(const conv_gemm_conf_t &jcp, const orig_im_dt *__restrict _im,
                         const int ow_end
                                 = saturate(0, wb, div_up(jcp.iw + wp, sw) - ws);
                         for (int ow = 0; ow < ow_start; ow++)
-                            col[col_idx_base + ow] = shift;
+                            col[col_idx_base + ow] = -shift;
                         const int iw_base = ws * sw - wp;
                         const ptrdiff_t im_idx_base = ih * im_ih_stride + ic;
                         for (int ow = ow_start; ow < ow_end; ow++) {
                             const int iw = iw_base + ow * sw;
                             const ptrdiff_t im_idx
                                     = im_idx_base + iw * im_iw_stride;
-                            col[col_idx_base + ow] = im[im_idx] + shift;
+                            col[col_idx_base + ow] = im[im_idx] - shift;
                         }
                         for (int ow = ow_end; ow < wb; ow++)
-                            col[col_idx_base + ow] = shift;
+                            col[col_idx_base + ow] = -shift;
                     }
                 });
     }
@@ -1060,7 +1061,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
     jcp.os = jcp.oh * jcp.ow;
     jcp.ks = jcp.kh * jcp.kw * jcp.kd;
 
-    jcp.signed_input = src_d.data_type() == data_type::s8;
+    jcp.compensation_input = src_d.data_type() == data_type::u8;
 
     jcp.outer_threading = false;
 
@@ -1088,7 +1089,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
 
     const auto set_or_check_tags
             = [&](format_tag_t desired_src_tag, format_tag_t desired_dst_tag,
-                      bool is_src_s8) -> status_t {
+                      bool is_src_u8) -> status_t {
         using namespace format_tag;
         auto src_tag = any, dst_tag = any;
 
@@ -1126,9 +1127,9 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                                : utils::pick(ndims - 3, oiw, oihw, oidhw));
         CHECK(memory_desc_init_by_tag(want_wei_md, wei_tag));
 
-        if (is_src_s8) {
+        if (is_src_u8) {
             want_wei_md.extra.flags = 0
-                    | memory_extra_flags::compensation_conv_s8s8
+                    | memory_extra_flags::compensation_conv_u8s8
                     | memory_extra_flags::scale_adjust;
             want_wei_md.extra.compensation_mask
                     = (1 << 0) + (with_groups ? (1 << 1) : 0);
@@ -1154,8 +1155,9 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                                 : utils::one_of(dst_d.data_type(), s8, u8))
             && weights_d.data_type() == s8;
 
-#if DNNL_AARCH64
+    //#if DNNL_AARCH64
     // For aarch64, int8 conv (signed input data) is not supported.
+#if 0
     if (is_fwd && src_d.data_type() == s8) return status::unimplemented;
 #endif
 
@@ -1165,7 +1167,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
             : utils::pick(ndims - 3, format_tag::ncw, format_tag::nchw,
                     format_tag::ncdhw);
     if (set_or_check_tags(default_dat_tag, default_dat_tag,
-                src_md.data_type == data_type::s8)
+                src_md.data_type == data_type::u8)
             != status::success)
         return status::unimplemented;
 
@@ -1242,7 +1244,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                     = !everyone_is(true, jcp.ow == jcp.iw, jcp.oh == jcp.ih,
                               jcp.od == jcp.id, jcp.stride_w == 1,
                               jcp.stride_h == 1, jcp.stride_d == 1, jcp.ks == 1,
-                              !jcp.signed_input)
+                              !jcp.compensation_input)
                     ? (ptrdiff_t)jcp.ic * jcp.ks * jcp.os
                     : 0;
 
@@ -1367,7 +1369,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                     = !everyone_is(true, jcp.ow == jcp.iw, jcp.oh == jcp.ih,
                               jcp.od == jcp.id, jcp.stride_w == 1,
                               jcp.stride_h == 1, jcp.stride_d == 1, jcp.ks == 1,
-                              !jcp.signed_input)
+                              !jcp.compensation_input)
                     ? (ptrdiff_t)jcp.ic * jcp.ks * jcp.os * jcp.od
                     : 0;
 
@@ -1399,7 +1401,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
         jcp.im2col_sz = !everyone_is(true, jcp.ow == jcp.iw, jcp.oh == jcp.ih,
                                 jcp.od == jcp.id, jcp.stride_w == 1,
                                 jcp.stride_h == 1, jcp.stride_d == 1,
-                                jcp.ks == 1, !jcp.signed_input)
+                                jcp.ks == 1, !jcp.compensation_input)
                 ? (ptrdiff_t)jcp.ic * jcp.ks * jcp.os
                 : 0;
         if (jcp.is_nspc && is_fwd) {
@@ -1928,7 +1930,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                     = !everyone_is(true, jcp.ow == jcp.iw, jcp.oh == jcp.ih,
                               jcp.od == jcp.id, jcp.stride_w == 1,
                               jcp.stride_h == 1, jcp.stride_d == 1, jcp.ks == 1,
-                              !jcp.signed_input)
+                              !jcp.compensation_input)
                     ? (ptrdiff_t)jcp.ic * jcp.ks * jcp.os * jcp.od
                     : 0;
 
@@ -1972,7 +1974,7 @@ status_t init_conf(conv_gemm_conf_t &jcp,
                     = !everyone_is(true, jcp.ow == jcp.iw, jcp.oh == jcp.ih,
                               jcp.od == jcp.id, jcp.stride_w == 1,
                               jcp.stride_h == 1, jcp.stride_d == 1, jcp.ks == 1,
-                              !jcp.signed_input)
+                              !jcp.compensation_input)
                     ? (ptrdiff_t)jcp.ic * jcp.ks * jcp.os
                     : 0;
             const size_t gemm_col_datatype_size

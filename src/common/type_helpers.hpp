@@ -179,7 +179,8 @@ inline bool memory_extra_desc_is_equal(
         const memory_extra_desc_t &lhs, const memory_extra_desc_t &rhs) {
     using namespace memory_extra_flags;
     return true && lhs.flags == rhs.flags
-            && IMPLICATION(lhs.flags & compensation_conv_s8s8,
+            && IMPLICATION(lhs.flags
+                            & (compensation_conv_s8s8 | compensation_conv_u8s8),
                     lhs.compensation_mask == rhs.compensation_mask)
             && IMPLICATION(lhs.flags & rnn_u8s8_compensation,
                     lhs.compensation_mask == rhs.compensation_mask)

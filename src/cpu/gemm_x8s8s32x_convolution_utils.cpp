@@ -99,7 +99,7 @@ void ref_pp_ker_t<dst_data_t>::operator()(void *void_dst, const acc_data_t *acc,
 
             float data = static_cast<float>(data_s32);
 
-            if (jcp_.signed_input) data *= signed_scale;
+            if (jcp_.compensation_input) data *= signed_scale;
 
             if (jcp_.with_bias)
                 data += math::get_bias(
