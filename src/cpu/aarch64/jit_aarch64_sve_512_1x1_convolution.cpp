@@ -908,104 +908,58 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                     for (int o = 0; o < 16; ++o)
                         d_bias[o] = 0.;
 #if 1
-                if(max_oc == 16){
+                if (max_oc == 16) {
 
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z0, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z1, [sp];");
-                    
-                    asm volatile ("ldr z1, [%0];" : : "r"(&d_bias[0]));
+                    asm volatile("ldr z1, [%0];" : : "r"(&d_bias[0]) : "z1");
                     for (int os = 0; os < jcp.os; ++os) {
-                        asm volatile ("ldr z0, [%0];" : : "r"(&d_dst[0]));
-                        asm volatile ("fadd z1.s, z1.s, z0.s;");
+                        asm volatile("ldr z0, [%0];" : : "r"(&d_dst[0]) : "z0");
+                        asm volatile("fadd z1.s, z1.s, z0.s;");
                         d_dst += sp_shift;
                     }
-                    asm volatile ("str z1, [%0];" : : "r"(&d_bias[0]));
+                    asm volatile("str z1, [%0];" : : "r"(&d_bias[0]));
 
-                    asm volatile ("ldr z1, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z0, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
+                } else if (max_oc == 32) {
 
-                }else if(max_oc == 32){
-
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z0, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z1, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z2, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z3, [sp];");
-
-                    asm volatile ("ldr z2, [%0];" : : "r"(&d_bias[0]));
-                    asm volatile ("ldr z3, [%0];" : : "r"(&d_bias[16]));
+                    asm volatile("ldr z2, [%0];" : : "r"(&d_bias[0]) : "z2");
+                    asm volatile("ldr z3, [%0];" : : "r"(&d_bias[16]) : "z3");
                     for (int os = 0; os < jcp.os; ++os) {
-                        asm volatile ("ldr z0, [%0];" : : "r"(&d_dst[0]));
-                        asm volatile ("ldr z1, [%0];" : : "r"(&d_dst[16]));
-                        asm volatile ("fadd z2.s, z2.s, z0.s;");
-                        asm volatile ("fadd z3.s, z3.s, z1.s;");
+                        asm volatile("ldr z0, [%0];" : : "r"(&d_dst[0]) : "z0");
+                        asm volatile("ldr z1, [%0];"
+                                     :
+                                     : "r"(&d_dst[16])
+                                     : "z1");
+                        asm volatile("fadd z2.s, z2.s, z0.s;");
+                        asm volatile("fadd z3.s, z3.s, z1.s;");
                         d_dst += sp_shift;
                     }
-                    asm volatile ("str z2, [%0];" : : "r"(&d_bias[0]));
-                    asm volatile ("str z3, [%0];" : : "r"(&d_bias[16]));
+                    asm volatile("str z2, [%0];" : : "r"(&d_bias[0]));
+                    asm volatile("str z3, [%0];" : : "r"(&d_bias[16]));
 
-                    asm volatile ("ldr z3, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z2, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z1, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z0, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
+                } else if (max_oc == 48) {
 
-                }else if(max_oc == 48){
-
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z0, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z1, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z2, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z3, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z4, [sp];");
-                    asm volatile ("sub sp, sp, #0x40;");
-                    asm volatile ("str z5, [sp];");
-
-                    asm volatile ("ldr z3, [%0];" : : "r"(&d_bias[0]));
-                    asm volatile ("ldr z4, [%0];" : : "r"(&d_bias[16]));
-                    asm volatile ("ldr z5, [%0];" : : "r"(&d_bias[32]));
+                    asm volatile("ldr z3, [%0];" : : "r"(&d_bias[0]) : "z3");
+                    asm volatile("ldr z4, [%0];" : : "r"(&d_bias[16]) : "z4");
+                    asm volatile("ldr z5, [%0];" : : "r"(&d_bias[32]) : "z5");
                     for (int os = 0; os < jcp.os; ++os) {
-                        asm volatile ("ldr z0, [%0];" : : "r"(&d_dst[0]));
-                        asm volatile ("ldr z1, [%0];" : : "r"(&d_dst[16]));
-                        asm volatile ("ldr z2, [%0];" : : "r"(&d_dst[32]));
-                        asm volatile ("fadd z3.s, z3.s, z0.s;");
-                        asm volatile ("fadd z4.s, z4.s, z1.s;");
-                        asm volatile ("fadd z5.s, z5.s, z2.s;");
+                        asm volatile("ldr z0, [%0];" : : "r"(&d_dst[0]) : "z0");
+                        asm volatile("ldr z1, [%0];"
+                                     :
+                                     : "r"(&d_dst[16])
+                                     : "z1");
+                        asm volatile("ldr z2, [%0];"
+                                     :
+                                     : "r"(&d_dst[32])
+                                     : "z2");
+                        asm volatile("fadd z3.s, z3.s, z0.s;");
+                        asm volatile("fadd z4.s, z4.s, z1.s;");
+                        asm volatile("fadd z5.s, z5.s, z2.s;");
                         d_dst += sp_shift;
                     }
-                    asm volatile ("str z3, [%0];" : : "r"(&d_bias[0]));
-                    asm volatile ("str z4, [%0];" : : "r"(&d_bias[16]));
-                    asm volatile ("str z5, [%0];" : : "r"(&d_bias[32]));
+                    asm volatile("str z3, [%0];" : : "r"(&d_bias[0]));
+                    asm volatile("str z4, [%0];" : : "r"(&d_bias[16]));
+                    asm volatile("str z5, [%0];" : : "r"(&d_bias[32]));
 
-                    asm volatile ("ldr z5, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z4, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z3, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z2, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z1, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-                    asm volatile ("ldr z0, [sp];");
-                    asm volatile ("add sp, sp, #0x40;");
-
-
-                }else{
+                } else {
                     for (int os = 0; os < jcp.os; ++os) {
                         PRAGMA_OMP_SIMD()
                         for (int o = 0; o < max_oc; ++o)
