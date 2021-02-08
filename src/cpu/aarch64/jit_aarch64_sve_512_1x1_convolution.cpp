@@ -907,14 +907,95 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                 if (img == img_start)
                     for (int o = 0; o < 16; ++o)
                         d_bias[o] = 0.;
+#if 1
+                if (max_oc == 16) {
 
+                    int os;
+                    asm volatile(
+                            "ldr z1, [%4];"
+                            "mov %0, %2;"
+                            "label10:"
+                            "cmp %0, 0x0;"
+                            "b.eq label20;"
+                            "ldr z0, [%1];"
+                            "fadd z1.s, z1.s, z0.s;"
+                            "add %1, %1, %3, lsl #2;"
+                            "sub %0, %0, 0x1;"
+                            "b label10;"
+                            "label20:"
+                            "str z1, [%4];"
+                            : "+r"(os), "+r"(d_dst)
+                            : "r"(jcp.os), "r"(sp_shift), "r"(d_bias)
+                            : "z0", "z1");
+
+                } else if (max_oc == 32) {
+
+                    int os;
+                    asm volatile(
+                            "ldr z2, [%4];"
+                            "ldr z3, [%4, #1, mul vl];"
+                            "mov %0, %2;"
+                            "label11:"
+                            "cmp %0, 0x0;"
+                            "b.eq label21;"
+                            "ldr z0, [%1];"
+                            "ldr z1, [%1, #1, mul vl];"
+                            "fadd z2.s, z2.s, z0.s;"
+                            "fadd z3.s, z3.s, z1.s;"
+                            "add %1, %1, %3, lsl #2;"
+                            "sub %0, %0, 0x1;"
+                            "b label11;"
+                            "label21:"
+                            "str z2, [%4];"
+                            "str z3, [%4, #1, mul vl];"
+                            : "+r"(os), "+r"(d_dst)
+                            : "r"(jcp.os), "r"(sp_shift), "r"(d_bias)
+                            : "z0", "z1", "z2", "z3");
+
+                } else if (max_oc == 48) {
+
+                    int os;
+                    asm volatile(
+                            "ldr z3, [%4];"
+                            "ldr z4, [%4, #1, mul vl];"
+                            "ldr z5, [%4, #2, mul vl];"
+                            "mov %0, %2;"
+                            "label12:"
+                            "cmp %0, 0x0;"
+                            "b.eq label22;"
+                            "ldr z0, [%1];"
+                            "ldr z1, [%1, #1, mul vl];"
+                            "ldr z2, [%1, #2, mul vl];"
+                            "fadd z3.s, z3.s, z0.s;"
+                            "fadd z4.s, z4.s, z1.s;"
+                            "fadd z5.s, z5.s, z2.s;"
+                            "add %1, %1, %3, lsl #2;"
+                            "sub %0, %0, 0x1;"
+                            "b label12;"
+                            "label22:"
+                            "str z3, [%4];"
+                            "str z4, [%4, #1, mul vl];"
+                            "str z5, [%4, #2, mul vl];"
+                            : "+r"(os), "+r"(d_dst)
+                            : "r"(jcp.os), "r"(sp_shift), "r"(d_bias)
+                            : "z0", "z1", "z2", "z3", "z4", "z5");
+
+                } else {
+                    for (int os = 0; os < jcp.os; ++os) {
+                        PRAGMA_OMP_SIMD()
+                        for (int o = 0; o < max_oc; ++o)
+                            d_bias[o] += d_dst[o];
+                        d_dst += sp_shift;
+                    }
+                }
+#else
                 for (int os = 0; os < jcp.os; ++os) {
                     PRAGMA_OMP_SIMD()
                     for (int o = 0; o < max_oc; ++o)
                         d_bias[o] += d_dst[o];
                     d_dst += sp_shift;
                 }
-
+#endif
                 nd_iterator_step(g, jcp.ngroups, ocb, jcp.nb_load);
             }
         }
