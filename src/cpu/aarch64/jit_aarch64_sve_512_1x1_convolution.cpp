@@ -907,7 +907,7 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                 if (img == img_start)
                     for (int o = 0; o < 16; ++o)
                         d_bias[o] = 0.;
-#if 1
+#ifdef __CLANG_FUJITSU
                 if (max_oc == 16) {
 
                     int os;
