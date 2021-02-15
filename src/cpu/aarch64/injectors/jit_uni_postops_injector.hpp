@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2020 Intel Corporation
-* Copyright 2020 FUJITSU LIMITED
+* Copyright 2020-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -47,6 +47,12 @@ namespace injector {
 using lambda_jit_injectors_t
         = std::map<dnnl_primitive_kind_t, std::function<void()>>;
 
+struct post_ops_ok_args_t;
+/*
+ * Checks if postops injection for given args is supported.
+ */
+bool is_supported(const post_ops_ok_args_t &post_ops_ok_args);
+
 /*
  * Main mechanism of handling various post-ops types. It utilizes internally
  * specialized injectors to generate post-ops code to host primitive. Random
@@ -85,10 +91,11 @@ public:
      *
      * @rhs_arg_params: see jit_uni_binary_injector description
      */
-    void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs,
+    void compute_vector_range(const injector_utils::treg_index_set_t &treg_idxs,
             const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params);
 
-    void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
+    void compute_vector_range(
+            const injector_utils::treg_index_set_t &treg_idxs);
 
     /*
      * Generates code of post_ops chain injected to host primitive. Applied to
@@ -109,6 +116,8 @@ public:
      */
     void compute_vector(size_t idx,
             const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params);
+    void compute_vector(size_t idx);
+
     /*
      * Thin wrapper for eltwise injector specific function
      */
@@ -148,6 +157,10 @@ struct post_ops_ok_args_t {
     const memory_desc_wrapper *dst_d = nullptr;
     const bool sum_at_pos_0_only = false;
     const bool sum_requires_scale_one = false;
+    const bcast_set_t enabled_bcast_strategy
+            = {broadcasting_strategy_t::scalar, broadcasting_strategy_t::per_oc,
+                    broadcasting_strategy_t::per_oc_spatial,
+                    broadcasting_strategy_t::no_broadcast};
 };
 
 bool post_ops_ok(const post_ops_ok_args_t &args);

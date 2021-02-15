@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2020 Intel Corporation
-* Copyright 2020 FUJITSU LIMITED
+* Copyright 2020-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -22,6 +22,28 @@ namespace cpu {
 namespace aarch64 {
 namespace injector {
 
+bool is_supported(const post_ops_ok_args_t &post_ops_ok_args) {
+    const cpu_isa_t isa = post_ops_ok_args.isa;
+    const post_ops_t &post_ops = post_ops_ok_args.post_ops;
+    const memory_desc_wrapper *dst_d = post_ops_ok_args.dst_d;
+    const auto &enabled_bcast_strategy
+            = post_ops_ok_args.enabled_bcast_strategy;
+
+    for (const auto &post_op : post_ops.entry_) {
+        if (post_op.is_eltwise()) {
+            const auto res
+                    = eltwise_injector::is_supported(isa, post_op.eltwise.alg);
+            if (!res) return false;
+        } else if (post_op.is_binary()) {
+            const auto &src1_desc = post_op.binary.src1_desc;
+            const auto res = binary_injector::is_supported(
+                    isa, src1_desc, *dst_d, enabled_bcast_strategy);
+            if (!res) return false;
+        }
+    }
+    return true;
+}
+
 template <cpu_isa_t isa>
 jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         const post_ops_t &post_ops,
@@ -40,8 +62,8 @@ jit_uni_postops_injector_t<isa>::jit_uni_postops_injector_t(jit_generator *host,
         if (post_op.is_eltwise()) {
             alg_to_eltwise_injector_.emplace(post_op.eltwise.alg,
                     jit_uni_eltwise_injector_f32<isa>(host_, post_op.eltwise,
-                            esp.save_state, esp.x_table, esp.p_mask, esp.p_512,
-                            esp.p_tmp0, esp.is_fwd, esp.use_dst));
+                            esp.save_state, esp.x_table, esp.p_mask, esp.p_tmp0,
+                            esp.p_all, esp.is_fwd, esp.use_dst));
         } else if (post_op.is_binary()) {
             is_binary = true;
         }
@@ -81,10 +103,10 @@ void jit_uni_postops_injector_t<isa>::compute_vector_range(size_t start_idx,
         size_t end_idx,
         const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params) {
 
-    injector_utils::vmm_index_set_t vmm_idxs;
+    injector_utils::treg_index_set_t treg_idxs;
     for (size_t i = start_idx; i < end_idx; i++)
-        vmm_idxs.emplace(i);
-    compute_vector_range(vmm_idxs, rhs_arg_params);
+        treg_idxs.emplace(i);
+    compute_vector_range(treg_idxs, rhs_arg_params);
 }
 
 template <cpu_isa_t isa>
@@ -96,17 +118,17 @@ void jit_uni_postops_injector_t<isa>::compute_vector_range(
 
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::compute_vector_range(
-        const injector_utils::vmm_index_set_t &vmm_idxs,
+        const injector_utils::treg_index_set_t &treg_idxs,
         const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params) {
 
     std::size_t rhs_arg_idx = 0;
     for (const auto &post_op : post_ops_.entry_) {
         if (post_op.is_eltwise()) {
             alg_to_eltwise_injector_.at(post_op.eltwise.alg)
-                    .compute_vector_range(vmm_idxs);
+                    .compute_vector_range(treg_idxs);
         } else if (post_op.is_binary()) {
             binary_injector_->compute_vector_range(
-                    vmm_idxs, rhs_arg_idx, post_op, rhs_arg_params);
+                    treg_idxs, rhs_arg_idx, post_op, rhs_arg_params);
             ++rhs_arg_idx;
         } else {
             const auto lam = lambda_jit_injectors_.find(post_op.kind);
@@ -116,8 +138,9 @@ void jit_uni_postops_injector_t<isa>::compute_vector_range(
 }
 template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::compute_vector_range(
-        const injector_utils::vmm_index_set_t &vmm_idxs) {
-    compute_vector_range(vmm_idxs, binary_injector::rhs_arg_dynamic_params_t());
+        const injector_utils::treg_index_set_t &treg_idxs) {
+    compute_vector_range(
+            treg_idxs, binary_injector::rhs_arg_dynamic_params_t());
 }
 
 template <cpu_isa_t isa>
@@ -130,6 +153,11 @@ template <cpu_isa_t isa>
 void jit_uni_postops_injector_t<isa>::compute_vector(size_t idx,
         const binary_injector::rhs_arg_dynamic_params_t &rhs_arg_params) {
     compute_vector_range({idx}, rhs_arg_params);
+}
+
+template <cpu_isa_t isa>
+void jit_uni_postops_injector_t<isa>::compute_vector(size_t idx) {
+    compute_vector_range({idx});
 }
 
 template <cpu_isa_t isa>
@@ -172,29 +200,32 @@ bool post_ops_ok(const post_ops_ok_args_t &post_ops_ok_args) {
     const memory_desc_wrapper *dst_d = post_ops_ok_args.dst_d;
     const bool sum_at_pos_0_only = post_ops_ok_args.sum_at_pos_0_only;
     const bool sum_requires_scale_one = post_ops_ok_args.sum_requires_scale_one;
+    const auto &enabled_bcast_strategy
+            = post_ops_ok_args.enabled_bcast_strategy;
 
     const auto is_accepted_postop = [&](const int idx) {
         for (const auto &post_op : accepted_post_op_types) {
             const auto &entry = post_ops.entry_[idx];
             switch (post_op) {
                 case sum:
-                    if (entry.is_sum(sum_requires_scale_one))
+                    if (entry.is_sum(false)) {
+                        if (sum_requires_scale_one && entry.sum.scale != 1)
+                            return false;
                         return IMPLICATION(sum_at_pos_0_only, idx == 0);
+                    }
                     break;
                 case eltwise:
-                    if (entry.is_eltwise()) return true;
+                    if (entry.is_eltwise()) {
+                        const auto alg = entry.eltwise.alg;
+                        return eltwise_injector::is_supported(isa, alg);
+                    }
                     break;
                 case binary:
                     if (entry.is_binary()) {
                         assert(dst_d != nullptr && "dst_d is null");
-
-                        bool res = IMPLICATION(entry.binary.src1_desc.data_type
-                                        == data_type::bf16,
-                                false);
-                        res &= binary_injector::binary_args_broadcast_supported(
-                                post_ops, *dst_d);
-
-                        return res;
+                        return binary_injector::is_supported(isa,
+                                entry.binary.src1_desc, *dst_d,
+                                enabled_bcast_strategy);
                     }
                     break;
                 default: assert(false && "Unhandled post_op type");

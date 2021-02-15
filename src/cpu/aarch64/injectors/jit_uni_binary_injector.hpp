@@ -69,7 +69,7 @@ bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
  * (arg1) that don't change during jit_uni_binary_injector_t object lifetime
  * and between compute_vector_range calls.
  *
- * @param rhs_dt_helper_vmm_idx - index of vmm helper used when loading data for
+ * @param rhs_dt_helper_treg_idx - index of treg helper used when loading data for
  * calculations. Treated as hint from user. If inside compute_vector_range hint
  * turns out to be invalid, it will be overwriten by register preserving logic inside
  * binary injector.
@@ -81,7 +81,7 @@ bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
  * @param preserve_gpr_helpers - determines whether gpr registers specified above
  * should be preserved (pushed to stack and poped back afterwords) between
  * compute_vector_range calls.
- * @param preserve_vmm_helper - determines whether vmm helper register specified
+ * @param preserve_treg_helper - determines whether treg helper register specified
  * above should be preserved between compute_vector_range calls.
  * @param abi_param_offset - offset to rhs tensor from first binary post-op operation
  * specified by user from runtime structure passed to kernel as abi param 1.
@@ -93,33 +93,33 @@ bool all_binary_postop_rhs_per_oc_broadcast(const post_ops_t &post_ops,
  * @param use_exact_tail_scalar_bcast - in case of scalar broadcast user can disable
  * loading data with tail, usually bcast through entire vector is faster (usually 1 instruction)
  * vs. broadcasting limited by tail size (potentially several instructions). In case
- * when user during storing ignores values from vmm above tail size, setting this option to
+ * when user during storing ignores values from treg above tail size, setting this option to
  * false can result in better performance.
  */
 struct rhs_arg_static_params_t {
-    rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
+    rhs_arg_static_params_t(std::size_t rhs_dt_helper_treg_idx,
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
-            bool preserve_gpr_helpers, bool preserve_vmm_helper,
+            bool preserve_gpr_helpers, bool preserve_treg_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
             std::size_t tail_size = 0u,
             bool use_exact_tail_scalar_bcast = false);
-    rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
+    rhs_arg_static_params_t(std::size_t rhs_dt_helper_treg_idx,
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
-            bool preserve_gpr_helpers, bool preserve_vmm_helper,
+            bool preserve_gpr_helpers, bool preserve_treg_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
             std::size_t tail_size, const Xbyak_aarch64::PReg &tail_opmask,
             bool use_exact_tail_scalar_bcast);
 
     bool is_opmask_set() const noexcept { return is_opmask_set_; }
 
-    mutable std::size_t rhs_dt_helper_vmm_idx;
+    mutable std::size_t rhs_dt_helper_treg_idx;
 
     Xbyak_aarch64::XReg rhs_addr_reg;
     Xbyak_aarch64::XReg rhs_helper_reg;
     bool preserve_gpr_helpers;
-    bool preserve_vmm_helper;
+    bool preserve_treg_helper;
     std::size_t abi_param_offset;
     memory_desc_wrapper dst_d;
     std::size_t tail_size;
@@ -127,10 +127,10 @@ struct rhs_arg_static_params_t {
     bool use_exact_tail_scalar_bcast;
 
 private:
-    rhs_arg_static_params_t(std::size_t rhs_dt_helper_vmm_idx,
+    rhs_arg_static_params_t(std::size_t rhs_dt_helper_treg_idx,
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
-            bool preserve_gpr_helpers, bool preserve_vmm_helper,
+            bool preserve_gpr_helpers, bool preserve_treg_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
             std::size_t tail_size, const Xbyak_aarch64::PReg &tail_opmask,
             bool use_exact_tail_scalar_bcast, bool is_opmask_set);
@@ -166,36 +166,36 @@ struct static_params_t {
 /*
  * Represents params passed to compute_vector_range method of
  * jit_uni_binary_injector_t that can be different for each call.
- * Contains configurable std::maps where key is vmm index and value is
+ * Contains configurable std::maps where key is treg index and value is
  * offset in elements. The offset value identifies tensor slice in particular
- * vmm. This is utilized by broadcasting mechanism. Offset, depending on the
+ * treg. This is utilized by broadcasting mechanism. Offset, depending on the
  * implementation particular kernels, can be passed as value (usually during
  * unrolling), inside operand, under memory address.
  *
- * @param vmm_idx_to_out_elem_off_addr - vmm mapped to offset in elements stored under
+ * @param treg_idx_to_out_elem_off_addr - treg mapped to offset in elements stored under
  * memory address intended to use in no_broadcast strategy.
- * @param vmm_idx_to_out_elem_off_addr - vmm mapped to offset in elements passed as raw
+ * @param treg_idx_to_out_elem_off_addr - treg mapped to offset in elements passed as raw
  * value intended to use in no_broadcast strategy
- * @param vmm_idx_to_out_elem_off_addr - vmm mapped to offset in elements inside operand
+ * @param treg_idx_to_out_elem_off_addr - treg mapped to offset in elements inside operand
  * intended to use in no_broadcast strategy
- * @param vmm_idx_to_oc_elem_off_addr - vmm mapped to output channel offset in elements
+ * @param treg_idx_to_oc_elem_off_addr - treg mapped to output channel offset in elements
  * stored under memory address intended to use in per_oc broadcast strategies.
- * @param vmm_idx_to_oc_elem_off_val - vmm mapped to  output channel offset in elements
+ * @param treg_idx_to_oc_elem_off_val - treg mapped to  output channel offset in elements
  * passed as raw value intended to use in per_oc broadcast strategies.
- * @param vmm_idx_to_oc_off_oprnd - vmm mapped to output channel offset in elements inside
+ * @param treg_idx_to_oc_off_oprnd - treg mapped to output channel offset in elements inside
  * operand intended to use in per_oc broadcast strategies.
- * @param vmm_tail_idx - vmm idxes that contains data don't fill the whole vector (tail).
+ * @param treg_tail_idx - treg idxes that contains data don't fill the whole vector (tail).
  */
 
 struct rhs_arg_dynamic_params_t {
-    std::map<int, Xbyak_aarch64::AdrNoOfs> vmm_idx_to_out_elem_off_addr;
-    std::map<int, int> vmm_idx_to_out_elem_off_val;
-    std::map<int, Xbyak_aarch64::XReg> vmm_idx_to_out_off_oprnd;
+    std::map<int, Xbyak_aarch64::AdrNoOfs> treg_idx_to_out_elem_off_addr;
+    std::map<int, int> treg_idx_to_out_elem_off_val;
+    std::map<int, Xbyak_aarch64::XReg> treg_idx_to_out_off_oprnd;
 
-    std::map<int, Xbyak_aarch64::AdrNoOfs> vmm_idx_to_oc_elem_off_addr;
-    std::map<int, int> vmm_idx_to_oc_elem_off_val;
-    std::map<int, Xbyak_aarch64::XReg> vmm_idx_to_oc_off_oprnd;
-    std::unordered_set<int> vmm_tail_idx_;
+    std::map<int, Xbyak_aarch64::AdrNoOfs> treg_idx_to_oc_elem_off_addr;
+    std::map<int, int> treg_idx_to_oc_elem_off_val;
+    std::map<int, Xbyak_aarch64::XReg> treg_idx_to_oc_off_oprnd;
+    std::unordered_set<int> treg_tail_idx_;
 };
 
 /*
@@ -234,10 +234,10 @@ public:
      * Generates code of binary post_op injected to host primitive. Applied to
      * ordered set of vector registers' indexes. Function loads appropriate
      * slice of rhs tensor for computations based on internally determined
-     * broadcast strategy and information about stored data in particular vmm
+     * broadcast strategy and information about stored data in particular treg
      * described inside rhs_arg_params.
      */
-    void compute_vector_range(const injector_utils::vmm_index_set_t &treg_idxs,
+    void compute_vector_range(const injector_utils::treg_index_set_t &treg_idxs,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params) const;
 
@@ -246,7 +246,7 @@ public:
      * range <start_idx, end_idx) of vector registers' indexes. Function loads
      * appropriate slice of rhs tensor for computations based on internally
      * determined broadcast strategy and information about stored data in particular
-     * vmm described inside rhs_arg_params.
+     * treg described inside rhs_arg_params.
      */
     void compute_vector_range(size_t start_idx, size_t end_idx,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
@@ -256,7 +256,7 @@ public:
      * Generates code of binary post_op injected to host primitive. Applied to
      * a single vector register index. Function loads appropriate slice of rhs tensor
      * for computations based on internally determined broadcast strategy and information
-     * about stored data in particular vmm described inside rhs_arg_params.
+     * about stored data in particular treg described inside rhs_arg_params.
      */
     void compute_vector(size_t idx, std::size_t rhs_arg_idx,
             const dnnl_post_ops::entry_t &post_op,
@@ -265,18 +265,18 @@ public:
 private:
     /*
      * Determines if hint passed by user is valid (is inside range
-     * <start_idx, end_idx>). If not it returns new vmm idx value that will be
-     * used as temporary vmm in future computations.
+     * <start_idx, end_idx>). If not it returns new treg idx value that will be
+     * used as temporary treg in future computations.
      */
-    int adjust_temp_vmm_hint(
-            int user_hint, int start_idx, int end_idx, int max_vmm_idx) const;
+    int adjust_temp_treg_hint(
+            int user_hint, int start_idx, int end_idx, int max_treg_idx) const;
     /*
      * Taking into account rhs_broadcasting_strategy and information from user
-     * about tensor slice (rhs_arg_params) stored in Vmm(vmm_idx) calculates
+     * about tensor slice (rhs_arg_params) stored in Treg(treg_idx) calculates
      * address of rhs tensor slice needed for binary operation and returns
      * ptr to it.
      */
-    Xbyak_aarch64::AdrNoOfs prepare_rhs_arg_addr(std::size_t vmm_idx,
+    Xbyak_aarch64::AdrNoOfs prepare_rhs_arg_addr(std::size_t treg_idx,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params,
             const broadcasting_strategy_t rhs_broadcasting_strategy) const;
@@ -289,30 +289,38 @@ private:
      * Helper functions responsible for preparing rhs tensor slice address.
      */
     void append_offset_from_operand(
-            const std::map<int, Xbyak_aarch64::XReg> &vmm_idx_to_elem_addr_off,
-            int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
+            const std::map<int, Xbyak_aarch64::XReg> &treg_idx_to_elem_addr_off,
+            int treg_idx, const Xbyak_aarch64::XReg &addr_reg,
             const Xbyak_aarch64::XReg &tmp_reg,
             std::size_t elem_size_bytes) const;
     void append_offset_under_mem_addr(
             const std::map<int, Xbyak_aarch64::AdrNoOfs>
-                    &vmm_idx_to_elem_addr_off,
-            int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
+                    &treg_idx_to_elem_addr_off,
+            int treg_idx, const Xbyak_aarch64::XReg &addr_reg,
             const Xbyak_aarch64::XReg &tmp_reg,
             std::size_t elem_size_bytes) const;
-    void append_value_offset(const std::map<int, int> &vmm_idx_to_elem_val_off,
-            int vmm_idx, const Xbyak_aarch64::XReg &addr_reg,
+    void append_value_offset(const std::map<int, int> &treg_idx_to_elem_val_off,
+            int treg_idx, const Xbyak_aarch64::XReg &addr_reg,
             std::size_t elem_size_bytes) const;
 
+    template <typename T>
+    typename std::enable_if<std::is_same<T, Xbyak_aarch64::ZReg>::value
+            || std::is_same<T, Xbyak_aarch64::AdrNoOfs>::value>::type
+    execute_cmp_binary(const TReg &dst, const TReg &lhs, const T &rhs,
+            const unsigned int cmp_predicate) const;
+    template <typename T>
+    typename std::enable_if<!(std::is_same<T, Xbyak_aarch64::ZReg>::value
+            || std::is_same<T, Xbyak_aarch64::AdrNoOfs>::value)>::type
+    execute_cmp_binary(const TReg &dst, const TReg &lhs, const T &rhs,
+            const unsigned int cmp_predicate) const;
     void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
             const TReg &rhs) const;
-
     void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
             const Xbyak_aarch64::AdrNoOfs &rhs) const;
     /*
      * Used in scalar broadcast strategy, broadcasting single value of given
      * data type over entire vector TReg register.
      */
-
     void execute_broadcast(const dnnl_data_type_t &data_type,
             const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
             bool with_tail = false) const;
@@ -331,12 +339,12 @@ private:
             const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
     void cvt_to_f32(const TReg &tmp_reg) const;
     /*
-     * Returns pair consisting of flag indication preservation is needed for vmm
-     * index in second member that should be used as temporary vmm inside inject
+     * Returns pair consisting of flag indication preservation is needed for treg
+     * index in second member that should be used as temporary treg inside inject
      * binary.
      */
-    std::pair<bool, int> should_preserve_vmm(int curr_idx, int vmm_hint,
-            int max_vmm_idx, bool dt_helper_vmm_needed) const;
+    std::pair<bool, int> should_preserve_treg(int curr_idx, int treg_hint,
+            int max_treg_idx, bool dt_helper_treg_needed) const;
     /*
      * Used in isa != avx512 where m32bcst is not supported, replaces ptr_b
      * with ptr.
