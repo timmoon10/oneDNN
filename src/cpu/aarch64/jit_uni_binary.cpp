@@ -223,9 +223,9 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t {
     bool is_tail_kernel_ = false;
     std::unique_ptr<injector::jit_uni_postops_injector_t<inject_isa>>
             postops_injector_;
-    const PReg &elt_inj_opmask_ = p1;
-    const PReg &elt_inj_tmp0_ = p2;
-    const PReg &elt_inj_all_ = p3;
+    const PReg &elt_inj_opmask_ = p5;
+    const PReg &elt_inj_tmp0_ = p6;
+    const PReg &elt_inj_all_ = p7; /* same as p_all */
 
     void init() {
         const memory_desc_wrapper src0_d(pd_->src_md(0));
@@ -544,12 +544,15 @@ struct jit_uni_binary_subkernel_t<sve_512, src_type>
     : public jit_uni_binary_kernel_t<sve_512> {
 
     void prepare_tail_mask() {
-        if (!tail_size_) return;
+        if (!tail_size_) {
+            ptrue(tail_opmask_.b);
+            return;
+        }
 
-        mov_imm(W_TMP_0, (1 << tail_size_) - 1);
+        mov_imm(W_TMP_0, tail_size_);
         dup(treg_tmp0_.s, W_TMP_0);
         index(treg_tmp1_.s, 0, 1);
-        cmple(tail_opmask_.s, p_all / T_z, treg_tmp1_.s, treg_tmp0_.s);
+        cmplt(tail_opmask_.s, p_all / T_z, treg_tmp1_.s, treg_tmp0_.s);
     }
 
     void prepare_isa_subkernel() override { prepare_tail_mask(); }
