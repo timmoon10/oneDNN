@@ -574,7 +574,7 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
                 = with_tail && scalar_f32 && is_sve_512_;
         if (with_tail_fusable_to_binary_op) {
             assert(rhs_arg_static_params_.is_opmask_set()
-                    && "Opmask is not set for tail loading avx512");
+                    && "Opmask is not set for tail loading sve_512");
             const auto &tail_opmask = rhs_arg_static_params_.tail_opmask;
             //            dst = dst | tail_opmask | host_->T_z;
         }

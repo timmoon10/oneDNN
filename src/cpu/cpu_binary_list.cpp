@@ -22,6 +22,9 @@
 #include "cpu/x64/jit_uni_binary.hpp"
 #include "cpu/x64/jit_uni_i8i8_binary.hpp"
 using namespace dnnl::impl::cpu::x64;
+#elif DNNL_AARCH64
+#include "cpu/aarch64/jit_uni_binary.hpp"
+using namespace dnnl::impl::cpu::aarch64;
 #endif
 
 namespace dnnl {
@@ -38,6 +41,7 @@ const pd_create_f impl_list[] = {
         /* fp */
         CPU_INSTANCE_X64(jit_uni_binary_t<f32>)
         CPU_INSTANCE_X64(jit_uni_binary_t<bf16>)
+        CPU_INSTANCE_AARCH64(jit_uni_binary_t<f32>)
         CPU_INSTANCE(ref_binary_t<f32>)
         CPU_INSTANCE(ref_binary_t<bf16>)
         /* int */
