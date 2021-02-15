@@ -197,7 +197,6 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t {
     const PReg &tail_opmask_ = p2;
     const PReg &cmp_mask = p4;
     const PReg &p_all = p7;
-    const TReg treg_one_ = TReg(25);
     const TReg tbcast_src1_ = TReg(30);
     const TReg tsum_scale_ = TReg(31);
     const TReg treg_scales_src0_ = TReg(17);
@@ -421,8 +420,9 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t {
         else if (alg == binary_sub)
             fsub(t0, t0, t1);
         else if (alg == binary_ge) {
-            fcmgt(cmp_mask.s, p_all / T_z, t0, t1);
-            mov(t0, cmp_mask / T_z, treg_one_.s);
+            fcmge(cmp_mask.s, p_all / T_z, t0, t1);
+            mov(t0, 0);
+            fmov(t0, cmp_mask / T_m, 1.0);
         } else
             assert(!"not supported operation!");
     }
@@ -450,11 +450,6 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t {
                     reg_off_rhs_postops_);
         const size_t vec_size = simd_w_ * data_type_size_;
         const auto alg = pd_->desc()->alg_kind;
-
-        if (alg == alg_kind::binary_ge) {
-            mov_imm(W_TMP_0, float2int(1));
-            dup(treg_one_.s, W_TMP_0);
-        }
 
         compute_bcast(false); // bcast/load vreg just one time per a kernel call
 
