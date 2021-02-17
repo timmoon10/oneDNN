@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2020-2021 Intel Corporation
-* Copyright 2020-2021 FUJITSU LIMITED
+* Copyright 2021 Intel Corporation
+* Copyright 2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -150,33 +150,42 @@ rhs_arg_static_params_t::rhs_arg_static_params_t(
         const Xbyak_aarch64::XReg &rhs_addr_reg,
         const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
         bool preserve_treg_helper, std::size_t abi_param_offset,
-        const memory_desc_wrapper &dst_d, std::size_t tail_size,
-        bool use_exact_tail_scalar_bcast)
+        const memory_desc_wrapper &dst_d,
+        /*const Xbyak_aarch64::VReg &v_tmp, */ const Xbyak_aarch64::ZReg &z_tmp,
+        std::size_t tail_size, bool use_exact_tail_scalar_bcast)
     : rhs_arg_static_params_t(rhs_dt_helper_treg_idx, rhs_addr_reg,
             rhs_helper_reg, preserve_gpr_helpers, preserve_treg_helper,
-            abi_param_offset, dst_d, tail_size, Xbyak_aarch64::PReg(2),
-            use_exact_tail_scalar_bcast, false /*is_opmask_set*/) {}
+            abi_param_offset, dst_d,
+            /*Xbyak_aarch64::ZReg(v_tmp.getIdx()),*/ z_tmp, tail_size,
+            Xbyak_aarch64::PReg(7), Xbyak_aarch64::PReg(2),
+            Xbyak_aarch64::PReg(6), use_exact_tail_scalar_bcast,
+            false /*is_opmask_set*/) {}
 
 rhs_arg_static_params_t::rhs_arg_static_params_t(
         std::size_t rhs_dt_helper_treg_idx,
         const Xbyak_aarch64::XReg &rhs_addr_reg,
         const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
         bool preserve_treg_helper, std::size_t abi_param_offset,
-        const memory_desc_wrapper &dst_d, std::size_t tail_size,
+        const memory_desc_wrapper &dst_d, const Xbyak_aarch64::ZReg &z_tmp,
+        std::size_t tail_size, const Xbyak_aarch64::PReg &p_all,
         const Xbyak_aarch64::PReg &tail_opmask,
+        const Xbyak_aarch64::PReg &inv_tail_opmask,
         bool use_exact_tail_scalar_bcast)
     : rhs_arg_static_params_t(rhs_dt_helper_treg_idx, rhs_addr_reg,
             rhs_helper_reg, preserve_gpr_helpers, preserve_treg_helper,
-            abi_param_offset, dst_d, tail_size, tail_opmask,
-            use_exact_tail_scalar_bcast, true /*is_opmask_set*/) {}
+            abi_param_offset, dst_d, z_tmp, tail_size, p_all, tail_opmask,
+            inv_tail_opmask, use_exact_tail_scalar_bcast,
+            true /*is_opmask_set*/) {}
 
 rhs_arg_static_params_t::rhs_arg_static_params_t(
         std::size_t rhs_dt_helper_treg_idx,
         const Xbyak_aarch64::XReg &rhs_addr_reg,
         const Xbyak_aarch64::XReg &rhs_helper_reg, bool preserve_gpr_helpers,
         bool preserve_treg_helper, std::size_t abi_param_offset,
-        const memory_desc_wrapper &dst_d, std::size_t tail_size,
+        const memory_desc_wrapper &dst_d, const Xbyak_aarch64::ZReg &z_tmp,
+        std::size_t tail_size, const Xbyak_aarch64::PReg &p_all,
         const Xbyak_aarch64::PReg &tail_opmask,
+        const Xbyak_aarch64::PReg &inv_tail_opmask,
         bool use_exact_tail_scalar_bcast, bool is_opmask_set)
     : rhs_dt_helper_treg_idx(rhs_dt_helper_treg_idx)
     , rhs_addr_reg(rhs_addr_reg)
@@ -185,8 +194,11 @@ rhs_arg_static_params_t::rhs_arg_static_params_t(
     , preserve_treg_helper(preserve_treg_helper)
     , abi_param_offset(abi_param_offset)
     , dst_d(dst_d)
+    , z_tmp(z_tmp)
     , tail_size(tail_size)
+    , p_all(p_all)
     , tail_opmask(tail_opmask)
+    , inv_tail_opmask(inv_tail_opmask)
     , use_exact_tail_scalar_bcast(use_exact_tail_scalar_bcast)
     , is_opmask_set_(is_opmask_set) {}
 
@@ -197,16 +209,6 @@ jit_uni_binary_injector_t<isa>::jit_uni_binary_injector_t(
     , rhs_arg_static_params_(static_params.rhs_arg_static_params)
     , param1_(static_params.param1)
     , supported_strategy_set_(static_params.supported_strategy_set) {}
-
-bool operator!=(
-        const Xbyak_aarch64::XReg &lhs, const Xbyak_aarch64::XReg &rhs) {
-    return lhs.getIdx() != rhs.getIdx();
-}
-
-bool operator!=(const Xbyak_aarch64::AdrNoOfs &lhs,
-        const Xbyak_aarch64::AdrNoOfs &rhs) {
-    return lhs.getXn() != rhs.getXn();
-}
 
 template <typename ParamsMap>
 static bool params_differ(ParamsMap &params,
@@ -292,6 +294,16 @@ static void pop_treg(jit_generator *host, const TReg &treg) {
 
     host->add_imm(host->X_SP, host->X_SP,
             injector_utils::treg_size_t<TReg>::bytes, host->X_TMP_0);
+}
+
+static void push_opmask(jit_generator *host, const Xbyak_aarch64::PReg &p) {
+    static constexpr int p_mask_size = 8;
+    if (mayiuse(sve_512)) {
+        host->sub(host->X_SP, host->X_SP, p_mask_size);
+        host->str(p, Xbyak_aarch64::ptr(host->X_SP));
+    } else {
+        assert(!"unreachable");
+    }
 }
 
 static void pop_opmask(jit_generator *host, const Xbyak_aarch64::PReg &p) {
@@ -387,7 +399,7 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
     bool treg0_was_preserved = false;
     static const TReg zero_treg(0);
 
-    Xbyak_aarch64::AdrNoOfs rhs_arg_addr(Xbyak_aarch64::XReg(0));
+    Address_t rhs_arg_addr(Xbyak_aarch64::XReg(0));
 
     // Phase 3 Apply binary post-op over all tregs.
     for (const auto treg_idx : treg_idxs) {
@@ -426,7 +438,7 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
 }
 
 template <cpu_isa_t isa>
-Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
+Address_t jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
         std::size_t treg_idx, std::size_t rhs_arg_idx,
         const dnnl_post_ops::entry_t &post_op,
         const rhs_arg_dynamic_params_t &rhs_arg_params,
@@ -447,7 +459,7 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
     host_->ldr(rhs_addr_reg, Xbyak_aarch64::ptr(host_->X_DEFAULT_ADDR));
 
     switch (rhs_broadcasting_strategy) {
-            //        case broadcasting_strategy_t::scalar: return host_->ptr_b[rhs_addr_reg];
+        case broadcasting_strategy_t::scalar: return Address_t(rhs_addr_reg);
         case broadcasting_strategy_t::no_broadcast: {
             append_offset_from_operand(rhs_arg_params.treg_idx_to_out_off_oprnd,
                     treg_idx, rhs_addr_reg, rhs_helper_reg, rhs_arg_elem_size);
@@ -457,9 +469,8 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
             append_value_offset(rhs_arg_params.treg_idx_to_out_elem_off_val,
                     treg_idx, rhs_addr_reg, rhs_arg_elem_size);
 
-            return Xbyak_aarch64::ptr(rhs_addr_reg);
+            return Address_t(rhs_addr_reg);
         }
-            /*
         case broadcasting_strategy_t::per_oc:
         case broadcasting_strategy_t::per_oc_spatial: {
             append_offset_from_operand(rhs_arg_params.treg_idx_to_oc_off_oprnd,
@@ -472,13 +483,13 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
 
             return rhs_broadcasting_strategy
                             == broadcasting_strategy_t::per_oc_spatial
-                    ? host_->ptr_b[rhs_addr_reg]
-                    : host_->ptr[rhs_addr_reg];
-        } */
+                    ? Address_t(rhs_addr_reg, true)
+                    : Address_t(rhs_addr_reg);
+        }
         default: assert(false && "Broadcasting type not supported");
     }
 
-    return Xbyak_aarch64::ptr(rhs_addr_reg);
+    return Address_t(rhs_addr_reg);
 }
 
 template <cpu_isa_t isa>
@@ -490,11 +501,10 @@ void jit_uni_binary_injector_t<isa>::append_offset_from_operand(
     const auto it_operand_off = treg_idx_to_elem_operand_off.find(treg_idx);
     if (it_operand_off != treg_idx_to_elem_operand_off.end()) {
         if (elem_size_bytes == 1) {
-            //            host_->add(addr_reg, it_operand_off->second);
+            host_->add(addr_reg, addr_reg, it_operand_off->second);
         } else {
             const int shift_val = std::log2(elem_size_bytes);
-            host_->mov(tmp_reg,
-                    Xbyak_aarch64::XReg(it_operand_off->second.getIdx()));
+            host_->mov(tmp_reg, it_operand_off->second);
             host_->lsl(tmp_reg, tmp_reg, shift_val);
             host_->add(addr_reg, addr_reg, tmp_reg);
         }
@@ -503,18 +513,18 @@ void jit_uni_binary_injector_t<isa>::append_offset_from_operand(
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::append_offset_under_mem_addr(
-        const std::map<int, Xbyak_aarch64::AdrNoOfs> &treg_idx_to_elem_addr_off,
-        int treg_idx, const Xbyak_aarch64::XReg &addr_reg,
-        const Xbyak_aarch64::XReg &tmp_reg, std::size_t elem_size_bytes) const {
+        const std::map<int, Address_t> &treg_idx_to_elem_addr_off, int treg_idx,
+        const Xbyak_aarch64::XReg &addr_reg, const Xbyak_aarch64::XReg &tmp_reg,
+        std::size_t elem_size_bytes) const {
 
     const auto it_off_addr = treg_idx_to_elem_addr_off.find(treg_idx);
     if (it_off_addr != treg_idx_to_elem_addr_off.end()) {
         if (elem_size_bytes == 1) {
-            //	  host_->add(addr_reg, addr_reg, it_off_addr->second);
+            host_->add(addr_reg, addr_reg, it_off_addr->second.getBase());
         } else {
             const int shift_val = std::log2(elem_size_bytes);
             host_->ldr(
-                    tmp_reg, Xbyak_aarch64::ptr(it_off_addr->second.getXn()));
+                    tmp_reg, Xbyak_aarch64::ptr(it_off_addr->second.getBase()));
             host_->lsl(tmp_reg, tmp_reg, shift_val);
             host_->add(addr_reg, addr_reg, tmp_reg);
         }
@@ -537,13 +547,12 @@ void jit_uni_binary_injector_t<isa>::append_value_offset(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::inject_binary(
         const dnnl_post_ops::entry_t &post_op, TReg dst,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const {
+        const Address_t &rhs_addr, bool with_tail) const {
 
     const auto &alg = post_op.binary.alg;
     const auto &rhs_arg_data_type = post_op.binary.src1_desc.data_type;
-    /*    const bool scalar_f32
-	  = rhs_addr.isBroadcast() && rhs_arg_data_type == data_type::f32; */
-    const bool scalar_f32 = false;
+    const bool scalar_f32
+            = rhs_addr.isBroadcast() && rhs_arg_data_type == data_type::f32;
     const bool with_tail_not_fusable_to_binary_op
             = with_tail && !(scalar_f32 && is_sve_512_);
     const bool process_rhs_arg_using_tmp_treg
@@ -557,11 +566,11 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
         const TReg tmp_treg
                 = TReg(rhs_arg_static_params_.rhs_dt_helper_treg_idx);
 
-        /*        if (rhs_addr.isBroadcast())
+        if (rhs_addr.isBroadcast())
             execute_broadcast(rhs_arg_data_type, tmp_treg,
                     remove_bcast_bit(rhs_addr), with_tail);
-		    else */
-        load_rhs(rhs_arg_data_type, tmp_treg, rhs_addr, with_tail);
+        else
+            load_rhs(rhs_arg_data_type, tmp_treg, rhs_addr, with_tail);
 
         if (rhs_arg_data_type != data_type::bf16
                 && rhs_arg_data_type != data_type::f32)
@@ -572,21 +581,21 @@ void jit_uni_binary_injector_t<isa>::inject_binary(
         const auto lhs = dst;
         const bool with_tail_fusable_to_binary_op
                 = with_tail && scalar_f32 && is_sve_512_;
-        if (with_tail_fusable_to_binary_op) {
+        if (!with_tail_fusable_to_binary_op) {
+            execute_binary(alg, dst, lhs, rhs_addr);
+        } else {
             assert(rhs_arg_static_params_.is_opmask_set()
                     && "Opmask is not set for tail loading sve_512");
             const auto &tail_opmask = rhs_arg_static_params_.tail_opmask;
-            //            dst = dst | tail_opmask | host_->T_z;
+            execute_binary(alg, dst, lhs, rhs_addr, tail_opmask);
         }
-
-        execute_binary(alg, dst, lhs, rhs_addr);
     }
 }
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast(
         const dnnl_data_type_t &data_type, const TReg &tmp_reg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const {
+        const Address_t &rhs_addr, bool with_tail) const {
     if (with_tail)
         execute_broadcast_tail(data_type, tmp_reg, rhs_addr);
     else
@@ -595,8 +604,7 @@ void jit_uni_binary_injector_t<isa>::execute_broadcast(
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs(const dnnl_data_type_t &data_type,
-        const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
-        bool with_tail) const {
+        const TReg &tmp_reg, const Address_t &rhs_addr, bool with_tail) const {
     if (with_tail)
         load_rhs_tail(data_type, tmp_reg, rhs_addr);
     else
@@ -604,9 +612,9 @@ void jit_uni_binary_injector_t<isa>::load_rhs(const dnnl_data_type_t &data_type,
 }
 
 template <cpu_isa_t isa>
-Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::remove_bcast_bit(
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
-    //    return Xbyak_aarch64::AdrNoOfs(
+Address_t jit_uni_binary_injector_t<isa>::remove_bcast_bit(
+        const Address_t &rhs_addr) const {
+    //    return Address_t(
     //            rhs_addr.getBit(), false, rhs_addr.getRegExp());
     return rhs_addr;
 }
@@ -619,7 +627,7 @@ void jit_uni_binary_injector_t<isa>::cvt_to_f32(const TReg &tmp_treg) const {
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast_no_tail(
         const dnnl_data_type_t &data_type, const TReg &tmp_treg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
+        const Address_t &rhs_addr) const {
     /*    switch (data_type) {
         case data_type::f32: host_->uni_vbroadcastss(tmp_treg, rhs_addr); break;
         case data_type::s32: host_->uni_vpbroadcastd(tmp_treg, rhs_addr); break;
@@ -641,7 +649,7 @@ void jit_uni_binary_injector_t<isa>::execute_broadcast_no_tail(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast_s8u8_no_tail(
         const data_type_t &data_type, const TReg &tmp_treg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
+        const Address_t &rhs_addr) const {
     /*    const TReg treg(tmp_treg.getIdx());
 	switch (data_type) {
 	case data_type::s8:
@@ -659,7 +667,7 @@ void jit_uni_binary_injector_t<isa>::execute_broadcast_s8u8_no_tail(
 template <>
 void jit_uni_binary_injector_t<asimd>::execute_broadcast_s8u8_no_tail(
         const data_type_t &data_type, const TReg &tmp_treg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
+        const Address_t &rhs_addr) const {
     /*
     if (data_type == data_type::s8 || data_type == data_type::u8) {
         const auto tmp_reg64_idx
@@ -684,7 +692,7 @@ void jit_uni_binary_injector_t<asimd>::execute_broadcast_s8u8_no_tail(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_broadcast_tail(
         const dnnl_data_type_t &data_type, const TReg &tmp_treg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
+        const Address_t &rhs_addr) const {
 
     assert(rhs_arg_static_params_.is_opmask_set()
             && "Opmask is not set for tail loading avx512");
@@ -764,8 +772,7 @@ static uint8_t MM_SHUFFLE(uint8_t z, uint8_t y, uint8_t x, uint8_t w) {
 }
 
 static void execute_broadcast_f32_tail_avx(jit_generator *host,
-        std::size_t ymm_idx, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
-        std::size_t tail_size) {
+        std::size_t ymm_idx, const Address_t &rhs_addr, std::size_t tail_size) {
 
     /*    const auto tmp_xmm = Xbyak::Xmm(ymm_idx);
     static const std::array<uint8_t, 2> imms {
@@ -789,11 +796,11 @@ static void execute_broadcast_f32_tail_avx(jit_generator *host,
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs_no_tail(
         const dnnl_data_type_t &data_type, const TReg &tmp_treg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
+        const Address_t &rhs_addr) const {
     switch (data_type) {
         case data_type::f32:
         case data_type::s32:
-            host_->ldr(tmp_treg, rhs_addr);
+            host_->ldr(tmp_treg, ptr(rhs_addr.getBase()));
             break;
             /*        case data_type::s8: host_->uni_vpmovsxbd(tmp_treg, rhs_addr); break;
         case data_type::u8: host_->uni_vpmovzxbd(tmp_treg, rhs_addr); break;
@@ -811,7 +818,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs_no_tail(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs_tail(
         const dnnl_data_type_t &data_type, const TReg &tmp_treg,
-        const Xbyak_aarch64::AdrNoOfs &rhs_addr) const {
+        const Address_t &rhs_addr) const {
 
     assert(rhs_arg_static_params_.is_opmask_set()
             && "Opmask is not set for tail loading avx512");
@@ -847,7 +854,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
                         Xbyak_aarch64::PRegH(9));
                 host_->ld1w(Xbyak_aarch64::ZRegS(IDX(tmp_treg)),
                         Xbyak_aarch64::PReg(1) / Xbyak_aarch64::T_z,
-                        Xbyak_aarch64::ptr(rhs_addr.getXn()));
+                        Xbyak_aarch64::ptr(rhs_addr.getBase()));
             } else if (vlen == 32) {
                 host_->sub(Xbyak_aarch64::XReg(22), Xbyak_aarch64::XReg(22), 8);
                 host_->str(Xbyak_aarch64::PReg(7),
@@ -859,7 +866,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
                         tail_opmask.b, Xbyak_aarch64::PRegB(14));
                 host_->ld1w(Xbyak_aarch64::ZRegS(IDX(tmp_treg)),
                         Xbyak_aarch64::PReg(7) / Xbyak_aarch64::T_z,
-                        Xbyak_aarch64::ptr(rhs_addr.getXn()));
+                        Xbyak_aarch64::ptr(rhs_addr.getBase()));
                 host_->ldr(Xbyak_aarch64::PReg(7),
                         Xbyak_aarch64::ptr(Xbyak_aarch64::XReg(22)));
                 host_->add(Xbyak_aarch64::XReg(22), Xbyak_aarch64::XReg(22), 8);
@@ -874,7 +881,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
                         tail_opmask.b, Xbyak_aarch64::PRegB(13));
                 host_->ld1w(Xbyak_aarch64::ZRegS(IDX(tmp_treg)),
                         Xbyak_aarch64::PReg(7) / Xbyak_aarch64::T_z,
-                        Xbyak_aarch64::ptr(rhs_addr.getXn()));
+                        Xbyak_aarch64::ptr(rhs_addr.getBase()));
                 host_->ldr(Xbyak_aarch64::PReg(7),
                         Xbyak_aarch64::ptr(Xbyak_aarch64::XReg(22)));
                 host_->add(Xbyak_aarch64::XReg(22), Xbyak_aarch64::XReg(22), 8);
@@ -898,24 +905,57 @@ void jit_uni_binary_injector_t<isa>::load_rhs_tail(
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
         const TReg &dst, const TReg &lhs, const TReg &rhs) const {
+    const auto &p_all = rhs_arg_static_params_.p_all;
+
+    execute_binary(binary_alg, dst, lhs, rhs, p_all);
+}
+
+template <cpu_isa_t isa>
+void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
+        const TReg &dst, const TReg &lhs, const TReg &rhs,
+        const Xbyak_aarch64::PReg &mask) const {
+
+    const auto &p_all = rhs_arg_static_params_.p_all;
+
     switch (binary_alg) {
         case alg_kind::binary_add:
             host_->fadd(Xbyak_aarch64::ZReg(IDX(dst)).s,
                     Xbyak_aarch64::ZReg(IDX(lhs)).s,
                     Xbyak_aarch64::ZReg(IDX(rhs)).s);
             break;
-        case alg_kind::binary_mul: /*unsupported*/ break;
-        case alg_kind::binary_max: /*unsupported*/ break;
-        case alg_kind::binary_min: /*unsupported*/ break;
-        case alg_kind::binary_div: /*unsupported*/ break;
-        case alg_kind::binary_sub: /*unsupported*/ break;
+        case alg_kind::binary_mul:
+            host_->fmul(Xbyak_aarch64::ZReg(IDX(dst)).s,
+                    Xbyak_aarch64::ZReg(IDX(lhs)).s,
+                    Xbyak_aarch64::ZReg(IDX(rhs)).s);
+            break;
+        case alg_kind::binary_max:
+            if (!(dst != lhs)) {
+                host_->fmaxnm(Xbyak_aarch64::ZReg(IDX(dst)).s,
+                        p_all / Xbyak_aarch64::T_m,
+                        Xbyak_aarch64::ZReg(IDX(rhs)).s);
+            } else {
+                assert(!"under implementation");
+            }
+            break;
+        case alg_kind::binary_min: break;
+        case alg_kind::binary_div: break;
+        case alg_kind::binary_sub: break;
         default: assert(!"unsupported algorithm"); break;
     }
 }
+
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
-        const TReg &dst, const TReg &lhs,
-        const Xbyak_aarch64::AdrNoOfs &rhs) const {
+        const TReg &dst, const TReg &lhs, const Address_t &rhs) const {
+    const auto &p_all = rhs_arg_static_params_.p_all;
+
+    execute_binary(binary_alg, dst, lhs, rhs, p_all);
+}
+
+template <cpu_isa_t isa>
+void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
+        const TReg &dst, const TReg &lhs, const Address_t &rhs,
+        const Xbyak_aarch64::PReg &mask) const {
     switch (binary_alg) {
         case alg_kind::binary_add:
             host_->ptrue(Xbyak_aarch64::PReg(1).b);
@@ -923,7 +963,8 @@ void jit_uni_binary_injector_t<isa>::execute_binary(alg_kind_t binary_alg,
                     host_->X_TMP_0);
             host_->st1w(Xbyak_aarch64::ZRegS(1), Xbyak_aarch64::PReg(1),
                     Xbyak_aarch64::ptr(Xbyak_aarch64::XReg(22)));
-            host_->ldr(Xbyak_aarch64::ZReg(1), Xbyak_aarch64::ptr(rhs.getXn()));
+            host_->ldr(
+                    Xbyak_aarch64::ZReg(1), Xbyak_aarch64::ptr(rhs.getBase()));
             host_->fadd(Xbyak_aarch64::ZReg(IDX(dst)).s,
                     Xbyak_aarch64::ZReg(IDX(lhs)).s, Xbyak_aarch64::ZReg(1).s);
             host_->ld1w(Xbyak_aarch64::ZRegS(1), Xbyak_aarch64::PReg(1),

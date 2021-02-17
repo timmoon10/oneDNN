@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2020-2021 Intel Corporation
-* Copyright 2020-2021 FUJITSU LIMITED
+* Copyright 2021 Intel Corporation
+* Copyright 2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -41,12 +41,6 @@ namespace cpu {
 namespace aarch64 {
 namespace binary_injector {
 using dnnl::impl::cpu::binary_injector_utils::prepare_binary_args;
-
-struct Address_t {
-    Xbyak_aarch64::XReg base_reg = Xbyak_aarch64::XReg(0);
-    bool isBroadcast_ = 0;
-    bool isBroadcast() const { return isBroadcast_; }
-};
 
 bool binary_args_matches_tag(format_tag_t tag, const post_ops_t &post_ops);
 
@@ -102,14 +96,18 @@ struct rhs_arg_static_params_t {
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_treg_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
-            std::size_t tail_size = 0u,
+            /*const Xbyak_aarch64::VReg &v_tmp,*/
+            const Xbyak_aarch64::ZReg &z_tmp, std::size_t tail_size = 0u,
             bool use_exact_tail_scalar_bcast = false);
     rhs_arg_static_params_t(std::size_t rhs_dt_helper_treg_idx,
             const Xbyak_aarch64::XReg &rhs_addr_reg,
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_treg_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
-            std::size_t tail_size, const Xbyak_aarch64::PReg &tail_opmask,
+            const Xbyak_aarch64::ZReg &z_tmp, std::size_t tail_size,
+            const Xbyak_aarch64::PReg &p_all,
+            const Xbyak_aarch64::PReg &tail_opmask,
+            const Xbyak_aarch64::PReg &inv_tail_opmask,
             bool use_exact_tail_scalar_bcast);
 
     bool is_opmask_set() const noexcept { return is_opmask_set_; }
@@ -123,7 +121,10 @@ struct rhs_arg_static_params_t {
     std::size_t abi_param_offset;
     memory_desc_wrapper dst_d;
     std::size_t tail_size;
+    Xbyak_aarch64::PReg p_all;
     Xbyak_aarch64::PReg tail_opmask;
+    Xbyak_aarch64::PReg inv_tail_opmask;
+    Xbyak_aarch64::ZReg z_tmp;
     bool use_exact_tail_scalar_bcast;
 
 private:
@@ -132,7 +133,10 @@ private:
             const Xbyak_aarch64::XReg &rhs_helper_reg,
             bool preserve_gpr_helpers, bool preserve_treg_helper,
             std::size_t abi_param_offset, const memory_desc_wrapper &dst_d,
-            std::size_t tail_size, const Xbyak_aarch64::PReg &tail_opmask,
+            const Xbyak_aarch64::ZReg &z_tmp, std::size_t tail_size,
+            const Xbyak_aarch64::PReg &p_all,
+            const Xbyak_aarch64::PReg &tail_opmask,
+            const Xbyak_aarch64::PReg &inv_tail_opmask,
             bool use_exact_tail_scalar_bcast, bool is_opmask_set);
 
     bool is_opmask_set_;
@@ -188,11 +192,11 @@ struct static_params_t {
  */
 
 struct rhs_arg_dynamic_params_t {
-    std::map<int, Xbyak_aarch64::AdrNoOfs> treg_idx_to_out_elem_off_addr;
+    std::map<int, Address_t> treg_idx_to_out_elem_off_addr;
     std::map<int, int> treg_idx_to_out_elem_off_val;
     std::map<int, Xbyak_aarch64::XReg> treg_idx_to_out_off_oprnd;
 
-    std::map<int, Xbyak_aarch64::AdrNoOfs> treg_idx_to_oc_elem_off_addr;
+    std::map<int, Address_t> treg_idx_to_oc_elem_off_addr;
     std::map<int, int> treg_idx_to_oc_elem_off_val;
     std::map<int, Xbyak_aarch64::XReg> treg_idx_to_oc_off_oprnd;
     std::unordered_set<int> treg_tail_idx_;
@@ -276,7 +280,7 @@ private:
      * address of rhs tensor slice needed for binary operation and returns
      * ptr to it.
      */
-    Xbyak_aarch64::AdrNoOfs prepare_rhs_arg_addr(std::size_t treg_idx,
+    Address_t prepare_rhs_arg_addr(std::size_t treg_idx,
             std::size_t rhs_arg_idx, const dnnl_post_ops::entry_t &post_op,
             const rhs_arg_dynamic_params_t &rhs_arg_params,
             const broadcasting_strategy_t rhs_broadcasting_strategy) const;
@@ -284,7 +288,7 @@ private:
      * Loads data and applies particular binary operation.
      */
     void inject_binary(const dnnl_post_ops::entry_t &post_op, TReg dst,
-            const Xbyak_aarch64::AdrNoOfs &rhs_addr, bool with_tail) const;
+            const Address_t &rhs_addr, bool with_tail) const;
     /*
      * Helper functions responsible for preparing rhs tensor slice address.
      */
@@ -294,8 +298,7 @@ private:
             const Xbyak_aarch64::XReg &tmp_reg,
             std::size_t elem_size_bytes) const;
     void append_offset_under_mem_addr(
-            const std::map<int, Xbyak_aarch64::AdrNoOfs>
-                    &treg_idx_to_elem_addr_off,
+            const std::map<int, Address_t> &treg_idx_to_elem_addr_off,
             int treg_idx, const Xbyak_aarch64::XReg &addr_reg,
             const Xbyak_aarch64::XReg &tmp_reg,
             std::size_t elem_size_bytes) const;
@@ -305,38 +308,41 @@ private:
 
     template <typename T>
     typename std::enable_if<std::is_same<T, Xbyak_aarch64::ZReg>::value
-            || std::is_same<T, Xbyak_aarch64::AdrNoOfs>::value>::type
+            || std::is_same<T, Address_t>::value>::type
     execute_cmp_binary(const TReg &dst, const TReg &lhs, const T &rhs,
             const unsigned int cmp_predicate) const;
     template <typename T>
     typename std::enable_if<!(std::is_same<T, Xbyak_aarch64::ZReg>::value
-            || std::is_same<T, Xbyak_aarch64::AdrNoOfs>::value)>::type
+            || std::is_same<T, Address_t>::value)>::type
     execute_cmp_binary(const TReg &dst, const TReg &lhs, const T &rhs,
             const unsigned int cmp_predicate) const;
     void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
             const TReg &rhs) const;
     void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
-            const Xbyak_aarch64::AdrNoOfs &rhs) const;
+            const TReg &rhs, const Xbyak_aarch64::PReg &mask) const;
+    void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
+            const Address_t &rhs) const;
+    void execute_binary(alg_kind_t binary_alg, const TReg &dst, const TReg &lhs,
+            const Address_t &rhs, const Xbyak_aarch64::PReg &mask) const;
     /*
      * Used in scalar broadcast strategy, broadcasting single value of given
      * data type over entire vector TReg register.
      */
     void execute_broadcast(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr,
+            const TReg &tmp_reg, const Address_t &rhs_addr,
             bool with_tail = false) const;
     void load_rhs(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
-            const Xbyak_aarch64::AdrNoOfs &rhs_addr,
-            bool with_tail = false) const;
+            const Address_t &rhs_addr, bool with_tail = false) const;
     void execute_broadcast_tail(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+            const TReg &tmp_reg, const Address_t &rhs_addr) const;
     void load_rhs_tail(const dnnl_data_type_t &data_type, const TReg &tmp_reg,
-            const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+            const Address_t &rhs_addr) const;
     void execute_broadcast_no_tail(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+            const TReg &tmp_reg, const Address_t &rhs_addr) const;
     void execute_broadcast_s8u8_no_tail(const data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+            const TReg &tmp_reg, const Address_t &rhs_addr) const;
     void load_rhs_no_tail(const dnnl_data_type_t &data_type,
-            const TReg &tmp_reg, const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+            const TReg &tmp_reg, const Address_t &rhs_addr) const;
     void cvt_to_f32(const TReg &tmp_reg) const;
     /*
      * Returns pair consisting of flag indication preservation is needed for treg
@@ -349,8 +355,7 @@ private:
      * Used in isa != avx512 where m32bcst is not supported, replaces ptr_b
      * with ptr.
      */
-    Xbyak_aarch64::AdrNoOfs remove_bcast_bit(
-            const Xbyak_aarch64::AdrNoOfs &rhs_addr) const;
+    Address_t remove_bcast_bit(const Address_t &rhs_addr) const;
 
     jit_generator *host_;
     const rhs_arg_static_params_t rhs_arg_static_params_;
@@ -358,6 +363,7 @@ private:
     const bcast_set_t supported_strategy_set_;
     static constexpr bool is_sve_512_
             = std::is_same<TReg, Xbyak_aarch64::ZReg>::value;
+    static constexpr int sizeof_xreg = 8;
     /*
      * Instructions from SSE/AVX used to compute binary result like vaddps where
      * second operand is memory, require mem operand to be 16/32 byte explicitly

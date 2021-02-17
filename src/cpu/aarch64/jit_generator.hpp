@@ -19,6 +19,7 @@
 #define CPU_AARCH64_JIT_GENERATOR_HPP
 
 #include <limits.h>
+#include <type_traits>
 
 #include "common/bit_cast.hpp"
 #include "common/type_helpers.hpp"
@@ -47,6 +48,47 @@ namespace {
 typedef enum {
     MAX_CODE_SIZE = 256 * 1024,
 } max_code_size_t;
+
+struct Address_t {
+    Address_t(const Xbyak_aarch64::XReg &base, bool isBroadcast = false)
+        : base_reg_(base), isBroadcast_(isBroadcast) {}
+    const Xbyak_aarch64::XReg &getBase() const { return base_reg_; }
+    const bool isBroadcast() const { return isBroadcast_; }
+
+private:
+    Xbyak_aarch64::XReg base_reg_ = Xbyak_aarch64::XReg(0);
+    bool isBroadcast_ = 0;
+};
+
+bool operator!=(
+        const Xbyak_aarch64::WReg &lhs, const Xbyak_aarch64::WReg &rhs) {
+    return lhs.getIdx() != rhs.getIdx();
+}
+
+bool operator!=(
+        const Xbyak_aarch64::XReg &lhs, const Xbyak_aarch64::XReg &rhs) {
+    return lhs.getIdx() != rhs.getIdx();
+}
+
+bool operator!=(
+        const Xbyak_aarch64::VReg &lhs, const Xbyak_aarch64::VReg &rhs) {
+    return lhs.getIdx() != rhs.getIdx();
+}
+
+bool operator!=(
+        const Xbyak_aarch64::ZReg &lhs, const Xbyak_aarch64::ZReg &rhs) {
+    return lhs.getIdx() != rhs.getIdx();
+}
+
+bool operator!=(const Xbyak_aarch64::AdrNoOfs &lhs,
+        const Xbyak_aarch64::AdrNoOfs &rhs) {
+    return lhs.getXn() != rhs.getXn();
+}
+
+bool operator!=(const Address_t &lhs, const Address_t &rhs) {
+    return lhs.getBase() != rhs.getBase()
+            || lhs.isBroadcast() != rhs.isBroadcast();
+}
 
 // Callee-saved registers
 constexpr Xbyak_aarch64::Operand::Code abi_save_gpr_regs[]

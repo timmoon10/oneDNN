@@ -333,7 +333,7 @@ struct jit_uni_binary_kernel_t : public binary_kernel_t {
                     x_addr = X_DEFAULT_ADDR;
                 }
                 rhs_arg_params.treg_idx_to_oc_elem_off_addr.emplace(
-                        treg_idx, ptr(x_addr));
+                        treg_idx, Address_t(x_addr));
             } else if (op_type_ == op_t::n_spatial_c) {
                 rhs_arg_params.treg_idx_to_oc_off_oprnd.emplace(
                         treg_idx, reg_off_rhs_postops_);
