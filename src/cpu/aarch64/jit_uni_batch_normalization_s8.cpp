@@ -94,7 +94,7 @@ struct jit_bnorm_base_t : public jit_generator {
         uint32_t offIdx = off.getIdx();
 
         if (offIdx <= SP_IDX) {
-            add(X_DEFAULT_ADDR, base, off);
+            xa_->add(X_DEFAULT_ADDR, base, off);
             x_addr = X_DEFAULT_ADDR;
         }
         if (disp) {
@@ -106,10 +106,10 @@ struct jit_bnorm_base_t : public jit_generator {
     }
 
     void uni_fmax(const ZReg &dst, const ZReg &src, const ZReg &src2) {
-        mov(z_tmp0.d, src2.d);
+        xa_->mov(z_tmp0.d, src2.d);
         fmaxnm(z_tmp0.s, p_512, src.s);
         fmax(z_tmp0.s, p_512, src.s);
-        mov(dst.d, z_tmp0.d);
+        xa_->mov(dst.d, z_tmp0.d);
     }
 
     void compute_predefined_variables() {
@@ -121,7 +121,7 @@ struct jit_bnorm_base_t : public jit_generator {
     }
 
     void load_common_params() {
-        mov(WReg(IDX(reg_tmp)), float2int(1.0f));
+        xa_->mov(WReg(IDX(reg_tmp)), float2int(1.0f));
         dup(vone.s, WReg(IDX(reg_tmp)));
 
 #define PARAM_OFF(x) offsetof(call_params_t, x)
@@ -131,7 +131,7 @@ struct jit_bnorm_base_t : public jit_generator {
     assert(-256 <= PARAM_OFF_DIFF(x, y) && PARAM_OFF_DIFF(x, y) <= 255); \
     ldr(r, pre_ptr(X_DEFAULT_ADDR, PARAM_OFF_DIFF(x, y)))
 
-        mov(X_DEFAULT_ADDR, reg_param);
+        xa_->mov(X_DEFAULT_ADDR, reg_param);
 
         ldr(W_TMP_0, pre_ptr(X_DEFAULT_ADDR, PARAM_OFF(eps)));
         dup(veps.s, W_TMP_0);
@@ -188,8 +188,8 @@ struct jit_bnorm_base_t : public jit_generator {
             const ZReg &vmean, const ZReg &vsqrtvar, size_t offt,
             bool need_tail) {
         load_mean_and_var(vmean, vsqrtvar, offt, need_tail);
-        fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
-        fsqrt(vsqrtvar.s, p_512 / T_m, vsqrtvar.s);
+        xa_->fadd(vsqrtvar.s, vsqrtvar.s, veps.s);
+        xa_->fsqrt(vsqrtvar.s, p_512 / T_m, vsqrtvar.s);
 
         if (pd_->use_scaleshift()) {
             load_scale_and_shift(vscale, vshift, offt, need_tail);
@@ -197,7 +197,7 @@ struct jit_bnorm_base_t : public jit_generator {
             fmls(vshift.s, p_512 / T_m, vmean.s, vscale.s);
         } else {
             uni_fdiv(vscale.s, vone.s, vsqrtvar.s, z_tmp0.s, p_512);
-            fmul(vmean.s, vmean.s, vscale.s);
+            xa_->fmul(vmean.s, vmean.s, vscale.s);
             uni_fsub(vshift.s, vzero.s, vmean.s);
         }
     }
@@ -207,7 +207,7 @@ struct jit_bnorm_base_t : public jit_generator {
                 reg_channel_offt_1byte);
         eor(reg_channel_offt_4byte, reg_channel_offt_4byte,
                 reg_channel_offt_4byte);
-        mov(WReg(IDX(reg_tmp)), sizeof(data_t) * c_in_xmm_);
+        xa_->mov(WReg(IDX(reg_tmp)), sizeof(data_t) * c_in_xmm_);
 
         if (num_c16_blocks_) compute_dst(false);
         if (c_tail_) compute_dst(true);
@@ -258,7 +258,8 @@ struct jit_bnorm_t<sve_512> : public jit_bnorm_base_t<sve_512> {
             case 1: ptrue(PRegS(idx), VL1); break;
             default:
                 index(z_tmp0.s, 1, 1);
-                cmple(PRegS(idx), p_512 / T_z, z_tmp0.s, c_tail_);
+                cmple(PRegS(idx), p_512 / Xbyak_aarch64::T_z, z_tmp0.s,
+                        c_tail_);
                 break;
         }
     }
@@ -266,22 +267,26 @@ struct jit_bnorm_t<sve_512> : public jit_bnorm_base_t<sve_512> {
     void load_mean_and_var(const ZReg &vmean, const ZReg &vsqrtvar, size_t offt,
             bool need_tail) override {
         if (need_tail) {
-            ld1w(vmean.s, tail_opmask / T_z, ptr(mean_ptr(offt)));
-            ld1w(vsqrtvar.s, tail_opmask / T_z, ptr(var_ptr(offt)));
+            ld1w(vmean.s, tail_opmask / Xbyak_aarch64::T_z,
+                    Xbyak_aarch64::ptr(mean_ptr(offt)));
+            ld1w(vsqrtvar.s, tail_opmask / Xbyak_aarch64::T_z,
+                    Xbyak_aarch64::ptr(var_ptr(offt)));
         } else {
-            ldr(vmean, ptr(mean_ptr(offt)));
-            ldr(vsqrtvar, ptr(var_ptr(offt)));
+            ldr(vmean, Xbyak_aarch64::ptr(mean_ptr(offt)));
+            ldr(vsqrtvar, Xbyak_aarch64::ptr(var_ptr(offt)));
         }
     }
 
     void load_scale_and_shift(const ZReg &vscale, const ZReg &vshift,
             size_t offt, bool need_tail) override {
         if (need_tail) {
-            ld1w(vscale.s, tail_opmask / T_z, ptr(scale_ptr(offt)));
-            ld1w(vshift.s, tail_opmask / T_z, ptr(shift_ptr(offt)));
+            ld1w(vscale.s, tail_opmask / Xbyak_aarch64::T_z,
+                    Xbyak_aarch64::ptr(scale_ptr(offt)));
+            ld1w(vshift.s, tail_opmask / Xbyak_aarch64::T_z,
+                    Xbyak_aarch64::ptr(shift_ptr(offt)));
         } else {
-            ldr(vscale, ptr(scale_ptr(offt)));
-            ldr(vshift, ptr(shift_ptr(offt)));
+            ldr(vscale, Xbyak_aarch64::ptr(scale_ptr(offt)));
+            ldr(vshift, Xbyak_aarch64::ptr(shift_ptr(offt)));
         }
     }
 
@@ -300,7 +305,7 @@ struct jit_bnorm_t<sve_512> : public jit_bnorm_base_t<sve_512> {
 
             // ... then process all spatial loop with it and move to the
             // next channel chunk
-            mov(reg_spat_offt, reg_channel_offt_1byte);
+            xa_->mov(reg_spat_offt, reg_channel_offt_1byte);
             Label mb_sp_loop;
             L(mb_sp_loop);
             {
@@ -313,13 +318,14 @@ struct jit_bnorm_t<sve_512> : public jit_bnorm_base_t<sve_512> {
                             ptrue(P_TMP_1.b, VL8);
                             zip1(p_tmp0.d, P_TMP_1.d, p_tmp0.d);
                         }
-                        ld1b(v.b, p_tmp0 / T_m, ptr(src_ptr()));
+                        ld1b(v.b, p_tmp0 / T_m, Xbyak_aarch64::ptr(src_ptr()));
                     }
                     zip1(z_tmp0.b, v.b, v.b);
                     zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
                     sxtb(v.s, p_512 / T_m, z_tmp0.s);
                 } else {
-                    ld1b(z_tmp0.b, p_lsb_128 / T_z, ptr(src_ptr()));
+                    ld1b(z_tmp0.b, p_lsb_128 / Xbyak_aarch64::T_z,
+                            Xbyak_aarch64::ptr(src_ptr()));
                     zip1(z_tmp0.b, z_tmp0.b, z_tmp0.b);
                     zip1(z_tmp0.h, z_tmp0.h, z_tmp0.h);
                     sxtb(v.s, p_512 / T_m, z_tmp0.s);
@@ -333,7 +339,7 @@ struct jit_bnorm_t<sve_512> : public jit_bnorm_base_t<sve_512> {
                 frinti(v.s, p_512 / T_m, v.s);
                 fcvtzs(v.s, p_512 / T_m, v.s);
                 if (need_tail) {
-                    mov(z_tmp0.d, v.d);
+                    xa_->mov(z_tmp0.d, v.d);
                     dup(v.d, 0);
                     smin(z_tmp0.s, 127);
                     smax(z_tmp0.s, -128);
@@ -341,27 +347,27 @@ struct jit_bnorm_t<sve_512> : public jit_bnorm_base_t<sve_512> {
                     uzp1(v.b, z_tmp0.b, v.b);
 
                     if (c_tail_ != 0) {
-                        st1b(v.b, p_tmp0 / T_m, ptr(dst_ptr()));
+                        st1b(v.b, p_tmp0 / T_m, Xbyak_aarch64::ptr(dst_ptr()));
                     }
                 } else {
-                    mov(z_tmp0.d, v.d);
+                    xa_->mov(z_tmp0.d, v.d);
                     smin(z_tmp0.s, 127);
                     smax(z_tmp0.s, -128);
-                    st1b(z_tmp0.s, p_512 / T_m, ptr(dst_ptr()));
+                    st1b(z_tmp0.s, p_512 / T_m, Xbyak_aarch64::ptr(dst_ptr()));
                 }
 
-                add(reg_spat_offt, reg_spat_offt, reg_channel_offt_count);
-                cmp(reg_spat_offt, reg_spat_offt_count);
+                xa_->add(reg_spat_offt, reg_spat_offt, reg_channel_offt_count);
+                xa_->cmp(reg_spat_offt, reg_spat_offt_count);
                 b(LT, mb_sp_loop);
             }
 
             // reg_tmp checks c_in_xmm_ channels ahead for further tail process
-            add(reg_tmp, reg_tmp, sizeof(data_t) * c_in_xmm_);
-            add(reg_channel_offt_1byte, reg_channel_offt_1byte,
+            xa_->add(reg_tmp, reg_tmp, sizeof(data_t) * c_in_xmm_);
+            xa_->add(reg_channel_offt_1byte, reg_channel_offt_1byte,
                     sizeof(data_t) * c_in_xmm_);
-            add(reg_channel_offt_4byte, reg_channel_offt_4byte,
+            xa_->add(reg_channel_offt_4byte, reg_channel_offt_4byte,
                     sizeof(float) * c_in_xmm_);
-            cmp(reg_tmp, reg_channel_offt_count);
+            xa_->cmp(reg_tmp, reg_channel_offt_count);
             b(LE, c_loop);
         }
     }
