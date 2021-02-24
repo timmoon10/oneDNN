@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2019-2020 Intel Corporation
-* Copyright 2020 FUJITSU LIMITED
+* Copyright 2019-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ bool init_max_cpu_isa() {
 
         IF_HANDLE_CASE(isa_all);
         ELSEIF_HANDLE_CASE(asimd);
+        ELSEIF_HANDLE_CASE(sve_256);
         ELSEIF_HANDLE_CASE(sve_512);
 
 #undef IF_HANDLE_CASE
@@ -72,6 +73,8 @@ struct isa_info_t {
         switch (isa) {
             case sve_512:
                 return static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_512);
+            case sve_256:
+                return static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_sve_512);
             case asimd: return static_cast<dnnl_cpu_isa_t>(dnnl_cpu_isa_asimd);
             default: return dnnl_cpu_isa_all;
         }
@@ -80,6 +83,7 @@ struct isa_info_t {
     const char *get_name() const {
         switch (isa) {
             case sve_512: return "AArch64 SVE (512 bits)";
+            case sve_256: return "AArch64 SVE (256 bits)";
             case asimd: return "AArch64 (with Advanced SIMD & floating-point)";
             default: return "AArch64";
         }
@@ -93,6 +97,7 @@ static isa_info_t get_isa_info_t(void) {
 #define HANDLE_CASE(cpu_isa) \
     if (mayiuse(cpu_isa)) return isa_info_t(cpu_isa);
     HANDLE_CASE(sve_512);
+    HANDLE_CASE(sve_256);
     HANDLE_CASE(asimd);
 #undef HANDLE_CASE
     return isa_info_t(isa_any);
@@ -124,6 +129,7 @@ status_t set_max_cpu_isa(dnnl_cpu_isa_t isa) {
     switch (isa) {
         HANDLE_CASE(isa_all);
         HANDLE_CASE(asimd);
+        HANDLE_CASE(sve_256);
         HANDLE_CASE(sve_512);
         default: return invalid_arguments;
     }
