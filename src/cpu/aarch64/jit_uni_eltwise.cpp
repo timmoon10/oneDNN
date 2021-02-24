@@ -138,14 +138,14 @@ struct jit_uni_kernel_t : public jit_uni_eltwise_kernel {
         xa_->cmp(reg_work_amount, 0);
         b(LE, reminder_loop_end);
 
-        ld1(xmm_src[0], ptr(reg_src));
+        ld1(xmm_src[0], Xbyak_aarch64::ptr(reg_src));
         eltwise_injector_->compute_vector(xmm_src.getIdx());
 
         if (!is_fwd) {
-            ld1(xmm_diff_dst[0], ptr(reg_diff_dst));
-            fmul(xmm_src, xmm_src, xmm_diff_dst);
+            ld1(xmm_diff_dst[0], Xbyak_aarch64::ptr(reg_diff_dst));
+            xa_->fmul(xmm_src, xmm_src, xmm_diff_dst);
         }
-        st1(xmm_src[0], ptr(reg_dst));
+        xa_->st1(xmm_src[0], Xbyak_aarch64::ptr(reg_dst));
 
         add_imm(reg_src, reg_src, dtype_size(), X_TMP_0);
         add_imm(reg_dst, reg_dst, dtype_size(), X_TMP_0);
