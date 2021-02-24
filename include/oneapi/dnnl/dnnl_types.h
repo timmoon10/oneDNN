@@ -2704,6 +2704,16 @@ typedef enum {
     /// Intel AVX2 and Intel Deep Learning Boost (Intel DL Boost) support
     dnnl_cpu_isa_avx2_vnni = 0x407,
 
+    /// AARCH64 Advanced SIMD & floating-point
+    dnnl_cpu_isa_asimd = 0x1000,
+    /// AARCH64 SVE 128 bits
+    dnnl_cpu_isa_sve_128 = 0x3000,
+    /// AARCH64 SVE 256 bits
+    dnnl_cpu_isa_sve_256 = 0x7000,
+    /// AARCH64 SVE 384 bits
+    dnnl_cpu_isa_sve_384 = 0xf000,
+    /// AARCH64 SVE 512 bits
+    dnnl_cpu_isa_sve_512 = 0x1f000,
 } dnnl_cpu_isa_t;
 
 /// CPU ISA hints flags
