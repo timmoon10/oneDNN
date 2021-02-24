@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2021 Intel Corporation
-* Copyright 2021 FUJITSU LIMITED
+* Copyright 2020-2021 Intel Corporation
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,7 +17,10 @@
 #ifndef CPU_AARCH64_JIT_INJECTOR_UTILS_HPP
 #define CPU_AARCH64_JIT_INJECTOR_UTILS_HPP
 
+#include <array>
+#include <cstddef>
 #include <set>
+#include <stack>
 
 #include "cpu/aarch64/jit_generator.hpp"
 
@@ -29,6 +32,46 @@ namespace injector_utils {
 
 using vmm_index_set_t = typename std::set<size_t>;
 using vmm_index_set_iterator_t = typename std::set<size_t>::iterator;
+template <typename Vmm>
+struct vmm_size_t;
+
+template <>
+struct vmm_size_t<Xbyak_aarch64::ZReg> {
+    static constexpr std::size_t bytes = 64u;
+};
+
+template <>
+struct vmm_size_t<Xbyak_aarch64::VReg> {
+    static constexpr std::size_t bytes = 16u;
+};
+
+/*
+ * Scope guard for general purpouse register and vector registers preservation.
+ * Pushes registers to stack during construction and pops during destruction.
+ */
+class register_preserve_guard_t {
+
+public:
+    register_preserve_guard_t(jit_generator *host,
+            std::initializer_list<Xbyak_aarch64::XReg> reg64_to_preserve,
+            std::initializer_list<Xbyak_aarch64::VReg> vmm_to_preserve = {});
+    register_preserve_guard_t(register_preserve_guard_t &&other) = default;
+    register_preserve_guard_t &operator=(register_preserve_guard_t &&other)
+            = default;
+    DNNL_DISALLOW_COPY_AND_ASSIGN(register_preserve_guard_t);
+    ~register_preserve_guard_t();
+    size_t stack_space_occupied() const;
+
+private:
+    jit_generator *host_;
+    std::stack<Xbyak_aarch64::XReg> reg64_stack_;
+    std::stack<Xbyak_aarch64::VReg> vmm_stack_;
+    size_t vmm_to_preserve_size_bytes_;
+};
+
+using output_dims_t = std::array<dim_t, 5>;
+
+output_dims_t make_output_dims(const memory_desc_wrapper &dst_d);
 
 } // namespace injector_utils
 } // namespace aarch64
