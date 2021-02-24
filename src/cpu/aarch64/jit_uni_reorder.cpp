@@ -1183,7 +1183,7 @@ struct jit_uni_reorder_kernel_f32_t : public kernel_t, public jit_generator {
             uzp1(z, z, z);
         }
         for (size_t i = startIdx; i < startIdx + regNum; i++) {
-            mov(ZRegB(i), P_MSB_384 / T_m, 0);
+            xa_->mov(ZRegB(i), P_MSB_384 / T_m, 0);
         }
     }
 
