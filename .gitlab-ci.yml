@@ -1,0 +1,26 @@
+variables:
+    GIT_STRATEGY: clone
+
+stages:
+    - test
+
+before_script:
+
+#ClangFormatCheck:
+#  stage: test
+#  image: bce7edfda510
+#  script:
+#  - ./.github/automation/clang-format.sh
+
+fcc_w/_SSL2:
+  stage: test
+  image: bce7edfda510
+  script:
+    - git submodule sync --recursive
+    - git submodule update --init --recursive
+    - source .github/automation/env/setenv-fcc
+    - .github/automation/env/xed.sh -n
+    - .github/automation/env/xbyak_translator_aarch64.sh
+    - .github/automation/build.sh --threading omp --mode Release --source-dir $(pwd) --build-dir $(pwd)/build --cmake-opt -DWITH_BLAS=ssl2
+    - .github/automation/test.sh --test-kind gtest --build-dir $(pwd)/build --report-dir $(pwd)/report
+    - .github/automation/test.sh --test-kind benchdnn --build-dir $(pwd)/build --report-dir $(pwd)/report
