@@ -1,6 +1,6 @@
 /*******************************************************************************
 * Copyright 2017-2021 Intel Corporation
-* Copyright 2021 FUJITSU LIMITED
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -28,6 +28,8 @@
 #include "cpu/cpu_eltwise_pd.hpp"
 
 #include "cpu/aarch64/cpu_isa_traits.hpp"
+
+#define MAX_NUM_SINGLE_ELTWISE 4096
 
 namespace dnnl {
 namespace impl {
