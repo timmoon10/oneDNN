@@ -1120,7 +1120,7 @@ public:
             const Xbyak_aarch64::VReg4S &tmp, const Xbyak_aarch64::PReg &pred) {
         UNUSED(tmp);
         UNUSED(pred);
-        fdiv(dst, src, src2);
+        xa_->fdiv(dst, src, src2);
     }
 
     template <typename TReg>
@@ -1134,14 +1134,15 @@ public:
         if (dstIdx == src2Idx) {
             assert(tmpIdx != srcIdx && tmpIdx != src2Idx);
 
-            mov(Xbyak_aarch64::ZRegD(tmpIdx), Xbyak_aarch64::ZRegD(src2Idx));
-            mov(dst, pred / Xbyak_aarch64::T_m, src);
-            fdiv(dst, pred / Xbyak_aarch64::T_m, tmp);
+            xa_->mov(Xbyak_aarch64::ZRegD(tmpIdx),
+                    Xbyak_aarch64::ZRegD(src2Idx));
+            xa_->mov(dst, pred / Xbyak_aarch64::T_m, src);
+            xa_->fdiv(dst, pred / Xbyak_aarch64::T_m, tmp);
         } else if (dstIdx == srcIdx) {
-            fdiv(dst, pred / Xbyak_aarch64::T_m, src2);
+            xa_->fdiv(dst, pred / Xbyak_aarch64::T_m, src2);
         } else {
-            mov(dst, P_ALL_ONE / Xbyak_aarch64::T_m, src);
-            fdiv(dst, pred / Xbyak_aarch64::T_m, src2);
+            xa_->mov(dst, P_ALL_ONE / Xbyak_aarch64::T_m, src);
+            xa_->fdiv(dst, pred / Xbyak_aarch64::T_m, src2);
         }
     }
 
