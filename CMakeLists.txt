@@ -72,7 +72,7 @@ endif()
 
 set(PROJECT_NAME "oneDNN")
 set(PROJECT_FULL_NAME "oneAPI Deep Neural Network Library (oneDNN)")
-set(PROJECT_VERSION "2.1.0")
+set(PROJECT_VERSION "2.0.0")
 
 set(LIB_NAME dnnl)
 
@@ -116,7 +116,10 @@ include("cmake/mkldnn_compat.cmake")
 include("cmake/utils.cmake")
 include("cmake/options.cmake")
 include("cmake/SYCL.cmake")
-include("cmake/OpenMP.cmake")
+if (NOT (CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
+      CMAKE_C_COMPILER MATCHES ".*/fcc$"))
+    include("cmake/OpenMP.cmake")
+endif()
 include("cmake/TBB.cmake")
 include("cmake/Threadpool.cmake")
 include("cmake/OpenCL.cmake")
@@ -129,6 +132,11 @@ include("cmake/version.cmake")
 include("cmake/coverage.cmake")
 include("cmake/build_types.cmake")
 include("cmake/testing.cmake")
+if (CMAKE_CXX_COMPILER MATCHES ".*/FCC$" AND
+      CMAKE_C_COMPILER MATCHES ".*/fcc$")
+    include("cmake/blas_ssl2.cmake")
+endif()
+include("cmake/xbyak_translator_aarch64.cmake")
 
 # Handle cases when OpenMP runtime is requested but not found: override CPU
 # runtime to be sequential
