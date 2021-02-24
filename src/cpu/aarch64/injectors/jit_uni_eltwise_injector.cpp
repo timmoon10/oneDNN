@@ -1,6 +1,6 @@
 /*******************************************************************************
 * Copyright 2019-2021 Intel Corporation
-* Copyright 2021 FUJITSU LIMITED
+* Copyright 2020-2021 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -42,6 +42,13 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     const auto end_idx = *(vmm_idxs.rbegin()) + 1;
     start_idx_tail = vmm_idxs.begin();
 
+    // For sse41 mask register has to be Xmm(0)
+    if (isa == asimd && vecs_to_preserve > 0) {
+        size_t idx = 0;
+        assert(idx < start_idx);
+        preserved_vec_idxs[preserved_vecs_count++] = idx;
+    }
+
     for (size_t idx = preserved_vecs_count; idx < vecs_count; idx++) {
         if (preserved_vecs_count >= vecs_to_preserve) break;
         if (start_idx <= idx && idx < end_idx) continue;
@@ -67,18 +74,18 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
     }
     assert(preserved_gprs_count == aux_gprs_count());
 
-    h->ptrue(p_all.b);
+    h->xa_->ptrue(p_512.b);
 
     if (save_state_) {
-        h->str(x_table, pre_ptr(h->X_SP, -8));
+        h->xa_->str(x_table, pre_ptr(h->X_SP, -8));
 
         for (size_t i = 0; i < preserved_gprs_count; ++i) {
             /* This route has not been tested */
-            h->str(XReg(preserved_gpr_idxs[i]), pre_ptr(h->X_SP, -8));
+            h->xa_->str(XReg(preserved_gpr_idxs[i]), pre_ptr(h->X_SP, -8));
         }
 
         if (preserved_vecs_count)
-            h->sub_imm(
+            h->xa_->sub_imm(
                     h->X_SP, h->X_SP, preserved_vecs_count * vlen, h->X_TMP_0);
 
         size_t i = 0;
@@ -87,19 +94,20 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble(
             int count = 0;
             int ii = i;
             do {
-                h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                h->xa_->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
                         h->X_DEFAULT_ADDR);
                 i++;
             } while (i < preserved_vecs_count && count < h->x_tmp_vec_size);
 
             for (int j = 0; j < count; j++)
-                h->st1w(ZRegS(preserved_vec_idxs[ii++]), p_all,
+                h->xa_->st1w(ZRegS(preserved_vec_idxs[ii++]), p_512,
                         ptr(h->x_tmp_vec[j]));
         }
         load_table_addr();
     }
 
     assign_regs();
+    set_coef_to_regs();
 }
 
 template <cpu_isa_t isa>
@@ -112,7 +120,8 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
 
     if (save_state_) {
         /* This route has not been tested */
-        if (idx_off) h->add_imm(h->X_SP, h->X_SP, idx_off * vlen, h->X_TMP_0);
+        if (idx_off)
+            h->xa_->add_imm(h->X_SP, h->X_SP, idx_off * vlen, h->X_TMP_0);
 
         size_t i = 0;
 
@@ -120,14 +129,14 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
             int count = 0;
             int ii = i;
             do {
-                h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                h->xa_->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
                         h->X_DEFAULT_ADDR);
                 i++;
             } while (i < tail_vecs_to_preserve && count < h->x_tmp_vec_size);
 
             for (int j = 0; j < count; j++)
-                h->ld1w(ZRegS(preserved_vec_idxs[idx_off + ii++]), p_all / T_z,
-                        ptr(h->x_tmp_vec[j]));
+                h->xa_->ld1w(ZRegS(preserved_vec_idxs[idx_off + ii++]),
+                        p_512 / T_z, ptr(h->x_tmp_vec[j]));
         }
     }
 
@@ -141,22 +150,23 @@ void jit_uni_eltwise_injector_f32<isa>::injector_preamble_tail(
             int count = 0;
             int ii = i;
             do {
-                h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+                h->xa_->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
                         h->X_DEFAULT_ADDR);
                 i++;
             } while (i < tail_vecs_to_preserve && count < h->x_tmp_vec_size);
 
             for (int j = 0; j < count; j++)
-                h->st1w(ZRegS(preserved_vec_idxs[idx_off + ii++]), p_all / T_z,
-                        ptr(h->x_tmp_vec[j]));
+                h->xa_->st1w(ZRegS(preserved_vec_idxs[idx_off + ii++]),
+                        p_512 / T_z, ptr(h->x_tmp_vec[j]));
         }
 
         if (idx_off) {
-            h->sub_imm(h->X_SP, h->X_SP, idx_off * vlen, h->X_TMP_0);
+            h->xa_->sub_imm(h->X_SP, h->X_SP, idx_off * vlen, h->X_TMP_0);
         }
     }
 
     assign_regs();
+    set_coef_to_regs();
 }
 
 template <cpu_isa_t isa>
@@ -170,22 +180,23 @@ void jit_uni_eltwise_injector_f32<isa>::injector_postamble() {
         int count = 0;
         int ii = i;
         do {
-            h->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
+            h->xa_->add_imm(h->x_tmp_vec[count++], h->X_SP, i * vlen,
                     h->X_DEFAULT_ADDR);
             i++;
         } while (i < preserved_vecs_count && count < h->x_tmp_vec_size);
 
         for (int j = 0; j < count; j++)
-            h->ld1w(ZRegS(preserved_vec_idxs[ii++]), p_all / T_z,
+            h->xa_->ld1w(ZRegS(preserved_vec_idxs[ii++]), p_512 / T_z,
                     ptr(h->x_tmp_vec[j]));
     }
 
     if (preserved_vecs_count)
-        h->add_imm(h->X_SP, h->X_SP, preserved_vecs_count * vlen, h->X_TMP_0);
+        h->xa_->add_imm(
+                h->X_SP, h->X_SP, preserved_vecs_count * vlen, h->X_TMP_0);
 
     for (int i = aux_gprs_count() - 1; i >= 0; --i)
-        h->ldr(XReg(preserved_gpr_idxs[i]), pre_ptr(h->X_SP, 8));
-    h->ldr(x_table, pre_ptr(h->X_SP, 8));
+        h->ldr(XReg(preserved_gpr_idxs[i]), post_ptr(h->X_SP, 8));
+    h->ldr(x_table, post_ptr(h->X_SP, 8));
 }
 
 template <cpu_isa_t isa>
@@ -204,8 +215,80 @@ void jit_uni_eltwise_injector_f32<isa>::assign_regs() {
     vmm_aux7 = TRegS(preserved_vec_idxs[8]);
 }
 
-// Uses injector masks objects: p_mask
-// Stores a mask by applying FCM<cc> on two inputs w/ a given cmp_redicate.
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::set_coef_to_regs() {
+    using namespace alg_kind;
+
+    if (is_fwd_) {
+        switch (alg_) {
+            case eltwise_relu_use_dst_for_bwd:
+            case eltwise_relu:
+                if (alpha_ != 0.f) table_val(alpha, z_tmp);
+                break;
+            case eltwise_elu_use_dst_for_bwd:
+            case eltwise_elu: table_val(alpha, vmm_aux4); break;
+            case eltwise_tanh_use_dst_for_bwd:
+            case eltwise_tanh:
+            case eltwise_square: break;
+            case eltwise_abs: break;
+            case eltwise_sqrt_use_dst_for_bwd:
+            case eltwise_sqrt:
+            case eltwise_swish: break;
+            case eltwise_linear:
+                table_val(alpha, z_tmp);
+                table_val(beta, vmm_aux0);
+                break;
+            case eltwise_bounded_relu: table_val(alpha, z_tmp); break;
+            case eltwise_soft_relu:
+            case eltwise_logistic_use_dst_for_bwd:
+            case eltwise_logistic:
+            case eltwise_exp_use_dst_for_bwd:
+            case eltwise_exp: break;
+            case eltwise_gelu_tanh: break;
+            case eltwise_log: break;
+            case eltwise_clip:
+                table_val(alpha, z_tmp);
+                table_val(beta, vmm_aux0);
+                break;
+            case eltwise_pow: break;
+            case eltwise_gelu_erf: break;
+            case eltwise_round:
+            default: assert(!"unsupported eltwise algorithm");
+        }
+    } else {
+        switch (alg_) {
+            case eltwise_relu_use_dst_for_bwd:
+            case eltwise_relu: table_val(alpha, z_tmp); break;
+            case eltwise_elu_use_dst_for_bwd:
+            case eltwise_elu:
+            case eltwise_tanh_use_dst_for_bwd:
+            case eltwise_tanh:
+            case eltwise_square:
+            case eltwise_abs:
+            case eltwise_sqrt_use_dst_for_bwd:
+            case eltwise_sqrt:
+            case eltwise_linear:
+            case eltwise_bounded_relu:
+            case eltwise_soft_relu:
+            case eltwise_logistic_use_dst_for_bwd:
+            case eltwise_logistic:
+            case eltwise_exp_use_dst_for_bwd:
+            case eltwise_exp: break;
+            case eltwise_gelu_tanh: break;
+            case eltwise_swish:
+            case eltwise_log: break;
+            case eltwise_clip:
+                table_val(beta, z_tmp);
+                table_val(alpha, vmm_aux0);
+                break;
+            case eltwise_pow:
+            case eltwise_gelu_erf: break;
+            default: assert(!"unsupported eltwise algorithm");
+        }
+    }
+}
+// Uses injector masks objects: k_mask (>= avx512_common) or vmm_mask (<= avx2).
+// Stores a mask by applying cmpps on two inputs w/ a given predicate.
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::compute_cmp_mask(
         const TRegS &vmm_src, const TRegS &compare_operand, int cmp_predicate) {
@@ -245,7 +328,7 @@ void jit_uni_eltwise_injector_f32<isa>::compute_cmp_mask(
         TRUE_US = 31,
     };
 
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE / T_z, h->P_ALL_ONE.b);
+    h->xa_->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE / T_z, h->P_ALL_ONE.b);
     switch (cmp_predicate) {
         case EQ_OQ:
             h->fcmeq(
@@ -356,7 +439,7 @@ void jit_uni_eltwise_injector_f32<isa>::compute_cmp_mask(
     }
 }
 
-// Uses injector masks objects: p_mask
+// Uses injector masks objects: k_mask (>= avx512_common) or vmm_mask (<= avx2).
 // Blends a result of second input into a first input w/ a stored mask.
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::blend_with_mask(
@@ -373,35 +456,32 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     // = 2^n * exp(r) // simplify the exp(n*ln(2)) expression
 
     // get mask of values lower than log(FLT_MIN) to zero them in the output
-    compute_cmp_mask(vmm_src, table_val(exp_ln_flt_min_f), _cmp_lt_os);
+    compute_cmp_mask(vmm_src, table_val(exp_ln_flt_min_f, z_tmp), _cmp_lt_os);
 
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(exp_ln_flt_max_f))));
-    h->fminnm(z_tmp, p_tmp0, vmm_src);
-    h->fmin(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    table_val(exp_ln_flt_max_f, z_tmp);
+    h->fminnm(z_tmp, p_512, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(exp_ln_flt_min_f))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    table_val(exp_ln_flt_min_f, z_tmp);
+    h->fmaxnm(z_tmp, p_512, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
 
     // calculate exp(x)
     // fx = x * log2ef + 0.5
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(exp_log2ef))));
-    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
+    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(exp_log2ef, z_tmp))));
+    h->xa_->fadd(vmm_src, p_512 / T_m, 0.5f);
 
     // tmp = floorf(fx)
-
-    h->frintm(vmm_aux2, p_tmp0 / T_m, vmm_src);
+    h->frintm(vmm_aux2, p_512 / T_m, vmm_src);
 
     // keep vmm_src = fx for further computations
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
 
     // x = x - fx * ln2
-    h->fmls(vmm_aux1, p_tmp0 / T_m, vmm_aux2, ZRegS(IDX(table_val(ln2f))));
+    h->fmls(vmm_aux1, p_512 / T_m, vmm_aux2,
+            ZRegS(IDX(table_val(ln2f, z_tmp))));
 
     // We do not count 2^n here, because n can reach 128 and 2^128 is not
     // representable by fp32, so to get around this problem, instead of computing
@@ -409,13 +489,12 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     // and 2 are numbers representable in fp32.
 
     // compute 2^(n-1)
-    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
-    h->frinti(vmm_aux2, p_tmp0 / T_m, vmm_src);
-    h->fcvtzs(vmm_aux2, p_tmp0 / T_m, vmm_aux2);
-    h->add(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(exponent_bias))));
-    h->lsl(vmm_aux2, vmm_aux2,
-
-            n_mantissa_bits); //TRegS(6) = 2^-fx
+    h->xa_->fsub(vmm_src, p_512 / T_m, 1.f);
+    h->frinti(vmm_aux2, p_512 / T_m, vmm_src);
+    h->fcvtzs(vmm_aux2, p_512 / T_m, vmm_aux2);
+    h->xa_->add(
+            vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(exponent_bias, z_tmp))));
+    h->lsl(vmm_aux2, vmm_aux2, n_mantissa_bits); //TRegS(6) = 2^-fx
 
     // use vmm_src as tmp vmm_zero when applying mask
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)));
@@ -423,57 +502,57 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     blend_with_mask(vmm_aux2, vmm_src);
 
     // compute polynomial
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(exp_pol, 4))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 3))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 2))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 1))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(exp_pol, 0))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(exp_pol, z_tmp, 4))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 3))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 2))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 1))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 0))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
 
     // y = y * 2^n
-    h->fmul(vmm_src, vmm_src, vmm_aux2);
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(two))));
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux2);
+    h->xa_->fmul(vmm_src, p_512 / T_m, 2.f);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
-    blend_with_mask(vmm_src, vmm_aux1);
+    /* Negative values are multiplied by alpha.
+     Positive values are not modified. */
+    h->xa_->mov(ZRegD(vmm_aux0.getIdx()), ZRegD(vmm_src.getIdx()));
+    h->fminnm(vmm_src, p_512, 0.f);
+    h->fmaxnm(vmm_aux0, p_512, 0.f);
+    /* alpha is set to z_tmp in set_coef_to_regs(). */
+    h->xa_->fmul(vmm_src, vmm_src, z_tmp);
+    h->xa_->fadd(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_zero_ns_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->fmaxnm(vmm_src, p_512, 0.f);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::elu_compute_vector_fwd(
         const TRegS &vmm_src) {
     // IMPORTANT: we use vmm_aux3 for the mask as exp_compute does not use it.
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(vmm_aux3.getIdx()), ZRegD(vmm_src.getIdx()));
 
     // compute exponent
     exp_compute_vector_fwd(vmm_src);
 
     // alpha * (exp(x) - 1)
-    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
+    h->xa_->fsub(vmm_src, p_512 / T_m, 1.f);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // combine with mask
-    compute_cmp_mask(vmm_aux3, table_val(zero), _cmp_gt_os);
-    blend_with_mask(vmm_src, vmm_aux3);
+    h->xa_->fcmgt(p_mask.s, p_512 / T_z, vmm_aux3, 0.f);
+    h->xa_->mov(vmm_src, p_mask / T_m, vmm_aux3);
 }
 
 template <cpu_isa_t isa>
@@ -489,25 +568,25 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
           vmm_pol = vmm_aux2, vmm_indices = vmm_aux3,
           vmm_src_original = vmm_aux4, vmm_sign = vmm_aux4;
 
-    auto lut_zreg2_f32 = [&](const ZRegS &d, const ZRegS &s, const ZRegS &s2,
-                                 const ZRegS &t, const ZRegS &t2,
-                                 const ZRegS &t3, const PReg &p) {
-        h->ptrue(p.b);
-        h->mov(t, 0x1f);
-        h->and_(ZRegB(t.getIdx()), p, ZRegB(s.getIdx()));
-        for (int i = 0; i < 16; i++) {
-            h->cmpeq(h->P_TMP_0.s, p, t, 0);
-            h->sub(t, 0x1);
-            h->dup(t2, d[i]);
-            h->mov(t3, h->P_TMP_0 / T_m, t2);
-        }
-        for (int i = 0; i < 16; i++) {
-            h->cmpeq(h->P_TMP_0.s, p, t, i);
-            h->dup(t2, s2[i]);
-            h->mov(t3, h->P_TMP_0 / T_m, t2);
-        }
-        h->mov(ZRegD(d.getIdx()), ZRegD(t3.getIdx()));
-    };
+    auto vpermt2ps_aarch64 =
+            [&](const ZRegS &d, const ZRegS &s, const ZRegS &s2, const ZRegS &t,
+                    const ZRegS &t2, const ZRegS &t3, const PReg &p) {
+                h->ptrue(p.b);
+                h->xa_->mov(t, 0x1f);
+                h->xa_->and_(ZRegB(t.getIdx()), p, ZRegB(s.getIdx()));
+                for (int i = 0; i < 16; i++) {
+                    h->cmpeq(h->P_TMP_0.s, p, t, 0);
+                    h->xa_->sub(t, 0x1);
+                    h->dup(t2, d[i]);
+                    h->xa_->mov(t3, h->P_TMP_0 / T_m, t2);
+                }
+                for (int i = 0; i < 16; i++) {
+                    h->cmpeq(h->P_TMP_0.s, p, t, i);
+                    h->dup(t2, s2[i]);
+                    h->xa_->mov(t3, h->P_TMP_0 / T_m, t2);
+                }
+                h->xa_->mov(ZRegD(d.getIdx()), ZRegD(t3.getIdx()));
+            };
 
     // We split the positive domain in 33 intervals:
     // a) [0; linear_ubound]: in this interval tanh(x) = x
@@ -529,7 +608,8 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     //         This needs an extra vmm to store the mask
     // - avx512: because the table fits in 2 registers, we can use vpermi2d.
     auto coeffs_address = [&](int coeff_off, int off = 0) {
-        return table_val(tanh_pol_table, coeff_off * tanh_n_polynomials + off);
+        return table_val(
+                tanh_pol_table, z_tmp, coeff_off * tanh_n_polynomials + off);
     };
     auto gather_coefficient_init = [&](TRegS vmm_pol_idx, int nelems) {
         switch (isa) {
@@ -547,12 +627,10 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
                 {
                     ZReg zmm_coeff(vmm_coeff.getIdx());
                     ZReg zmm_pol_idx(vmm_pol_idx.getIdx());
-                    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-                    h->mov(ZRegD(IDX(zmm_coeff)),
+                    h->xa_->mov(ZRegD(IDX(zmm_coeff)),
                             ZRegD(IDX(coeffs_address(coeff_idx, 0))));
-                    h->mov(ZRegS(IDX(zmm_coeff)), p_tmp0 / T_m, 0);
 
-                    lut_zreg2_f32(ZRegS(IDX(zmm_coeff)),
+                    vpermt2ps_aarch64(ZRegS(IDX(zmm_coeff)),
                             ZRegS(IDX(zmm_pol_idx)),
                             ZRegS(IDX(coeffs_address(coeff_idx, 16))), vmm_aux5,
                             vmm_aux6, vmm_aux7, p_tmp0);
@@ -564,29 +642,23 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
 
     // because tanh(x) = -tanh(-x), we extract sign to make x postive
     // and reapply sign at the end
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src_original)), ZRegD(IDX(vmm_src)));
-    h->mov(ZRegS(IDX(vmm_src_original)), p_tmp0 / T_m, 0);
-    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask))));
+    h->xa_->mov(ZRegD(IDX(vmm_src_original)), ZRegD(IDX(vmm_src)));
+    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(positive_mask, z_tmp))));
 
     // We compute the indices for the table lookup
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_src)));
-    h->mov(ZRegS(IDX(vmm_indices)), p_tmp0 / T_m, 0);
-    h->sub(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)),
-            ZRegS(IDX(table_val(tanh_idx_bias))));
-    h->and_(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_indices)),
-            ZRegD(IDX(table_val(tanh_idx_mask))));
+    h->xa_->mov(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_src)));
+    h->xa_->sub(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)),
+            ZRegS(IDX(table_val(tanh_idx_bias, z_tmp))));
+    h->xa_->and_(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_indices)),
+            ZRegD(IDX(table_val(tanh_idx_mask, z_tmp))));
     h->lsr(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)), 22);
 
     // we do the argument reduction
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src)));
-    h->mov(ZRegS(IDX(vmm_src_shift)), p_tmp0 / T_m, 0);
-    h->and_(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src_shift)),
-            ZRegD(IDX(table_val(tanh_idx_mask))));
-    h->fsub(vmm_src, vmm_src, ZRegS(IDX(vmm_src_shift)));
+    h->xa_->mov(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src)));
+    h->xa_->and_(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src_shift)),
+            ZRegD(IDX(table_val(tanh_idx_mask, z_tmp))));
+    h->xa_->fsub(vmm_src, vmm_src, ZRegS(IDX(vmm_src_shift)));
 
     // we gather and evaluate the polynonials
     gather_coefficient_init(vmm_indices, vlen / sizeof(float));
@@ -594,67 +666,53 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
 
     for (int deg = 5; deg >= 0; --deg) {
         gather_coefficient(vmm_coeff, deg, vmm_indices);
-        h->fmad(ZRegS(IDX(vmm_pol)), p_all / T_m, vmm_src,
+        h->fmad(ZRegS(IDX(vmm_pol)), p_512 / T_m, vmm_src,
                 ZRegS(IDX(vmm_coeff)));
     }
 
     // we restore src with cleared sign, and keep sign
     assert(vmm_sign.getIdx() == vmm_src_original.getIdx());
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src_original)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
-    h->and_(ZRegD(IDX(vmm_sign)), ZRegD(IDX(vmm_sign)),
-            ZRegD(IDX(table_val(sign_mask))));
-    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask))));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src_original)));
+    h->xa_->and_(ZRegD(IDX(vmm_sign)), ZRegD(IDX(vmm_sign)),
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
+    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(positive_mask, z_tmp))));
 
     // Now we blend the results
     // [saturation_ubound; +inf[ : we return +/- 1
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_dst)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_dst, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_dst)), ZRegD(IDX(table_val(one, z_tmp))));
 
     // [linear_ubound; saturation_lbound] : we return +/- P(x)
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_mask)), ZRegD(IDX(table_val(tanh_saturation_lbound))));
-    h->mov(vmm_mask, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_mask)),
+            ZRegD(IDX(table_val(tanh_saturation_lbound, z_tmp))));
 
     compute_cmp_mask(vmm_mask, vmm_src, _cmp_gt_os);
     blend_with_mask(vmm_dst, vmm_pol);
 
     // [0; linear_ubound]  : we return x
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_mask)), ZRegD(IDX(table_val(tanh_linear_ubound))));
-    h->mov(vmm_mask, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_mask)),
+            ZRegD(IDX(table_val(tanh_linear_ubound, z_tmp))));
 
     compute_cmp_mask(vmm_mask, vmm_src, _cmp_gt_os);
     blend_with_mask(vmm_dst, vmm_src);
 
     // We reapply the sign and return
-    h->eor(ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
-
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::gelu_tanh_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
 
     // compute G(x) = sqrt_root_two_over_pi * x * (1 + fitting_const * x * x)
-    h->fmul(vmm_src, vmm_src, vmm_src);
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)),
-            ZRegD(IDX(table_val(gelu_tanh_fitting_const))));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
-    h->fmul(vmm_src, vmm_src, vmm_aux0);
-    h->fmul(vmm_src, vmm_src,
-            ZRegS(IDX(table_val(gelu_tanh_sqrt_two_over_pi))));
+    h->xa_->fmul(vmm_src, vmm_src, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(gelu_tanh_fitting_const, z_tmp))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->xa_->fmul(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(gelu_tanh_sqrt_two_over_pi, z_tmp))));
 
     // save x on stack as tanh uses vmm_aux0
     h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
@@ -670,72 +728,48 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_tanh_compute_vector_fwd(
     h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     // compute 0.5 * x * (1 + tanh(G(x)))
-    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
-    h->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->xa_->fadd(vmm_src, p_512 / T_m, 1.f);
+    h->xa_->fmul(vmm_src, p_512 / T_m, 0.5f);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::square_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_src);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::abs_compute_vector_fwd(
         const TRegS &vmm_src) {
-    // compute abs(x) = _mm_and_ps(x, 01111..111));
-    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask))));
+    h->xa_->fabs(vmm_src, p_512 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::sqrt_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b, h->P_ALL_ONE.b);
-    h->fsqrt(vmm_src, p_tmp0 / T_m, vmm_src);
+    h->xa_->fsqrt(vmm_src, p_512 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::linear_compute_vector_fwd(
         const TRegS &vmm_src) {
     // compute x = alpha * x + beta;
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(alpha))));
-    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
-    h->fmad(vmm_src, p_all / T_m, vmm_aux0, ZRegS(IDX(table_val(beta))));
+    h->fmad(vmm_src, p_512 / T_m, z_tmp, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::bounded_relu_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
-
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(alpha))));
-    h->fminnm(z_tmp, p_tmp0, vmm_src);
-    h->fmin(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->fmaxnm(vmm_src, p_512, 0.f);
+    h->fminnm(vmm_src, p_512, z_tmp);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::clip_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(alpha))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
-
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(beta))));
-    h->fminnm(z_tmp, p_tmp0, vmm_src);
-    h->fmin(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->fmaxnm(vmm_src, p_512, z_tmp);
+    h->fminnm(vmm_src, p_512, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
@@ -749,44 +783,41 @@ void jit_uni_eltwise_injector_f32<isa>::soft_relu_compute_vector_fwd(
     // = ln(2 ^ n * (2^-n + exp(r))) // factorize with 2^n
     // = n * ln(2) + ln(2^-n + exp(r)) // take the 2^n factor out of the ln
 
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-
     // keep src for further computations
-    h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(vmm_src)));
+    h->xa_->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(vmm_src)));
 
-    h->fminnm(ZRegS(IDX(table_val(exp_ln_flt_max_f))), p_tmp0, vmm_src);
-    h->fmin(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
-    h->fmaxnm(ZRegS(IDX(table_val(exp_ln_flt_min_f))), p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
+    h->fminnm(ZRegS(IDX(table_val(exp_ln_flt_max_f, z_tmp))), p_512, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->fmaxnm(ZRegS(IDX(table_val(exp_ln_flt_min_f, z_tmp))), p_512, vmm_src);
+
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
 
     // calculate exp(x)
     // fx = x * log2ef + 0.5
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(exp_log2ef))));
-    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
+    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(exp_log2ef, z_tmp))));
+    h->xa_->fadd(vmm_src, p_512 / T_m, 0.5f);
 
     // tmp = floorf(fx)
-    h->frintm(vmm_aux0, p_tmp0 / T_m, vmm_src);
+    h->frintm(vmm_aux0, p_512 / T_m, vmm_src);
 
     // keep vmm_src = fx for further computations
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 
     // x = x - fx * ln2
-    h->fmul(vmm_aux0, vmm_aux0, ZRegS(IDX(table_val(ln2f))));
-    h->fsub(vmm_aux1, vmm_aux1, vmm_aux0);
+    h->xa_->fmul(vmm_aux0, vmm_aux0, ZRegS(IDX(table_val(ln2f, z_tmp))));
+    h->xa_->fsub(vmm_aux1, vmm_aux1, vmm_aux0);
     // compute exponent polynomial
-    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(exp_pol, 4))));
-    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
-            ZRegS(IDX(table_val(exp_pol, 3))));
-    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
-            ZRegS(IDX(table_val(exp_pol, 2))));
-    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
-            ZRegS(IDX(table_val(exp_pol, 1))));
-    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1,
-            ZRegS(IDX(table_val(exp_pol, 0))));
-    h->fmad(vmm_aux3, p_tmp0 / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(exp_pol, z_tmp, 4))));
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 3))));
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 2))));
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 1))));
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1,
+            ZRegS(IDX(table_val(exp_pol, z_tmp, 0))));
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
 
     // We do not count 2^-n here, because n can reach 128 and 2^(-128) is not
     // representable by fp32, so to get around this problem, instead of computing
@@ -795,65 +826,67 @@ void jit_uni_eltwise_injector_f32<isa>::soft_relu_compute_vector_fwd(
 
     // compute 2^-(n-1)
     // vmm_src now represents n-1
-    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
-    h->fmul(vmm_aux1, vmm_src, ZRegS(IDX(table_val(minus_one))));
+    h->xa_->fsub(vmm_src, p_512 / T_m, 1.f);
+    h->xa_->fneg(vmm_aux1, p_512 / T_m, vmm_src);
 
-    h->frinti(vmm_aux1, p_tmp0 / T_m, vmm_aux1);
-    h->fcvtzs(vmm_aux1, p_tmp0 / T_m, vmm_aux1);
+    h->frinti(vmm_aux1, p_512 / T_m, vmm_aux1);
+    h->fcvtzs(vmm_aux1, p_512 / T_m, vmm_aux1);
     // restore vmm_src to n
-    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
+    h->xa_->fadd(vmm_src, p_512 / T_m, 1.f);
 
-    h->add(vmm_aux1, vmm_aux1, ZRegS(IDX(table_val(exponent_bias))));
+    h->xa_->add(
+            vmm_aux1, vmm_aux1, ZRegS(IDX(table_val(exponent_bias, z_tmp))));
     h->lsl(vmm_aux1, vmm_aux1, n_mantissa_bits);
     // calculate ln(1 + y)
-    h->fmul(vmm_aux3, vmm_aux3,
-            ZRegS(IDX(table_val(two)))); // 2*exp(r)
-    h->fadd(vmm_aux3, vmm_aux3,
+    h->xa_->fmul(vmm_aux3, p_512 / T_m, 2.f); // 2*exp(r)
+    h->xa_->fadd(vmm_aux3, vmm_aux3,
             vmm_aux1); // 2^-(n-1) + 2*exp(r)
-    h->fdiv(vmm_aux3, p_tmp0 / T_m,
-            ZRegS(IDX(table_val(two)))); // (2^-(n-1) + 2*exp(r))/2
+    h->xa_->fdiv(vmm_aux3, p_512 / T_m,
+            ZRegS(IDX(table_val(two, z_tmp)))); // (2^-(n-1) + 2*exp(r))/2
 
     // frexp()
     h->lsr(vmm_src, vmm_aux3, n_mantissa_bits);
-    h->scvtf(vmm_src, p_tmp0 / T_m, vmm_src);
+    h->scvtf(vmm_src, p_512 / T_m, vmm_src);
     // got n. where n is x = 2^n * y. y = 0.5 .. 1
-    h->fsub(vmm_src, vmm_src, ZRegS(IDX(table_val(soft_relu_one_twenty_six))));
+    h->xa_->fsub(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(soft_relu_one_twenty_six, z_tmp))));
 
     // and with mask (to get 0.5 * mantissa)
-    h->and_(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
-            ZRegD(IDX(table_val(soft_relu_mantissa_sign_mask))));
+    h->xa_->and_(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
+            ZRegD(IDX(table_val(soft_relu_mantissa_sign_mask, z_tmp))));
     // got y. (mantisa)  0.5 < y < 1 (or with (to get 0.5 * mantissa))
     h->orr(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
-            ZRegD(IDX(table_val(half))));
+            ZRegD(IDX(table_val(half, z_tmp))));
     // y  = y - 1
-    h->fsub(vmm_aux3, vmm_aux3, ZRegS(IDX(table_val(one))));
+    h->xa_->fsub(vmm_aux3, p_512 / T_m, 1.f);
 
     // compute log1p polynomial
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(soft_relu_pol, 8))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 7))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 6))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 5))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 4))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 3))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 2))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 1))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(soft_relu_pol, 0))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(soft_relu_pol, z_tmp, 8))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 7))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 6))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 5))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 4))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 3))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 2))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 1))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(soft_relu_pol, z_tmp, 0))));
     //calculate ln(2) * n
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(ln2f))));
-    h->fadd(vmm_src, vmm_src, vmm_aux1);
-    h->fadd(vmm_src, vmm_src, vmm_aux0);
+    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(ln2f, z_tmp))));
+    h->xa_->fadd(vmm_src, vmm_src, vmm_aux1);
+    h->xa_->fadd(vmm_src, vmm_src, vmm_aux0);
 
     // get vmm_mask = src > max logf
     // y = (x < max log f) ? soft_relu(x) : x
-    compute_cmp_mask(vmm_aux2, table_val(exp_ln_flt_max_f), _cmp_gt_os);
+    compute_cmp_mask(vmm_aux2, table_val(exp_ln_flt_max_f, z_tmp), _cmp_gt_os);
     blend_with_mask(vmm_src, vmm_aux2);
 }
 
@@ -864,42 +897,32 @@ void jit_uni_eltwise_injector_f32<isa>::logistic_compute_vector_fwd(
     // compute exp(x), where x <= 0 to get 0 <= exp(x) <= 1 and restore value
     // sign at the end. This is possible due to logistic is symmetric function.
     // IMPORTANT: we use vmm_aux3 for the mask as exp_compute does not use it.
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
     // we store the original sign and make x negative
-    h->and_(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
-            ZRegD(IDX(table_val(sign_mask))));
+    h->xa_->and_(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)),
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
     h->orr(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(sign_mask))));
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
 
     exp_compute_vector_fwd(vmm_src);
 
     // dup exp(x)
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
     // (exp(x) + 1)
-    h->fadd(vmm_aux1, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->xa_->fadd(vmm_aux1, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
     // y = exp(x) / (exp(x) + 1)
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(vmm_src, p_tmp0, vmm_aux1);
+    h->xa_->fdiv(vmm_src, p_512, vmm_aux1);
 
     // Now we have to apply the "symmetry" based on original sign
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_aux2, p_tmp0 / T_m, 0);
-    h->fsub(vmm_aux2, vmm_aux2, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(one, z_tmp))));
+    h->xa_->fsub(vmm_aux2, vmm_aux2, vmm_src);
 
-    h->movs(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->and_(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)));
-    h->cmpne(PRegS(IDX(p_mask)), p_tmp0 / T_z, z_tmp, 0);
+    h->xa_->and_(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux3)));
+    h->cmpne(PRegS(IDX(p_mask)), p_512 / T_z, z_tmp, 0);
 
     blend_with_mask(vmm_aux2, vmm_src);
 
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
 }
 
 template <cpu_isa_t isa>
@@ -910,7 +933,7 @@ void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_fwd(
     h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
     h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
     // x*alpha
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
+    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
     // sigmoid(x*alpha)
     logistic_compute_vector_fwd(vmm_src);
     // x*sigmoid(alpha*x)
@@ -918,7 +941,7 @@ void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_fwd(
     h->ldr(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
     h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
-    h->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
@@ -945,8 +968,8 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     // compute i
     const int approx_order = 5;
     h->lsr(vmm_aux1, vmm_src, n_mantissa_bits - approx_order);
-    h->and_(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux1)),
-            ZRegD(IDX(table_val(log_five_bit_offset))));
+    h->xa_->and_(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(log_five_bit_offset, z_tmp))));
     h->lsl(vmm_aux1, vmm_aux1,
             1); // multiply i by 2
 
@@ -955,16 +978,15 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     // get E, don't care about sign as only positive numbers are considered
     h->lsr(vmm_aux3, vmm_src, n_mantissa_bits);
-    h->add(vmm_aux3, vmm_aux3, vmm_aux2);
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->scvtf(vmm_aux3, p_tmp0 / T_m, vmm_aux3);
+    h->xa_->add(vmm_aux3, vmm_aux3, vmm_aux2);
+    h->scvtf(vmm_aux3, p_512 / T_m, vmm_aux3);
 
     // get m (mantissa)
     h->eor(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(vmm_aux2)),
-            ZRegD(IDX(table_val(exponent_bias))));
+            ZRegD(IDX(table_val(exponent_bias, z_tmp))));
     h->lsl(vmm_aux2, vmm_aux2, n_mantissa_bits);
-    h->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(log_mantissa_mask))));
+    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
+            ZRegD(IDX(table_val(log_mantissa_mask, z_tmp))));
     h->orr(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
 
     // At first, adjust indices for table structure which broadcasts elements
@@ -981,11 +1003,11 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
         h->add_imm(
                 h->X_DEFAULT_ADDR, x_table, table_start_idx + offt, h->X_TMP_1);
 
-        h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_idxs)));
-        h->mul(z_tmp, 4);
+        h->xa_->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_idxs)));
+        h->xa_->mul(z_tmp, 4);
 
         h->ld1w(z_tmp, p_mask / T_z, ptr(h->X_DEFAULT_ADDR, z_tmp, SXTW));
-        h->mov(vmm_dst, p_mask / T_m, z_tmp);
+        h->xa_->mov(vmm_dst, p_mask / T_m, z_tmp);
         h->pfalse(PRegB(IDX(p_mask)));
     };
 
@@ -994,25 +1016,26 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     // compute relative error (rel_err = m * r_i - 1)
     /* [info]Expand from the content of the process, not from the instruction. */
-    h->fmul(vmm_aux2, vmm_aux2, vmm_src);
-    h->fsub(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(one))));
+    h->xa_->fmul(vmm_aux2, vmm_aux2, vmm_src);
+    h->xa_->fsub(vmm_aux2, p_512 / T_m, 1.f);
 
     // compute polynomial(rel_err)
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(log_pol, 3))));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
-    h->fmad(vmm_src, p_all / T_m, vmm_aux2, ZRegS(IDX(table_val(log_pol, 2))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux2, ZRegS(IDX(table_val(log_pol, 1))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux2, ZRegS(IDX(table_val(log_pol, 0))));
-    h->fmad(vmm_src, p_all / T_m, vmm_aux2, ZRegS(IDX(table_val(one))));
-    h->fmul(vmm_src, vmm_src, vmm_aux2);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(log_pol, z_tmp, 3))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2,
+            ZRegS(IDX(table_val(log_pol, z_tmp, 2))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2,
+            ZRegS(IDX(table_val(log_pol, z_tmp, 1))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2,
+            ZRegS(IDX(table_val(log_pol, z_tmp, 0))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux2, ZRegS(IDX(table_val(one, z_tmp))));
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux2);
 
     // get log(r_i) = table(i+1)
     gather_table_values(vmm_aux2, vmm_aux1, vlen);
 
     // compute partial result (pres = E * ln(2) - log(r_i))
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(vmm_aux2, p_tmp0 / T_m, vmm_aux3, ZRegS(IDX(table_val(ln2f))));
+    h->fmla(vmm_aux2, p_512 / T_m, vmm_aux3,
+            ZRegS(IDX(table_val(ln2f, z_tmp))));
 
     // compute (result = polynomial + pres) w/ TwoSum algorithm
     // TODO: restore this instead of version below when asserts are gone
@@ -1021,21 +1044,15 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     // h->uni_vsubps(vmm_aux3, vmm_aux3, vmm_src); // res_lo = res_lo - pol
     // h->uni_vaddps(vmm_src, vmm_aux1, vmm_aux3); // res_hi = pol + pres
 
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    h->fadd(vmm_aux1, vmm_aux1, vmm_aux2);
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux1)));
-    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
-    h->fsub(vmm_aux3, vmm_aux3,
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
+    h->xa_->fadd(vmm_aux1, vmm_aux1, vmm_aux2);
+    h->xa_->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux1)));
+    h->xa_->fsub(vmm_aux3, vmm_aux3,
             vmm_aux2); // res_lo = res_hi - pres
-    h->fsub(vmm_aux3, vmm_aux3,
+    h->xa_->fsub(vmm_aux3, vmm_aux3,
             vmm_src); // res_lo = res_lo - pol
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
-    h->fadd(vmm_src, vmm_src, vmm_aux3);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
+    h->xa_->fadd(vmm_src, vmm_src, vmm_aux3);
 
     // Check original source for zero and neg values. skip blend w/ extreme
     // values if all src values were positive.
@@ -1044,7 +1061,7 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
 
     Label end_log_label;
-    compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_le_os);
+    compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_le_os);
 
     h->orrs(h->P_TMP_0.b, h->P_ALL_ONE / Xbyak_aarch64::T_z,
             Xbyak_aarch64::PRegB(p_mask.getIdx()),
@@ -1054,14 +1071,149 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
 
     // Blend extreme values into src if reach here.
     // First zero for -inf values...
-    compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_eq_oq);
-    blend_with_mask(vmm_src, table_val(log_minus_inf));
+    compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_eq_oq);
+    blend_with_mask(vmm_src, table_val(log_minus_inf, z_tmp));
 
     // ...then negative for qnan values.
-    compute_cmp_mask(vmm_aux1, table_val(zero), _cmp_lt_os);
-    blend_with_mask(vmm_src, table_val(log_qnan));
+    compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_lt_os);
+    blend_with_mask(vmm_src, table_val(log_qnan, z_tmp));
 
     h->L(end_log_label);
+}
+
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_fwd(
+        const TRegS &vmm_src) {
+    // dispatch between special cases.
+    if (beta_ == -1) { // alpha / x
+        h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(alpha, z_tmp))));
+
+        h->xa_->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_src)));
+        h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
+        h->xa_->fdiv(vmm_src, p_512 / T_m, z_tmp);
+    } else if (beta_ == 0) { // alpha
+        h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha, z_tmp))));
+    } else if (beta_ == 0.5) { // alpha * sqrt(x)
+        sqrt_compute_vector_fwd(vmm_src);
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
+    } else if (beta_ == 1) { // alpha * x
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
+    } else if (beta_ == 2) { // alpha * x^2
+        square_compute_vector_fwd(vmm_src);
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
+    } else { // general path
+        // caller obligation to save gprs as callee may use them
+        size_t gpr_size = 5;
+        Xbyak_aarch64::XReg gprs_to_save[]
+                = {h->x8, h->x9, h->x10, h->x11, h->x0};
+
+        size_t n_gprs_to_save = sizeof(gprs_to_save) / sizeof(gprs_to_save[0]);
+
+        h->sub_imm(h->X_SP, h->X_SP, n_gprs_to_save * gpr_size, h->X_TMP_0);
+        for (size_t i = 0; i < n_gprs_to_save; ++i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * gpr_size, h->X_TMP_1);
+            h->str(XReg(IDX(gprs_to_save[i])), ptr(h->X_TMP_0));
+        }
+
+        // caller obligation to save k-regs as callee may use them
+        size_t n_k_regs_to_save = 8;
+        h->sub_imm(
+                h->X_SP, h->X_SP, n_k_regs_to_save * k_mask_size, h->X_TMP_0);
+        for (size_t i = 0; i < n_k_regs_to_save; ++i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * k_mask_size, h->X_TMP_1);
+            h->str(PReg(static_cast<uint32_t>(i)), ptr(h->X_TMP_0));
+        }
+
+        // 1. Caller obligation to save vector registers as callee may use them.
+        // 2. Additionally save space for vmm_src, to put the answer in-place on
+        // this space and space for beta.
+        // 3. There is an implicit assumption that the host code uses the same
+        // `isa` as the injector. Once the assumption is wrong, `vecs_count` and
+        // `vlen` should be replaced with `host_isa::vlen` and
+        // `host_isa::vecs_count`.
+        h->sub_imm(h->X_SP, h->X_SP, (vecs_count + 2) * vlen, h->X_TMP_0);
+
+        for (size_t i = 2; i < vecs_count + 2; ++i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * vlen, h->X_TMP_1);
+            h->str(ZReg(IDX(TRegS(i - 2))), ptr(h->X_TMP_0));
+        }
+
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
+
+        h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(beta, z_tmp))));
+
+        h->add_imm(h->X_TMP_0, h->X_SP, vlen, h->X_TMP_1);
+        h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
+
+        // save function address in gpr to pass in in call instruction
+        h->xa_->mov_imm(h->x0, reinterpret_cast<uintptr_t>(powf));
+
+        // align stack on 16-byte as ABI requires
+        h->xa_->mov(h->x0, h->X_SP);
+
+        uint64_t mask = ~uint64_t(0xffffffff);
+        unsigned bits = (mask & 0xf) ? 64 : 32;
+        h->xa_->mov_imm(h->X_TMP_0, int64_t(bits));
+        h->xa_->and_(h->x0, h->x0, h->X_TMP_0);
+
+        h->xa_->sub(h->X_SP, h->X_SP, h->x0);
+
+        // Take src, apply powf on it and replace value on a stack with dst.
+        VReg xmm0 = VReg(0), xmm1 = VReg(1);
+        for (size_t i = 0; i < vlen / sizeof(float); ++i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * sizeof(float), h->X_TMP_1);
+            h->xa_->add(h->X_TMP_0, h->X_TMP_0, h->x0);
+            h->ld1(VReg(IDX(xmm0)).s[0], ptr(h->X_TMP_0));
+            h->xa_->mov(z_tmp, 0);
+            for (int ii = 1; ii < 4; ii++) {
+                h->xa_->mov(VReg(IDX(xmm0)).s[ii], VReg(IDX(z_tmp)).s[0]);
+            }
+            // beta
+            h->add_imm(h->X_TMP_0, h->X_SP, vlen, h->X_TMP_1);
+            h->xa_->add(h->X_TMP_0, h->X_TMP_0, h->x0);
+            h->ld1(VReg(IDX(xmm1)).s[0], ptr(h->X_TMP_0));
+            h->xa_->mov(z_tmp, 0);
+            for (int ii = 1; ii < 4; ii++) {
+                h->xa_->mov(VReg(IDX(xmm1)).s[ii], VReg(IDX(z_tmp)).s[0]);
+            }
+
+            h->br(h->x0);
+
+            h->add_imm(h->X_TMP_0, h->X_SP, i * sizeof(float), h->X_TMP_1);
+            h->xa_->add(h->X_TMP_0, h->X_TMP_0, h->x0);
+            h->xa_->st1(VReg(IDX(xmm0)).s[0], ptr(h->X_TMP_0));
+        }
+
+        h->xa_->add(h->X_SP, h->X_SP, h->x0);
+
+        // restore vector registers
+        for (size_t i = vecs_count + 1; i >= 2; --i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * vlen, h->X_TMP_1);
+            h->ldr(ZReg(IDX(TRegS(i - 2))), ptr(h->X_TMP_0));
+        }
+
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->ldr(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
+
+        h->add_imm(h->X_SP, h->X_SP, (vecs_count + 2) * vlen, h->X_TMP_0);
+        // restore k registers
+
+        for (int i = n_k_regs_to_save - 1; i >= 0; --i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * k_mask_size, h->X_TMP_1);
+            h->ldr(PReg(static_cast<uint32_t>(i)), ptr(h->X_TMP_0));
+        }
+        h->add_imm(
+                h->X_SP, h->X_SP, n_k_regs_to_save * k_mask_size, h->X_TMP_0);
+
+        // restore gpr registers
+        for (int i = n_gprs_to_save - 1; i >= 0; --i) {
+            h->add_imm(h->X_TMP_0, h->X_SP, i * gpr_size, h->X_TMP_1);
+            h->ldr(gprs_to_save[i], ptr(h->X_TMP_0));
+        }
+        h->add_imm(h->X_SP, h->X_SP, n_gprs_to_save * gpr_size, h->X_TMP_0);
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
+    }
 }
 
 template <cpu_isa_t isa>
@@ -1077,87 +1229,71 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_fwd(
     // ~1.0e-5 -- 1.0e-3 absolute error at s = -5.
 
     // x = s / sqrt(2)
-    h->fmul(vmm_src, vmm_src,
-            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two))));
+    h->xa_->fmul(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two, z_tmp))));
 
     // IMPORTANT: we use vmm_aux3 to save `x` as exp_compute does not use it.
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_src)));
 
     // -exp(-x*x)
-    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_src);
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(sign_mask))));
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
 
     exp_compute_vector_fwd(vmm_src);
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(sign_mask))));
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
 
     // get sign
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux3)));
-    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
-    h->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
-            ZRegD(IDX(table_val(sign_mask))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux3)));
+    h->xa_->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
 
     // abs(x)
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux3)));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux3)));
     abs_compute_vector_fwd(vmm_aux1);
 
     // t = 1 / (p*x + 1)
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->mov(vmm_aux2, p_tmp0 / T_m, 0);
-    h->fmad(vmm_aux2, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux2)),
+            ZRegD(IDX(table_val(gelu_erf_approx_const, z_tmp))));
+    h->fmad(vmm_aux2, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
 
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_aux4, p_tmp0 / T_m, 0);
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(vmm_aux4, p_tmp0, vmm_aux2);
+    h->xa_->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one, z_tmp))));
+    h->xa_->fdiv(vmm_aux4, p_512, vmm_aux2);
 
     // -exp(-x*x)*t
-    h->fmul(vmm_src, vmm_src, vmm_aux4);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomialial r
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(gelu_erf_pol, z_tmp, 4))));
 
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 3))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 2))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 1))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 0))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 3))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 2))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 1))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 0))));
 
     // erf = sign * (1 - r * t * exp(-x*x))
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 
     // S = 0.5 * s = x / sqrt^2(2)
-    h->fmul(vmm_aux3, vmm_aux3,
-            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two))));
+    h->xa_->fmul(vmm_aux3, vmm_aux3,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two, z_tmp))));
     // GELU = 0.5 * s * (1 + erf) = S + S * erf
-    h->fmad(vmm_src, p_all / T_m, vmm_aux3, vmm_aux3);
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux3, vmm_aux3);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::relu_compute_vector_bwd(
         const TRegS &vmm_src) {
-    // invariant to whether `s` or `d` is passed.
-    // get mask of `s` > 0
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    // fill with alpha, then blend with 1.f
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
-    blend_with_mask(vmm_src, table_val(one));
+    h->fcmgt(p_mask.s, p_512 / T_z, vmm_src, 0.f);
+    h->xa_->mov(ZRegD(vmm_src.getIdx()), ZRegD(z_tmp.getIdx()));
+    h->xa_->fmov(vmm_src, p_mask / T_m, 1.f);
 }
 
 template <cpu_isa_t isa>
@@ -1167,16 +1303,16 @@ void jit_uni_eltwise_injector_f32<isa>::elu_compute_vector_bwd(
         // R = exp(s)
         exp_compute_vector_fwd(vmm_src);
         // after exponentiation, get mask by comparing with exp(0)=1.f, not 0.f
-        compute_cmp_mask(vmm_src, table_val(one), _cmp_gt_os);
+        compute_cmp_mask(vmm_src, table_val(one, z_tmp), _cmp_gt_os);
         // R * alpha, then blend with 1.f
-        h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
     } else {
         // get mask of `d` > 0
-        compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
+        compute_cmp_mask(vmm_src, table_val(zero, z_tmp), _cmp_gt_os);
         // R = `d` + alpha, then blend with 1.f
-        h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
+        h->xa_->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
     }
-    blend_with_mask(vmm_src, table_val(one));
+    blend_with_mask(vmm_src, table_val(one, z_tmp));
 }
 
 template <cpu_isa_t isa>
@@ -1184,41 +1320,34 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_bwd(
         const TRegS &vmm_src) {
     // res = 1 - d^2 = 1 - tanh^2(s)
     if (!use_dst_) tanh_compute_vector_fwd(vmm_src);
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one, z_tmp))));
 
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmls(vmm_aux0, p_tmp0 / T_m, vmm_src, vmm_src);
+    h->fmls(vmm_aux0, p_512 / T_m, vmm_src, vmm_src);
 
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::gelu_tanh_compute_vector_bwd(
         const TRegS &vmm_src) {
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
-    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_src)));
 
     // compute G1(x) = sqrt_root_two_over_pi * x * (1 + fitting_const * x^2)
     // compute G2(x) = sqrt_root_two_over_pi * x * (1 + 3 * fitting_const * x^2)
-    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_src);
 
     // keep G2 in a separate register
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux2)),
-            ZRegD(IDX(table_val(gelu_tanh_fitting_const_times_three))));
-    h->mov(vmm_aux2, p_tmp0 / T_m, 0);
-    h->fmad(vmm_aux2, p_all / T_m, vmm_src, ZRegS(IDX(table_val(one))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux2)),
+            ZRegD(IDX(table_val(gelu_tanh_fitting_const_times_three, z_tmp))));
+    h->fmad(vmm_aux2, p_512 / T_m, vmm_src, ZRegS(IDX(table_val(one, z_tmp))));
 
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)),
-            ZRegD(IDX(table_val(gelu_tanh_fitting_const))));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
-    h->fmul(vmm_aux0, vmm_aux0,
-            ZRegS(IDX(table_val(gelu_tanh_sqrt_two_over_pi))));
-    h->fmul(vmm_src, vmm_src, vmm_aux0);
-    h->fmul(vmm_aux2, vmm_aux2, vmm_aux0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(gelu_tanh_fitting_const, z_tmp))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
+    h->xa_->fmul(vmm_aux0, vmm_aux0,
+            ZRegS(IDX(table_val(gelu_tanh_sqrt_two_over_pi, z_tmp))));
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->xa_->fmul(vmm_aux2, vmm_aux2, vmm_aux0);
 
     // save G2 on stack as tanh uses all available registers
     h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
@@ -1234,33 +1363,31 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_tanh_compute_vector_bwd(
 
     // compute 0.5 * (1 + T) * (1 + G2 * (1 - T))
     // 1) R = G2 * (1 - T) = G2 - G2 * T
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmls(vmm_aux2, p_tmp0 / T_m, vmm_aux2, vmm_src);
+    h->fmls(vmm_aux2, p_512 / T_m, vmm_aux2, vmm_src);
     // 2) Q = 1 + T
-    h->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one))));
+    h->xa_->fadd(vmm_src, vmm_src, ZRegS(IDX(table_val(one, z_tmp))));
     // 3) res = Q * (1 + R) = Q + Q * R
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(vmm_src, p_tmp0 / T_m, vmm_src, vmm_aux2);
+    h->fmla(vmm_src, p_512 / T_m, vmm_src, vmm_aux2);
 
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(half))));
+    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(half, z_tmp))));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::square_compute_vector_bwd(
         const TRegS &vmm_src) {
     // res = 2 * s
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(two))));
+    h->xa_->fmul(vmm_src, p_512 / T_m, 2.f);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::abs_compute_vector_bwd(
         const TRegS &vmm_src) {
     // replace positive values with 1.f
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    blend_with_mask(vmm_src, table_val(one));
+    compute_cmp_mask(vmm_src, table_val(zero, z_tmp), _cmp_gt_os);
+    blend_with_mask(vmm_src, table_val(one, z_tmp));
     // replace negative values with -1.f
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_lt_os);
-    blend_with_mask(vmm_src, table_val(minus_one));
+    compute_cmp_mask(vmm_src, table_val(zero, z_tmp), _cmp_lt_os);
+    blend_with_mask(vmm_src, table_val(minus_one, z_tmp));
 }
 
 template <cpu_isa_t isa>
@@ -1268,36 +1395,30 @@ void jit_uni_eltwise_injector_f32<isa>::sqrt_compute_vector_bwd(
         const TRegS &vmm_src) {
     // res = 0.5 / d = 0.5 / sqrt(s)
     if (!use_dst_) sqrt_compute_vector_fwd(vmm_src);
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(half))));
-
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(vmm_aux0, p_tmp0, vmm_src);
-
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
+    h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(half, z_tmp))));
+    h->xa_->fdiv(vmm_aux0, p_512, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::linear_compute_vector_bwd(
         const TRegS &vmm_src) {
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha))));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha, z_tmp))));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::bounded_relu_compute_vector_bwd(
         const TRegS &vmm_src) {
     // get mask of values > alpha and blend with 0.f
-    compute_cmp_mask(vmm_src, table_val(alpha), _cmp_gt_os);
-    blend_with_mask(vmm_src, table_val(zero));
+    compute_cmp_mask(vmm_src, table_val(alpha, z_tmp), _cmp_gt_os);
+    blend_with_mask(vmm_src, table_val(zero, z_tmp));
     // make all negative values zeros
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(table_val(zero))));
-    h->fmaxnm(z_tmp, p_tmp0, vmm_src);
-    h->fmax(z_tmp, p_tmp0, vmm_src);
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
+    h->xa_->fmov(z_tmp, 0.f);
+    h->fmaxnm(vmm_src, p_512, z_tmp);
 
     // everything bigger than 0.f should be 1.f
-    compute_cmp_mask(vmm_src, table_val(zero), _cmp_gt_os);
-    blend_with_mask(vmm_src, table_val(one));
+    compute_cmp_mask(vmm_src, table_val(zero, z_tmp), _cmp_gt_os);
+    blend_with_mask(vmm_src, table_val(one, z_tmp));
 }
 
 template <cpu_isa_t isa>
@@ -1312,13 +1433,11 @@ void jit_uni_eltwise_injector_f32<isa>::logistic_compute_vector_bwd(
     // res = d * (1 - d) = d - d * d; d = logistic(s)
     if (!use_dst_) logistic_compute_vector_fwd(vmm_src);
     // h->uni_vfnmadd231ps(vmm_src, vmm_src, vmm_src); // bless sse41
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one, z_tmp))));
 
-    h->fsub(vmm_aux0, vmm_aux0, vmm_src);
+    h->xa_->fsub(vmm_aux0, vmm_aux0, vmm_src);
 
-    h->fmul(vmm_src, vmm_src, vmm_aux0);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
@@ -1331,7 +1450,7 @@ template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_bwd(
         const TRegS &vmm_src) {
     // R = alpha * s
-    h->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha))));
+    h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
 
     // Save R on stack for later usage
     h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
@@ -1349,56 +1468,83 @@ void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_bwd(
 
     // compute Q * (1 + R * (1 - Q))
     // T = R * (1 - Q) = R - R * Q
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmls(vmm_aux0, p_tmp0 / T_m, vmm_aux0, vmm_src);
+    h->fmls(vmm_aux0, p_512 / T_m, vmm_aux0, vmm_src);
 
     // Q * (1 + T) = Q + Q * T
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(vmm_src, p_tmp0 / T_m, vmm_src, vmm_aux0);
+    h->fmla(vmm_src, p_512 / T_m, vmm_src, vmm_aux0);
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_bwd(
         const TRegS &vmm_src) {
     // res = 1 / s
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_aux0, p_tmp0 / T_m, 0);
-
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(vmm_aux0, p_tmp0, vmm_src);
-
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    /* Do not use 1.f, which is a float constant,
+       but 1., which is a double constant. */
+    h->xa_->fmov(z_tmp, 1.);
+    h->xa_->fdiv(z_tmp, p_512, vmm_src);
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(z_tmp)));
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::clip_compute_vector_bwd(
         const TRegS &vmm_src) {
-    // set result with 1.f
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
+    // set result with 1.
+    /* Do not use 1.f, which is a float constant,
+       but 1., which is a double constant. */
+    h->xa_->fmov(vmm_aux1, 1.);
 
     // get mask of values > beta and blend with 0.f
-    compute_cmp_mask(vmm_src, table_val(beta), _cmp_gt_os);
-    blend_with_mask(vmm_aux1, table_val(zero));
+    h->xa_->fcmgt(p_mask.s, p_512 / T_z, vmm_src, z_tmp);
+    h->xa_->mov(vmm_aux1, p_mask / T_m, 0);
     // get mask of values <= alpha and blend with 0.f
-    compute_cmp_mask(vmm_src, table_val(alpha), _cmp_le_os);
-    blend_with_mask(vmm_aux1, table_val(zero));
+    h->xa_->fcmle(p_tmp0.s, p_512 / T_z, vmm_src, vmm_aux0);
+    h->xa_->mov(vmm_aux1, p_tmp0 / T_m, 0);
 
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->xa_->mov(ZRegD(vmm_src.getIdx()), ZRegD(vmm_aux1.getIdx()));
+}
+
+template <cpu_isa_t isa>
+void jit_uni_eltwise_injector_f32<isa>::pow_compute_vector_bwd(
+        const TRegS &vmm_src) {
+    // dispatch some special cases.
+    if (beta_ == 0) { // zero
+        /* This route has not been tested */
+        h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(zero, z_tmp))));
+    } else if (beta_ == 0.5) { // 0.5 * alpha / sqrt(s)
+        sqrt_compute_vector_bwd(vmm_src);
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(alpha, z_tmp))));
+    } else if (beta_ == 1) { // alpha
+        h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(alpha, z_tmp))));
+    } else {
+        // Save `s` on stack for later usage
+        h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
+        // R = alpha * pow(s, beta)
+        pow_compute_vector_fwd(vmm_src);
+        // Restore `s` from stack
+        h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
+        h->ldr(ZReg(IDX(vmm_aux1)), ptr(h->X_TMP_0));
+        h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
+        // Save mask of zero elements to convert them into zeros at the end
+        if (beta_ >= 1)
+            compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_eq_oq);
+        // res = alpha * beta * pow(s, beta - 1) = beta * R / s;
+        h->xa_->fdiv(vmm_src, p_512, vmm_aux1);
+        h->xa_->fmul(vmm_src, vmm_src, ZRegS(IDX(table_val(beta, z_tmp))));
+
+        // beta < 1 leads to NaN as `s` appears in denominator, but beta >= 1
+        // should lead to zero, when `s` is zero.
+        if (beta_ >= 1) blend_with_mask(vmm_src, table_val(zero, z_tmp));
+    }
 }
 
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
         const TRegS &vmm_src) {
     // R = s / sqrt(2)
-    h->fmul(vmm_src, vmm_src,
-            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two))));
+    h->xa_->fmul(vmm_src, vmm_src,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_two, z_tmp))));
 
     // Save R on stack for later usage
     h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
@@ -1406,27 +1552,27 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
     h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
 
     // Q = exp(-R*R)
-    h->fmul(vmm_src, vmm_src, vmm_src);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_src);
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(sign_mask))));
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
     exp_compute_vector_fwd(vmm_src);
 
     // T = R / sqrt(pi) * Q
     h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
     h->ldr(ZReg(IDX(vmm_aux2)), ptr(h->X_TMP_0));
-    h->fmul(vmm_aux2, vmm_aux2,
-            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_pi))));
-    h->fmul(vmm_aux2, vmm_aux2, vmm_src);
+    h->xa_->fmul(vmm_aux2, vmm_aux2,
+            ZRegS(IDX(table_val(gelu_erf_one_over_sqrt_pi, z_tmp))));
+    h->xa_->fmul(vmm_aux2, vmm_aux2, vmm_src);
 
     // -Q
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(sign_mask))));
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
 
     // get sign
     h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
     h->ldr(ZReg(IDX(vmm_aux0)), ptr(h->X_TMP_0));
-    h->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
-            ZRegD(IDX(table_val(sign_mask))));
+    h->xa_->and_(ZRegD(IDX(vmm_aux0)), ZRegD(IDX(vmm_aux0)),
+            ZRegD(IDX(table_val(sign_mask, z_tmp))));
 
     // abs(x)
     h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
@@ -1436,44 +1582,36 @@ void jit_uni_eltwise_injector_f32<isa>::gelu_erf_compute_vector_bwd(
     abs_compute_vector_fwd(vmm_aux1);
 
     // W = 1 / (p * s + 1)
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(table_val(gelu_erf_approx_const))));
-    h->mov(vmm_aux3, p_tmp0 / T_m, 0);
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one))));
-    h->mov(vmm_aux4, p_tmp0 / T_m, 0);
-    h->fmad(vmm_aux3, p_all / T_m, vmm_aux1, vmm_aux4);
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE, h->P_ALL_ONE.b);
-    h->fdiv(vmm_aux4, p_tmp0, vmm_aux3);
+    h->xa_->mov(ZRegD(IDX(vmm_aux3)),
+            ZRegD(IDX(table_val(gelu_erf_approx_const, z_tmp))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux4)), ZRegD(IDX(table_val(one, z_tmp))));
+    h->fmad(vmm_aux3, p_512 / T_m, vmm_aux1, vmm_aux4);
+    h->xa_->fdiv(vmm_aux4, p_512, vmm_aux3);
 
     // Q * W
-    h->fmul(vmm_src, vmm_src, vmm_aux4);
+    h->xa_->fmul(vmm_src, vmm_src, vmm_aux4);
 
     // compute polynomial r
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(table_val(gelu_erf_pol, 4))));
-    h->mov(vmm_aux1, p_tmp0 / T_m, 0);
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 3))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 2))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 1))));
-    h->fmad(vmm_aux1, p_all / T_m, vmm_aux4,
-            ZRegS(IDX(table_val(gelu_erf_pol, 0))));
+    h->xa_->mov(ZRegD(IDX(vmm_aux1)),
+            ZRegD(IDX(table_val(gelu_erf_pol, z_tmp, 4))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 3))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 2))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 1))));
+    h->fmad(vmm_aux1, p_512 / T_m, vmm_aux4,
+            ZRegS(IDX(table_val(gelu_erf_pol, z_tmp, 0))));
 
     // erf = sign * (1 - r * t * exp(-x*x))
-    h->fmad(vmm_src, p_all / T_m, vmm_aux1, ZRegS(IDX(table_val(one))));
+    h->fmad(vmm_src, p_512 / T_m, vmm_aux1, ZRegS(IDX(table_val(one, z_tmp))));
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux0)));
 
     // P = T + 0.5
-    h->fadd(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(half))));
+    h->xa_->fadd(vmm_aux2, vmm_aux2, ZRegS(IDX(table_val(half, z_tmp))));
     // res = P + 0.5 * erf
-    h->mov(PRegB(IDX(p_tmp0)), h->P_ALL_ONE.b);
-    h->fmla(vmm_aux2, p_tmp0 / T_m, vmm_src, ZRegS(IDX(table_val(half))));
-    h->not_(p_tmp0.b, h->P_ALL_ONE / T_z, PRegB(IDX(p_all)));
-    h->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-    h->mov(vmm_src, p_tmp0 / T_m, 0);
+    h->fmla(vmm_aux2, p_512 / T_m, vmm_src, ZRegS(IDX(table_val(half, z_tmp))));
+    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
 }
 
 template <cpu_isa_t isa>
@@ -1491,7 +1629,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_gprs_count() {
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::round_compute_vector_fwd(
         const TRegS &vmm_src) {
-    h->frintn(vmm_src, p_all / T_m, vmm_src);
+    h->frintn(vmm_src, p_512 / T_m, vmm_src);
 }
 
 template <cpu_isa_t isa>
@@ -1501,9 +1639,9 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     if (is_fwd_) {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return (alpha_ == 0.f) ? 1 : 3;
+            case eltwise_relu: return (alpha_ == 0.f) ? 0 : 2;
             case eltwise_elu_use_dst_for_bwd:
-            case eltwise_elu: return 5; /* = exp + 1 */
+            case eltwise_elu: return 6; /* = exp + 2 */
             case eltwise_tanh_use_dst_for_bwd:
             case eltwise_tanh: return 9;
             case eltwise_square: return 0;
@@ -1520,7 +1658,8 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
             case eltwise_gelu_tanh: return 9; /* = tanh */
             case eltwise_swish: return 6; /* = logistic */
             case eltwise_log: return 5;
-            case eltwise_clip: return 1;
+            case eltwise_clip: return 2;
+            case eltwise_pow: return 3;
             case eltwise_gelu_erf: return 6;
             case eltwise_round: return 0;
             default: assert(!"unsupported eltwise algorithm");
@@ -1528,7 +1667,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     } else {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return 2;
+            case eltwise_relu: return 1;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu: return 4; /* = exp */
             case eltwise_tanh_use_dst_for_bwd: return 2;
@@ -1546,8 +1685,9 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
             case eltwise_exp: return 4; /* = exp */
             case eltwise_gelu_tanh: return 9; /* = tanh */
             case eltwise_swish: return 6; /* = logistic */
-            case eltwise_log: return 2;
+            case eltwise_log: return 1;
             case eltwise_clip: return 3;
+            case eltwise_pow: return 3;
             case eltwise_gelu_erf: return 6;
             default: assert(!"unsupported eltwise algorithm");
         }
@@ -1602,6 +1742,7 @@ void jit_uni_eltwise_injector_f32<isa>::compute_body(
                     break;
                 case eltwise_log: log_compute_vector_fwd(TRegS(idx)); break;
                 case eltwise_clip: clip_compute_vector_fwd(TRegS(idx)); break;
+                case eltwise_pow: pow_compute_vector_fwd(TRegS(idx)); break;
                 case eltwise_gelu_erf:
                     gelu_erf_compute_vector_fwd(TRegS(idx));
                     break;
@@ -1643,6 +1784,7 @@ void jit_uni_eltwise_injector_f32<isa>::compute_body(
                 case eltwise_swish: swish_compute_vector_bwd(TRegS(idx)); break;
                 case eltwise_log: log_compute_vector_bwd(TRegS(idx)); break;
                 case eltwise_clip: clip_compute_vector_bwd(TRegS(idx)); break;
+                case eltwise_pow: pow_compute_vector_bwd(TRegS(idx)); break;
                 case eltwise_gelu_erf:
                     gelu_erf_compute_vector_bwd(TRegS(idx));
                     break;
@@ -1650,8 +1792,8 @@ void jit_uni_eltwise_injector_f32<isa>::compute_body(
             }
         }
         if (scale_ != 1.f) {
-            h->fmul(ZRegS(IDX(TRegS(idx))), ZRegS(IDX(TRegS(idx))),
-                    ZRegS(IDX(table_val(scale))));
+            h->xa_->fmul(ZRegS(IDX(TRegS(idx))), ZRegS(IDX(TRegS(idx))),
+                    ZRegS(IDX(table_val(scale, z_tmp))));
         }
     });
 }
@@ -1706,7 +1848,7 @@ void jit_uni_eltwise_injector_f32<isa>::prepare_table(bool gen_table) {
         /*        for (size_t d = 0; d < len; d += sizeof(table_entry_val_t))
             h->dd(te.val);*/
         for (size_t d = 0; d < len; d += sizeof(table_entry_val_t))
-            h->dw(te.val);
+            h->Xbyak_aarch64::CodeArray::dw(te.val);
 
 #ifndef NDEBUG
         // we check that the precomputed offsets match the registered ones
@@ -2239,6 +2381,7 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
 }
 
 template struct jit_uni_eltwise_injector_f32<sve_512>;
+template struct jit_uni_eltwise_injector_f32<avx512_common>;
 
 } // namespace aarch64
 } // namespace cpu

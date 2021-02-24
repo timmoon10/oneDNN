@@ -1,6 +1,6 @@
 /*******************************************************************************
-* Copyright 2019-2021 Intel Corporation
-* Copyright 2021 FUJITSU LIMITED
+* Copyright 2019-2020 Intel Corporation
+* Copyright 2020 FUJITSU LIMITED
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -38,23 +38,23 @@ struct static_params_t {
 
     static_params_t(bool save_state = true,
             Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
-            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
-            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(4),
-            Xbyak_aarch64::PReg p_all = Xbyak_aarch64::PReg(7),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(0),
+            Xbyak_aarch64::PReg p_512 = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(2),
             bool is_fwd = true, bool use_dst = false)
         : save_state(save_state)
         , x_table(x_table)
         , p_mask(p_mask)
+        , p_512(p_512)
         , p_tmp0(p_tmp0)
-        , p_all(p_all)
         , is_fwd(is_fwd)
         , use_dst(use_dst) {}
 
     bool save_state;
     Xbyak_aarch64::XReg x_table;
     Xbyak_aarch64::PReg p_mask;
+    Xbyak_aarch64::PReg p_512;
     Xbyak_aarch64::PReg p_tmp0;
-    Xbyak_aarch64::PReg p_all;
     bool is_fwd;
     bool use_dst;
 };
@@ -80,9 +80,9 @@ struct jit_uni_eltwise_injector_f32 {
     jit_uni_eltwise_injector_f32(jit_generator *host, alg_kind_t alg,
             float alpha, float beta, float scale, bool save_state = true,
             Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
-            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
-            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(4),
-            Xbyak_aarch64::PReg p_all = Xbyak_aarch64::PReg(7),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(0),
+            Xbyak_aarch64::PReg p_512 = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(2),
             bool is_fwd = true, bool use_dst = false)
         : alg_(alg)
         , alpha_(alpha)
@@ -92,19 +92,20 @@ struct jit_uni_eltwise_injector_f32 {
         , save_state_(save_state)
         , x_table(x_table)
         , p_mask(p_mask)
+        , p_512(p_512)
         , p_tmp0(p_tmp0)
-        , p_all(p_all)
         , is_fwd_(is_fwd)
         , use_dst_(use_dst)
 
     {
         using namespace alg_kind;
-        assert(utils::one_of(isa, sve_512));
+        assert(utils::one_of(isa, avx512_common, sve_512));
         assert(utils::one_of(alg_, eltwise_relu, eltwise_tanh, eltwise_elu,
                 eltwise_square, eltwise_abs, eltwise_sqrt, eltwise_linear,
                 eltwise_bounded_relu, eltwise_soft_relu, eltwise_logistic,
-                eltwise_exp, eltwise_gelu_tanh, eltwise_swish, eltwise_log,
-                eltwise_clip, eltwise_clip_v2, eltwise_gelu_erf, eltwise_round,
+                eltwise_logsigmoid, eltwise_exp, eltwise_gelu_tanh,
+                eltwise_swish, eltwise_log, eltwise_clip, eltwise_clip_v2,
+                eltwise_pow, eltwise_gelu_erf, eltwise_round,
                 eltwise_relu_use_dst_for_bwd, eltwise_tanh_use_dst_for_bwd,
                 eltwise_elu_use_dst_for_bwd, eltwise_sqrt_use_dst_for_bwd,
                 eltwise_logistic_use_dst_for_bwd, eltwise_exp_use_dst_for_bwd,
@@ -116,13 +117,13 @@ struct jit_uni_eltwise_injector_f32 {
             const post_ops_t::entry_t::eltwise_t &eltwise,
             bool save_state = true,
             Xbyak_aarch64::XReg x_table = Xbyak_aarch64::XReg(0),
-            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(1),
-            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(4),
-            Xbyak_aarch64::PReg p_all = Xbyak_aarch64::PReg(7),
+            Xbyak_aarch64::PReg p_mask = Xbyak_aarch64::PReg(0),
+            Xbyak_aarch64::PReg p_512 = Xbyak_aarch64::PReg(1),
+            Xbyak_aarch64::PReg p_tmp0 = Xbyak_aarch64::PReg(2),
             bool is_fwd = true, bool use_dst = false)
         : jit_uni_eltwise_injector_f32(host, eltwise.alg, eltwise.alpha,
-                eltwise.beta, eltwise.scale, save_state, x_table, p_mask,
-                p_tmp0, p_all, is_fwd, use_dst) {}
+                eltwise.beta, eltwise.scale, save_state, x_table, p_mask, p_512,
+                p_tmp0, is_fwd, use_dst) {}
 
     void compute_vector_range(size_t start_idx, size_t end_idx);
     void compute_vector_range(const injector_utils::vmm_index_set_t &vmm_idxs);
@@ -141,8 +142,8 @@ private:
     const bool save_state_;
     const Xbyak_aarch64::XReg x_table;
     const Xbyak_aarch64::PReg p_mask;
+    const Xbyak_aarch64::PReg p_512;
     const Xbyak_aarch64::PReg p_tmp0;
-    const Xbyak_aarch64::PReg p_all;
     const bool is_fwd_;
     const bool use_dst_;
 
@@ -192,6 +193,7 @@ private:
             const injector_utils::vmm_index_set_iterator_t start_idx_it);
     void injector_postamble();
     void assign_regs();
+    void set_coef_to_regs();
     void compute_cmp_mask(
             const TRegS &vmm_src, const TRegS &vmm_cmpare, int cmp_predicate);
     void blend_with_mask(const TRegS &vmm_dst, const TRegS &src);
@@ -213,6 +215,7 @@ private:
     void swish_compute_vector_fwd(const TRegS &vmm_src);
     void log_compute_vector_fwd(const TRegS &vmm_src);
     void clip_compute_vector_fwd(const TRegS &vmm_src);
+    void pow_compute_vector_fwd(const TRegS &vmm_src);
     void gelu_erf_compute_vector_fwd(const TRegS &vmm_src);
     void round_compute_vector_fwd(const TRegS &vmm_src);
 
@@ -231,6 +234,7 @@ private:
     void swish_compute_vector_bwd(const TRegS &vmm_src);
     void log_compute_vector_bwd(const TRegS &vmm_src);
     void clip_compute_vector_bwd(const TRegS &vmm_src);
+    void pow_compute_vector_bwd(const TRegS &vmm_src);
     void gelu_erf_compute_vector_bwd(const TRegS &vmm_src);
 
     enum key_t {
@@ -288,7 +292,7 @@ private:
         return te.off + key_off_val_shift * scale;
     }
 
-    TRegS table_val(key_t key, size_t key_off_val_shift = 0) {
+    TRegS table_val(key_t key, TRegS zreg, size_t key_off_val_shift = 0) {
         Xbyak_aarch64::XReg x_addr(h->X_DEFAULT_ADDR);
         auto off = table_off(key, key_off_val_shift);
 
@@ -298,8 +302,8 @@ private:
             x_addr = x_table;
         }
 
-        h->ldr(TReg(z_tmp.getIdx()), ptr(x_addr));
-        return z_tmp;
+        h->ldr(TReg(zreg.getIdx()), ptr(x_addr));
+        return zreg;
     }
 
     // we accept only 32bit hexadecimal table values to avoid any rounding
