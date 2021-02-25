@@ -33,8 +33,6 @@
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 #include "cpu/aarch64/jit_sve_512_core_bf16cvt.hpp"
 
-#define IDX(a) static_cast<uint32_t>(a.getIdx())
-
 using namespace Xbyak_aarch64;
 
 namespace dnnl {
@@ -58,6 +56,7 @@ struct jit_uni_pool_kernel : public jit_generator {
 
 private:
     using TReg = typename cpu_isa_traits<isa>::TReg;
+    using TRegS = typename cpu_isa_traits<isa>::TRegS;
 
     int vmm_idx_upper_bound() const noexcept { return 31; }
 
@@ -70,7 +69,7 @@ private:
 
     VReg vmm_mask = VReg(0);
     ZReg ymm_tmp_1 = ZReg(0);
-    TReg vmm_tmp_1 = TReg(0);
+    TRegS vmm_tmp_1 = TRegS(0);
 
     TReg vmm_c_tail_mask = TReg(2);
 
@@ -78,12 +77,12 @@ private:
     VReg xmm_one = VReg(2);
     VReg xmm_tmp = VReg(3);
 
-    TReg vmm_ker_area_h = TReg(2);
-    TReg vmm_one = TReg(2);
+    TRegS vmm_ker_area_h = TRegS(2);
+    TRegS vmm_one = TRegS(2);
     TReg vmm_tmp = TReg(3);
     ZReg ymm_tmp = ZReg(3);
 
-    TReg vmm_k_offset = TReg(1);
+    TRegS vmm_k_offset = TRegS(1);
 
     inline uint32_t reg_idx() {
         if (!jpp.is_backward) {
@@ -92,83 +91,57 @@ private:
             return 4;
     }
 
-    ZReg bf16_emu_reserv_1 = ZReg(5);
-    ZReg bf16_emu_reserv_2 = ZReg(6);
-    ZReg bf16_emu_reserv_3 = ZReg(7);
-    XReg bf16_emu_reserv_4 = XReg(11);
-    ZReg bf16_emu_reserv_5 = ZReg(8);
-
     const std::vector<uint32_t> tmp_vec_idx = {4, 5, 6, 7};
-    ZReg z_tmp0 = ZReg(4);
-    ZReg z_tmp1 = ZReg(5);
-    ZReg z_tmp2 = ZReg(6);
-    ZReg z_tmp3 = ZReg(7);
+    ZReg z_tmp0 = z4;
+    ZReg z_tmp1 = z5;
+    ZReg z_tmp2 = z6;
+    ZReg z_tmp3 = z7;
 
-    PReg k_c_tail_mask = PReg(4);
-    PReg k_mask_cvt = PReg(5);
-    PReg k_store_mask = PReg(6);
+    PReg k_c_tail_mask = p4;
+    PReg k_mask_cvt = p5;
+    PReg k_store_mask = p6;
 
     /* Caution: Chose predicate registers not used by x64's implementation. */
-    PReg p_256 = PReg(1);
-    PReg p_512 = PReg(2);
-    PReg p_tmp0 = PReg(3);
-    PReg p_128 = PReg(7);
-    PReg p_lsb = PReg(2);
-    PReg p_tmp1 = PReg(11);
-    PReg p_tmp2 = PReg(12);
-    PReg P_MSB_256 = PReg(13);
-    PReg P_MSB_384 = PReg(14);
-    PReg P_ALL_ONE = PReg(15);
-    PReg p_injector = p0; // for injector
+    PReg p_all_zero = p0;
+    PReg p_512 = p2;
+    PReg p_tmp0 = p3;
+    PReg p_lsb = p2;
+    PReg p_injector = p5; // for injector
     XReg x_table = x16; // for injector
 
-    // Here be some (tame) dragons. This kernel does not follow the regular
-    // OS-agnostic ABI pattern because when isa is sse41 it uses maskmovdqu
-    // instruction which has its destination hardcoded in rdi. Therefore:
-    // - all registers are hardcoded
-    // - on Windows rdi and rcx are swapped to mimic the Unix x86_64 ABI
-    //
-    // While this is only required by the backward pass, the quirk above
-    // is applied to the forward pass as well to keep things simpler.
     using xreg_t = const XReg;
-    xreg_t reg_param = XReg(0); // Always mimic the Unix ABI
-    xreg_t reg_input = XReg(4);
-    xreg_t aux_reg_input = XReg(5);
-    xreg_t reg_index = XReg(10);
-    xreg_t reg_output = XReg(12);
-    xreg_t reg_kd_pad_shift = XReg(13);
+    xreg_t reg_param = x0;
+    xreg_t reg_input = x4;
+    xreg_t aux_reg_input = x5;
+    xreg_t reg_index = x10;
+    xreg_t reg_output = x12;
+    xreg_t reg_kd_pad_shift = x13;
     xreg_t dst_ptr = XReg(0); // Must be rdi due to maskmovdqu
 
-    xreg_t kj = XReg(14);
-    xreg_t oi_iter = XReg(15);
-    xreg_t reg_kh = XReg(7);
-    xreg_t reg_k_shift = XReg(3);
-    xreg_t tmp_gpr = XReg(6); // Must be rcx because rdi is used above
-    xreg_t reg_ker_area_h = XReg(2);
-    xreg_t reg_nbc = XReg(1);
+    xreg_t kj = x14;
+    xreg_t oi_iter = x15;
+    xreg_t reg_kh = x7;
+    xreg_t reg_k_shift = x3;
+    xreg_t tmp_gpr = x6;
+    xreg_t reg_ker_area_h = x2;
+    xreg_t reg_nbc = x1;
 
-    xreg_t reg_zero_ptr = XReg(5);
-    xreg_t reg_zero_id = XReg(13);
-    xreg_t reg_zero_ih = XReg(14);
-    xreg_t aux_reg_zero_ih = XReg(15);
-    xreg_t ki = XReg(12);
-    xreg_t aux_reg_input_d = XReg(4);
+    xreg_t reg_zero_ptr = x5;
+    xreg_t reg_zero_id = x13;
+    xreg_t reg_zero_ih = x14;
+    xreg_t aux_reg_zero_ih = x15;
+    xreg_t ki = x12;
+    xreg_t aux_reg_input_d = x4;
 
     using wreg_t = const WReg;
-    wreg_t w_tmp_0 = WReg(23);
-    wreg_t W_TMP_0 = WReg(23);
 
-    xreg_t aux_xreg_input = XReg(5);
-    xreg_t xreg_output = XReg(12);
-    xreg_t xreg_index = XReg(10);
-    xreg_t xreg_zero_ptr = XReg(5);
-    xreg_t x_tmp_addr = XReg(28);
-    xreg_t x_tmp_0 = XReg(23);
-    xreg_t X_TMP_0 = XReg(23);
-    xreg_t X_TRANSLATOR_STACK = XReg(22);
-    xreg_t reg_adrimm = XReg(24);
+    xreg_t aux_xreg_input = x5;
+    xreg_t xreg_output = x12;
+    xreg_t xreg_index = x10;
+    xreg_t xreg_zero_ptr = x5;
+    xreg_t reg_adrimm = x24;
 
-    WReg reg_shuf_mask = WReg(1);
+    WReg reg_shuf_mask = w1;
 
     bool sse_high_half = false;
     bool disable_postops_when_sse_high_half_processed_ = false;
