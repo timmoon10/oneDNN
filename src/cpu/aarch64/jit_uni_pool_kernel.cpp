@@ -371,7 +371,7 @@ bool jit_uni_pool_kernel<isa>::post_ops_ok(jit_pool_conf_t &jpp,
             if (entry.is_eltwise()) {
                 jpp.with_eltwise = true;
             } else if (entry.is_binary()) {
-                jpp.with_binary = true;
+                return false;
             } else
                 return false;
         }
