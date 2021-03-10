@@ -61,6 +61,7 @@ jit_sve_512_x8s8s32x_convolution_fwd_t<src_type, dst_type>::execute_forward_1d(
             : 0;
 
     const auto &jcp = pd()->jcp_;
+    // const jit_conv_conf_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.nb_oc % jcp.nb_oc_blocking == 0);
     assert(jcp.nb_ch % jcp.nb_ch_blocking == 0);
 
@@ -183,6 +184,7 @@ jit_sve_512_x8s8s32x_convolution_fwd_t<src_type, dst_type>::execute_forward_2d(
             : 0;
 
     const auto &jcp = pd()->jcp_;
+    // const jit_conv_conf_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.ch_block == 1);
     assert(jcp.nb_ch_blocking == 1);
     assert(jcp.nb_oc % jcp.nb_oc_blocking == 0);
@@ -341,6 +343,7 @@ status_t jit_sve_512_x8s8s32x_convolution_fwd_t<src_type,
             : 0;
 
     const auto &jcp = pd()->jcp_;
+    // const jit_conv_conf_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.ic_block == 1);
     assert(jcp.oc_block == 1);
     assert(jcp.nb_ic == 1);
@@ -446,6 +449,7 @@ jit_sve_512_x8s8s32x_convolution_fwd_t<src_type, dst_type>::execute_forward_3d(
             : 0;
 
     const auto &jcp = pd()->jcp_;
+    // const jit_conv_conf_t jit_ker = (decltype(jit_ker))kernel_->jit_ker();
     assert(jcp.ch_block == 1);
     assert(jcp.nb_ch_blocking == 1);
     assert(jcp.nb_oc % jcp.nb_oc_blocking == 0);
