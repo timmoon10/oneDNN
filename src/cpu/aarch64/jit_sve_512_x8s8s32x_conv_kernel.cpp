@@ -656,7 +656,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
         for (int ki = 0; ki < kw; ki++) {
             int jj_start = get_ow_start(ki, pad_l);
             int jj_end = get_ow_end(ur_w, ki, pad_r);
-            int ic_tail_size = jcp.ic_without_padding % 4;
             int _start = (!jcp.signed_input) ? 0 : jj_start;
             int _end = (!jcp.signed_input) ? ur_w : jj_end;
             /* Skip the last loads of input if (ic%16)/4 < ic_block/4 */

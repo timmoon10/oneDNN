@@ -70,7 +70,6 @@ struct jit_sve_512_x8s8s32x_fwd_kernel : public jit_generator {
 private:
     size_t sve_len_;
     jit_uni_eltwise_injector_f32<sve_512> *eltwise_injector_;
-    const int ic_sub_step = 4;
 
     enum {
         typesize = sizeof(float),
