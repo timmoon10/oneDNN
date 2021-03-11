@@ -776,12 +776,29 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                             vmm_inp(jj, nb_oc_block + a)
                                                     .getIdx());
                                     for (int r = 0; r < ic_tail_size; ++r) {
+#if 0 // Address calculation change_3
                                         add_imm(reg_tmp0_adr, aux_reg_inp,
                                                 (aux_input_offset + r),
                                                 reg_tmp0_imm);
                                         ldrb(WReg(reg_tmp1_imm.getIdx()),
                                                 Xbyak_aarch64::ptr(
                                                         reg_tmp0_adr));
+#else
+                                        if ((aux_input_offset + r) < 4096) {
+                                            ldrb(WReg(reg_tmp1_imm.getIdx()),
+                                                    Xbyak_aarch64::ptr(
+                                                            aux_reg_inp,
+                                                            (aux_input_offset
+                                                                    + r)));
+                                        } else {
+                                            add_imm(reg_tmp0_adr, aux_reg_inp,
+                                                    (aux_input_offset + r),
+                                                    reg_tmp0_imm);
+                                            ldrb(WReg(reg_tmp1_imm.getIdx()),
+                                                    Xbyak_aarch64::ptr(
+                                                            reg_tmp0_adr));
+                                        }
+#endif
                                         ins(VReg16B(xmm_tmp.getIdx())[r],
                                                 WReg(reg_tmp1_imm.getIdx()));
                                     }
@@ -900,11 +917,27 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                 auto xmm_tmp = VReg16B(
                                         vmm_inp(jj, nb_oc_block).getIdx());
                                 for (int r = 0; r < ic_tail_size; ++r) {
+#if 0 // Address calculation change_3
                                     add_imm(reg_tmp0_adr, aux_reg_inp,
                                             (aux_input_offset + r),
                                             reg_tmp0_imm);
                                     ldrb(WReg(reg_tmp1_imm.getIdx()),
                                             Xbyak_aarch64::ptr(reg_tmp0_adr));
+#else
+                                    if ((aux_input_offset + r) < 4096) {
+                                        ldrb(WReg(reg_tmp1_imm.getIdx()),
+                                                Xbyak_aarch64::ptr(aux_reg_inp,
+                                                        (aux_input_offset
+                                                                + r)));
+                                    } else {
+                                        add_imm(reg_tmp0_adr, aux_reg_inp,
+                                                (aux_input_offset + r),
+                                                reg_tmp0_imm);
+                                        ldrb(WReg(reg_tmp1_imm.getIdx()),
+                                                Xbyak_aarch64::ptr(
+                                                        reg_tmp0_adr));
+                                    }
+#endif
                                     ins(VReg16B(xmm_tmp.getIdx())[r],
                                             WReg(reg_tmp1_imm.getIdx()));
                                 }

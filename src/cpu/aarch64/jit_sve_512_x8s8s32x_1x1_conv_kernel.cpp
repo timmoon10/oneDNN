@@ -214,10 +214,14 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         if (bcast)
             assert(!"unimplemented");
         else {
+#if 0 // Address calculation change_2 
             if ((-0x40 <= ofs) && (ofs < 0x40) && ((ofs % 4) == 0))
-                ld1rw(ZRegS(bcast_reg.getIdx()), PReg(vmask.getIdx()),
-                        Xbyak_aarch64::ptr(XReg(base.getIdx()),
-                                static_cast<int32_t>(ofs)));
+#else
+            if ((ofs < 0xFD) && ((ofs % 4) == 0))
+#endif
+            ld1rw(ZRegS(bcast_reg.getIdx()), PReg(vmask.getIdx()),
+                    Xbyak_aarch64::ptr(
+                            XReg(base.getIdx()), static_cast<int32_t>(ofs)));
             else {
                 auto reg_tmp_adr = ((i_ur % 4) == 0)
                         ? reg_tmp0_adr
@@ -243,7 +247,7 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         int offt = (i_load * jcp.reduce_dim + u0) * jcp.load_block;
         int ofs = get_offset(
                 u1 * jcp.reduce_loop_load_step + jcp.typesize_in * offt);
-
+#if 0 // Address calculation change_2
         if (ofs == 0) {
             ldr(load_reg, Xbyak_aarch64::ptr(aux_reg_load_data));
         } else {
@@ -258,6 +262,22 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
             add_imm(reg_tmp_adr, aux_reg_load_data, ofs, reg_tmp_imm);
             ldr(load_reg, Xbyak_aarch64::ptr(reg_tmp_adr));
         }
+#else
+        if ((ofs > -257 * 64) && (ofs < 256 * 64) && ((ofs % 64) == 0)) {
+            ldr(load_reg, Xbyak_aarch64::ptr(aux_reg_load_data, ofs / 64));
+        } else {
+            auto reg_tmp_adr = ((i_load % 4) == 0) ? reg_tmp0_adr
+                                                   : ((i_load % 4) == 1)
+                            ? reg_tmp1_adr
+                            : ((i_load % 4) == 2) ? reg_tmp2_adr : reg_tmp3_adr;
+            auto reg_tmp_imm = ((i_load % 4) == 0) ? reg_tmp0_imm
+                                                   : ((i_load % 4) == 1)
+                            ? reg_tmp1_imm
+                            : ((i_load % 4) == 2) ? reg_tmp2_imm : reg_tmp3_imm;
+            add_imm(reg_tmp_adr, aux_reg_load_data, ofs, reg_tmp_imm);
+            ldr(load_reg, Xbyak_aarch64::ptr(reg_tmp_adr));
+        }
+#endif
     };
 
     auto output_ptr = [=](ZReg output_reg, int i_load, int i_ur,
@@ -268,7 +288,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
 
         int offt = get_offset(
                 jcp.typesize_out * (ur_stride + i_load * jcp.load_block));
-
         add_imm(reg_tmp0_adr, aux_reg_output_data, offt, reg_tmp0_imm);
         if (mask_flag)
             ld1w(output_reg.s, ktail_mask / Xbyak_aarch64::T_z,
@@ -315,7 +334,16 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         const int sum_idx = p.find(primitive_kind::sum);
         const float *p_sum_scale = nullptr;
         if (sum_idx != -1) p_sum_scale = &p.entry_[sum_idx].sum.scale;
+#if 0 // Address calculation change_2
         str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+#else
+        if ((reg_bcast_data_off > -257) && (reg_bcast_data_off < 256)) {
+            str(reg_bcast_data,
+                    Xbyak_aarch64::ptr(reg_rsp, reg_bcast_data_off));
+        } else {
+            str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+        }
+#endif
 #if 0 // Address calculation change
         ldr(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
 #else
@@ -1032,10 +1060,23 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
         ldr(reg_bias_data,
                 Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(bias_data)));
     if (!jcp.signed_input) {
+#if 0 // Address calculation change_2
         str(reg_bias_data, SVE_compress_addr(reg_rsp, reg_bias_data_off));
         ldr(reg_comp_data,
                 Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(compensation)));
         str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
+#else
+        if ((reg_bias_data_off > -257) && (reg_bias_data_off < 256))
+            str(reg_bias_data, Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
+        else
+            str(reg_bias_data, SVE_compress_addr(reg_rsp, reg_bias_data_off));
+        ldr(reg_comp_data,
+                Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(compensation)));
+        if ((reg_comp_data_off > -257) && (reg_comp_data_off < 256))
+            str(reg_comp_data, Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
+        else
+            str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
+#endif
     }
 #if 0
     if (jcp.src_zero_point) {
@@ -1051,7 +1092,14 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
 #endif
 
     ldr(reg_ptr_scales, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(scales)));
+#if 0 // Address calculation change_2
     str(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
+#else
+    if ((reg_ptr_sum_scale_off > -257) && (reg_ptr_sum_scale_off < 256))
+        str(reg_ptr_scales, Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
+    else
+        str(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
+#endif
     ldr(reg_bcast_data,
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(bcast_data)));
     ldr(reg_load_data, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(load_data)));
@@ -1062,7 +1110,16 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(load_dim)));
     ldr(reg_bcast_loop_work,
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(bcast_dim)));
+#if 0 // Address calculation change_2
     str(reg_bcast_loop_work, SVE_compress_addr(reg_rsp, bcast_loop_work_off));
+#else
+    if ((bcast_loop_work_off > -257) && (bcast_loop_work_off < 256))
+        str(reg_bcast_loop_work,
+                Xbyak_aarch64::ptr(reg_rsp, bcast_loop_work_off));
+    else
+        str(reg_bcast_loop_work,
+                SVE_compress_addr(reg_rsp, bcast_loop_work_off));
+#endif
     ldr(reg_reduce_loop_work,
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(reduce_dim)));
     ldr(reg_reduce_pos_flag,
@@ -1072,49 +1129,65 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
         bcast_loop(load_loop_blk);
         add_imm(reg_load_data, reg_load_data,
                 load_loop_blk * jcp.load_loop_load_step, reg_tmp0_imm);
-#if 1
         if (jcp.with_bias) {
+#if 0 // Address calculation change_2
             if (!jcp.signed_input)
                 ldr(reg_bias_data,
                         SVE_compress_addr(reg_rsp, reg_bias_data_off));
+#else
+            if (!jcp.signed_input) {
+                if ((reg_bias_data_off > -257) && (reg_bias_data_off < 256))
+                    ldr(reg_bias_data,
+                            Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
+                else
+                    ldr(reg_bias_data,
+                            SVE_compress_addr(reg_rsp, reg_bias_data_off));
+            }
+#endif
             add_imm(reg_bias_data, reg_bias_data,
                     load_loop_blk * jcp.load_block * jcp.typesize_bia,
                     reg_tmp0_imm);
+#if 0 // Address calculation change_2
             if (!jcp.signed_input)
                 str(reg_bias_data,
                         SVE_compress_addr(reg_rsp, reg_bias_data_off));
-        }
-        if (!jcp.signed_input) {
-            ldr(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-            add_imm(reg_comp_data, reg_comp_data,
-                    load_loop_blk * jcp.load_block * sizeof(int32_t),
-                    reg_tmp0_imm);
-            str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-        }
 #else
-        if (!jcp.signed_input) {
-            if (jcp.with_bias) {
-                ldr(reg_bias_data,
-                        SVE_compress_addr(reg_rsp, reg_bias_data_off));
-                add_imm(reg_bias_data, reg_bias_data,
-                        load_loop_blk * jcp.load_block * jcp.typesize_bia,
-                        reg_tmp0_imm);
-                str(reg_bias_data,
-                        SVE_compress_addr(reg_rsp, reg_bias_data_off));
+            if (!jcp.signed_input) {
+                if ((reg_bias_data_off > -257) && (reg_bias_data_off < 256))
+                    str(reg_bias_data,
+                            Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
+                else
+                    str(reg_bias_data,
+                            SVE_compress_addr(reg_rsp, reg_bias_data_off));
             }
+#endif
+        }
+        if (!jcp.signed_input) {
+#if 0 // Address calculation change_2
             ldr(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
+#else
+            if ((reg_comp_data_off > -257) && (reg_comp_data_off < 256))
+                ldr(reg_comp_data,
+                        Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
+            else
+                ldr(reg_comp_data,
+                        SVE_compress_addr(reg_rsp, reg_comp_data_off));
+#endif
             add_imm(reg_comp_data, reg_comp_data,
                     load_loop_blk * jcp.load_block * sizeof(int32_t),
                     reg_tmp0_imm);
+#if 0 // Address calculation change_2
             str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-        } else {
-            if (jcp.with_bias) {
-                add_imm(reg_bias_data, reg_bias_data,
-                        load_loop_blk * jcp.load_block * jcp.typesize_bia,
-                        reg_tmp0_imm);
-            }
-        }
+#else
+            if ((reg_comp_data_off > -257) && (reg_comp_data_off < 256))
+                str(reg_comp_data,
+                        Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
+            else
+                str(reg_comp_data,
+                        SVE_compress_addr(reg_rsp, reg_comp_data_off));
 #endif
+        }
+
 #if 0
         if (jcp.src_zero_point) {
             ldr(reg_zp_compensation,
@@ -1124,14 +1197,42 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
             str(reg_zp_compensation, SVE_compress_addr(reg_rsp, reg_zp_compensation_off));
         }
 #endif
+#if 0 // Address calculation change_2
         str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
         ldr(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
+#else
+        if ((reg_bcast_data_off > -257) && (reg_bcast_data_off < 256))
+            str(reg_bcast_data,
+                    Xbyak_aarch64::ptr(reg_rsp, reg_bcast_data_off));
+        else
+            str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+        if ((reg_ptr_sum_scale_off > -257) && (reg_ptr_sum_scale_off < 256))
+            ldr(reg_ptr_scales,
+                    Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
+        else
+            ldr(reg_ptr_scales,
+                    SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
+#endif
         add_imm(reg_ptr_scales, reg_ptr_scales,
                 jcp.is_oc_scale * load_loop_blk * jcp.load_block
                         * sizeof(float),
                 reg_tmp0_imm);
+#if 0 // Address calculation change_2
         str(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
         ldr(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+#else
+        if ((reg_ptr_sum_scale_off > -257) && (reg_ptr_sum_scale_off < 256))
+            str(reg_ptr_scales,
+                    Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
+        else
+            str(reg_ptr_scales,
+                    SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
+        if ((reg_bcast_data_off > -257) && (reg_bcast_data_off < 256))
+            ldr(reg_bcast_data,
+                    Xbyak_aarch64::ptr(reg_rsp, reg_bcast_data_off));
+        else
+            ldr(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+#endif
         adds(reg_output_data, reg_output_data,
                 load_loop_blk * jcp.load_block * jcp.typesize_out);
         subs(reg_load_loop_work, reg_load_loop_work,
@@ -1168,12 +1269,33 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
                 for (int _i = 1; _i <= label_idx + 1; _i++) {
                     // prefetcht0(ptr[reg_load_data + _i * jcp.ic * jcp.oc_block]);
                     // prefetcht1(ptr[reg_output_data + _i * jcp.oc_block]);
+#if 0 // Address calculation change_4
                     add_imm(reg_tmp0_adr, reg_load_data,
                             (_i * jcp.ic * jcp.oc_block), reg_tmp0_imm);
                     add_imm(reg_tmp1_adr, reg_output_data, (_i * jcp.oc_block),
                             reg_tmp1_imm);
                     prfm(PLDL1KEEP, Xbyak_aarch64::ptr(reg_tmp0_adr));
                     prfm(PLDL2KEEP, Xbyak_aarch64::ptr(reg_tmp1_adr));
+#else
+                    auto pf_ofs_1 = _i * jcp.ic * jcp.oc_block;
+                    auto pf_ofs_2 = _i * jcp.oc_block;
+                    if ((pf_ofs_1 < 32761) && ((pf_ofs_1 % 8) == 0)) {
+                        prfm(PLDL1KEEP,
+                                Xbyak_aarch64::ptr(reg_load_data, pf_ofs_1));
+                    } else {
+                        add_imm(reg_tmp0_adr, reg_load_data, pf_ofs_1,
+                                reg_tmp0_imm);
+                        prfm(PLDL1KEEP, Xbyak_aarch64::ptr(reg_tmp0_adr));
+                    }
+                    if ((pf_ofs_2 < 32761) && ((pf_ofs_2 % 8) == 0)) {
+                        prfm(PLDL2KEEP,
+                                Xbyak_aarch64::ptr(reg_output_data, pf_ofs_2));
+                    } else {
+                        add_imm(reg_tmp1_adr, reg_output_data, pf_ofs_2,
+                                reg_tmp1_imm);
+                        prfm(PLDL2KEEP, Xbyak_aarch64::ptr(reg_tmp1_adr));
+                    }
+#endif
                 }
 
                 load_loop_body(label_idx + 1);
