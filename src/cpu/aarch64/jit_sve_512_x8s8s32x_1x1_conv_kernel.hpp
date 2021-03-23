@@ -135,41 +135,6 @@ private:
     void generate() override;
     // void cvt2ps(data_type_t type_in, const Vmm vmm_in, const Xbyak::Operand &op,
     //         bool mask_flag);
-
-    int get_offset(int raw_offt) {
-
-        assert(raw_offt <= INT_MAX);
-        auto offt = static_cast<int>(raw_offt);
-
-        int scale = 0;
-        const int EVEX_max_8b_offt = 0x200;
-
-        if (EVEX_max_8b_offt <= offt && offt < 3 * EVEX_max_8b_offt) {
-            offt = offt - 2 * EVEX_max_8b_offt;
-            scale = 1;
-        } else if (3 * EVEX_max_8b_offt <= offt
-                && offt < 5 * EVEX_max_8b_offt) {
-            offt = offt - 4 * EVEX_max_8b_offt;
-            scale = 2;
-        }
-
-        auto re = offt;
-        if (scale) re = re + (2 * EVEX_max_8b_offt) * scale;
-
-        return re;
-    }
-
-    XReg get_comp_addr_reg(XReg base, int offset = 0) {
-        auto offt = get_offset(offset);
-
-        if (offt == 0) return base;
-
-        auto reg_tmp_adr = reg_tmp0_adr;
-        auto reg_tmp_imm = reg_tmp0_imm;
-        add_imm(reg_tmp_adr, base, offt, reg_tmp_imm);
-
-        return reg_tmp_adr;
-    }
 };
 
 struct jit_sve_512_x8s8s32x_1x1_conv_kernel {

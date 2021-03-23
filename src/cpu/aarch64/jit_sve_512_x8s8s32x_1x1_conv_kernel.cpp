@@ -29,6 +29,7 @@
 #include "cpu/aarch64/jit_sve_512_x8s8s32x_1x1_conv_kernel.hpp"
 #include "cpu/aarch64/jit_uni_1x1_conv_utils.hpp"
 
+#define NOT_TESTED_ZERO_POINT 0
 #define GET_OFF(field) \
     static_cast<int32_t>(offsetof(jit_1x1_conv_call_s, field))
 
@@ -39,9 +40,6 @@ namespace aarch64 {
 
 using namespace dnnl::impl::utils;
 using namespace dnnl::impl::data_type;
-
-#define SVE_compress_addr(base, offt) \
-    Xbyak_aarch64::ptr(get_comp_addr_reg(base, offt))
 
 template <typename Vmm>
 bool _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::maybe_eltwise(int position) {
@@ -65,7 +63,9 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::bcast_loop(int load_loop_blk) {
     xa_->mov(aux_reg_bcast_data, reg_bcast_data);
 
     xa_->mov(aux_reg_output_data, reg_output_data);
-    ldr(bcast_loop_iter, SVE_compress_addr(reg_rsp, bcast_loop_work_off));
+    ldr(bcast_loop_iter,
+            Xbyak_aarch64::ptr(get_comp_addr_reg(
+                    reg_rsp, reg_tmp0_adr, reg_tmp0_imm, bcast_loop_work_off)));
 
     Label bcast_loop;
     Label bcast_loop_tail;
@@ -125,15 +125,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
 
     auto bias_ptr = [=](ZReg bias_reg, int i_load, bool mask_flag) {
         int offt = get_offset(jcp.typesize_bia * jcp.oc_block * i_load);
-#if 0 // Address calculation change
-
-        add_imm(reg_tmp0_adr, reg_bias_data, offt, reg_tmp0_imm);
-        if (mask_flag)
-            ld1w(bias_reg.s, ktail_mask / Xbyak_aarch64::T_z,
-                    Xbyak_aarch64::ptr(reg_tmp0_adr));
-        else
-            ldr(bias_reg, Xbyak_aarch64::ptr(reg_tmp0_adr));
-#else
         if (mask_flag) {
             add_imm(reg_tmp0_adr, reg_bias_data, offt, reg_tmp0_imm);
             ld1w(bias_reg.s, ktail_mask / Xbyak_aarch64::T_z,
@@ -141,7 +132,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         } else {
             ldr(bias_reg, Xbyak_aarch64::ptr(reg_bias_data, offt / 64));
         }
-#endif
     };
 
     auto bias_ptr8 = [=](ZReg bias_reg, int i_load, bool mask_flag) {
@@ -160,14 +150,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
 
     auto comp_ptr = [=](ZReg comp_reg, int i_load, bool mask_flag) {
         int offt = get_offset(sizeof(int32_t) * jcp.oc_block * i_load);
-#if 0 // Address calculation change
-        add_imm(reg_tmp0_adr, reg_comp_data, offt, reg_tmp0_imm);
-        if (mask_flag)
-            ld1w(comp_reg.s, ktail_mask / Xbyak_aarch64::T_z,
-                    Xbyak_aarch64::ptr(reg_tmp0_adr));
-        else
-            ldr(comp_reg, Xbyak_aarch64::ptr(reg_tmp0_adr));
-#else
         if (mask_flag) {
             add_imm(reg_tmp0_adr, reg_comp_data, offt, reg_tmp0_imm);
             ld1w(comp_reg.s, ktail_mask / Xbyak_aarch64::T_z,
@@ -175,7 +157,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         } else {
             ldr(comp_reg, Xbyak_aarch64::ptr(reg_comp_data, offt / 64));
         }
-#endif
     };
 
     auto scale_ptr = [=](ZReg scale_reg, int i_load) {
@@ -214,14 +195,10 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         if (bcast)
             assert(!"unimplemented");
         else {
-#if 0 // Address calculation change_2 
-            if ((-0x40 <= ofs) && (ofs < 0x40) && ((ofs % 4) == 0))
-#else
             if ((ofs < 0xFD) && ((ofs % 4) == 0))
-#endif
-            ld1rw(ZRegS(bcast_reg.getIdx()), PReg(vmask.getIdx()),
-                    Xbyak_aarch64::ptr(
-                            XReg(base.getIdx()), static_cast<int32_t>(ofs)));
+                ld1rw(ZRegS(bcast_reg.getIdx()), PReg(vmask.getIdx()),
+                        Xbyak_aarch64::ptr(XReg(base.getIdx()),
+                                static_cast<int32_t>(ofs)));
             else {
                 auto reg_tmp_adr = ((i_ur % 4) == 0)
                         ? reg_tmp0_adr
@@ -247,22 +224,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         int offt = (i_load * jcp.reduce_dim + u0) * jcp.load_block;
         int ofs = get_offset(
                 u1 * jcp.reduce_loop_load_step + jcp.typesize_in * offt);
-#if 0 // Address calculation change_2
-        if (ofs == 0) {
-            ldr(load_reg, Xbyak_aarch64::ptr(aux_reg_load_data));
-        } else {
-            auto reg_tmp_adr = ((i_load % 4) == 0) ? reg_tmp0_adr
-                                                   : ((i_load % 4) == 1)
-                            ? reg_tmp1_adr
-                            : ((i_load % 4) == 2) ? reg_tmp2_adr : reg_tmp3_adr;
-            auto reg_tmp_imm = ((i_load % 4) == 0) ? reg_tmp0_imm
-                                                   : ((i_load % 4) == 1)
-                            ? reg_tmp1_imm
-                            : ((i_load % 4) == 2) ? reg_tmp2_imm : reg_tmp3_imm;
-            add_imm(reg_tmp_adr, aux_reg_load_data, ofs, reg_tmp_imm);
-            ldr(load_reg, Xbyak_aarch64::ptr(reg_tmp_adr));
-        }
-#else
         if ((ofs > -257 * 64) && (ofs < 256 * 64) && ((ofs % 64) == 0)) {
             ldr(load_reg, Xbyak_aarch64::ptr(aux_reg_load_data, ofs / 64));
         } else {
@@ -277,7 +238,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
             add_imm(reg_tmp_adr, aux_reg_load_data, ofs, reg_tmp_imm);
             ldr(load_reg, Xbyak_aarch64::ptr(reg_tmp_adr));
         }
-#endif
     };
 
     auto output_ptr = [=](ZReg output_reg, int i_load, int i_ur,
@@ -334,50 +294,33 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         const int sum_idx = p.find(primitive_kind::sum);
         const float *p_sum_scale = nullptr;
         if (sum_idx != -1) p_sum_scale = &p.entry_[sum_idx].sum.scale;
-#if 0 // Address calculation change_2
-        str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
-#else
-        if ((reg_bcast_data_off > -257) && (reg_bcast_data_off < 256)) {
-            str(reg_bcast_data,
-                    Xbyak_aarch64::ptr(reg_rsp, reg_bcast_data_off));
-        } else {
-            str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
-        }
-#endif
-#if 0 // Address calculation change
-        ldr(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-#else
+        str_offt(reg_bcast_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_bcast_data_off);
         ldur(reg_ptr_scales,
                 Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
-#endif
         if (p_sum_scale && *p_sum_scale != 1.f) {
-            str(reg_load_data, SVE_compress_addr(reg_rsp, reg_load_data_off));
+            str(reg_load_data,
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_load_data_off)));
             xa_->mov_imm(reg_ptr_sum_scale, (size_t)p_sum_scale);
         }
-#if 0
+#if NOT_TESTED_ZERO_POINT
         if (jcp.src_zero_point) {
             ldr(reg_zp_compensation,
-                    SVE_compress_addr(reg_rsp, reg_zp_compensation_off));
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_zp_compensation_off)));
             ldr(reg_src_zero_point,
-                    SVE_compress_addr(reg_rsp, reg_src_zero_point_off));
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_src_zero_point_off)));
         }
 #endif
 
-#if 0 // Address calculation change
-        if (!jcp.signed_input) {
-            ldr(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-            if (jcp.with_bias)
-                ldr(reg_bias_data,
-                        SVE_compress_addr(reg_rsp, reg_bias_data_off));
-        }
-#else
         if (!jcp.signed_input) {
             ldur(reg_comp_data, Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
             if (jcp.with_bias)
                 ldr(reg_bias_data,
                         Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
         }
-#endif
         for (int i_load = 0; i_load < load_loop_blk; ++i_load) {
             const bool mask_flag = mask_flag_in && i_load == load_loop_blk - 1;
             auto vmm_comp = vmm_tmp; // ZReg(28)
@@ -426,24 +369,27 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                 comp_ptr(vmm_comp, i_load, mask_flag);
                 add_flag = true;
             }
-#if 0
+#if NOT_TESTED_ZERO_POINT
             if (jcp.src_zero_point) {
                 // zero_point: conv(src_x8, wei_s8) - src_shift_s32 * compensation_s32
                 const int zp_offset = sizeof(int32_t) * i_load * jcp.load_block;
                 // vmovups(vmm_zp,
                 //         EVEX_compress_addr(reg_zp_compensation, zp_offset));
-                auto reg_addr = get_comp_addr_reg(reg_zp_compensation, zp_offset);
+                auto reg_addr = get_comp_addr_reg(reg_zp_compensation,
+                        reg_tmp0_adr, reg_tmp0_imm, zp_offset);
                 ldr(vmm_zp.s, Xbyak_aarch64::ptr(reg_addr));
 
                 // vpmulld(vmm_zp, vmm_zp,
                 //         EVEX_compress_addr(
                 //                 reg_src_zero_point, 0, jcp.zp_src_is_common));
-                auto reg_addr2 = get_comp_addr_reg(reg_src_zero_point, 0);
+                auto reg_addr2 = get_comp_addr_reg(
+                        reg_src_zero_point, reg_tmp0_adr, reg_tmp0_imm, 0);
                 ldr(vmm_zp2.s, Xbyak_aarch64::ptr(reg_addr));
                 mul(vmm_zp.s, vmask, vmm_zp2.s);
 
                 // upscale to f32
-                auto vmm_ = mask_flag ? vmm_zp | ktail_mask | Xbyak_aarch64::T_z : vmm_zp;
+                auto vmm_ = mask_flag ? vmm_zp | ktail_mask | Xbyak_aarch64::T_z
+                                      : vmm_zp;
                 // vcvtdq2ps(vmm_, vmm_);
                 scvtf(ZRegS(vmm_.getIdx()), vmask, ZRegS(vmm_.getIdx()));
             }
@@ -455,9 +401,11 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                         PReg(vmask.getIdx()),
                         ZRegS(vreg_accum(i_load, i_ur)
                                         .getIdx())); //< vcvtdq2ps(r, r);
-#if 0
+#if NOT_TESTED_ZERO_POINT
             if (jcp.src_zero_point) {
-                for (int i_ur = 0; i_ur < ur; ++i_ur) xa_->fadd(vreg_accum(i_load, i_ur).s, vreg_accum(i_load, i_ur).s, vmm_zp.s);
+                for (int i_ur = 0; i_ur < ur; ++i_ur)
+                    xa_->fadd(vreg_accum(i_load, i_ur).s,
+                            vreg_accum(i_load, i_ur).s, vmm_zp.s);
             }
 #endif
             if (!jcp.signed_input) {
@@ -506,40 +454,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                         case data_type::s32:
                             output_ptr(vmm_prev_dst, i_load, i_ur, mask_flag);
                             break;
-#if 0
-			case data_type::s8:
-                            xa_->sub(x22, x22, 64);
-                            str(ZReg(29), Xbyak_aarch64::ptr(x22));
-                            output_ptr8(ZReg(29), i_load, i_ur, mask_flag);
-                            zip1(ZRegB(29), ZRegB(29), ZRegB(29));
-                            zip1(ZRegH(29), ZRegH(29), ZRegH(29));
-                            sxtb(ZRegS(vmm_prev_dst.getIdx()),
-                                    vmask / Xbyak_aarch64::T_m, ZRegS(29));
-                            if (mask_flag) {
-                                xa_->not_(mask_tmp.b, vmask.b, ktail_mask.b);
-                                xa_->mov(vmm_prev_dst.s,
-                                        mask_tmp / Xbyak_aarch64::T_m, 0);
-                            }
-                            ldr(ZReg(29), Xbyak_aarch64::ptr(x22));
-                            xa_->add(x22, x22, 64);
-                            break;
-                        case data_type::u8:
-                            xa_->sub(x22, x22, 64);
-                            str(ZReg(29), Xbyak_aarch64::ptr(x22));
-                            output_ptr8(ZReg(29), i_load, i_ur, mask_flag);
-                            zip1(ZRegB(29), ZRegB(29), ZRegB(29));
-                            zip1(ZRegH(29), ZRegH(29), ZRegH(29));
-                            uxtb(ZRegS(vmm_prev_dst.getIdx()),
-                                    vmask / Xbyak_aarch64::T_m, ZRegS(29));
-                            if (mask_flag) {
-                                xa_->not_(mask_tmp.b, vmask.b, ktail_mask.b);
-                                xa_->mov(vmm_prev_dst.s,
-                                        mask_tmp / Xbyak_aarch64::T_m, 0);
-                            }
-                            ldr(ZReg(29), Xbyak_aarch64::ptr(x22));
-                            xa_->add(x22, x22, 64);
-                            break;
-#else
                         case data_type::s8:
                             output_ptr8(ZReg(27), i_load, i_ur, mask_flag);
                             zip1(ZRegB(27), ZRegB(27), ZRegB(27));
@@ -564,7 +478,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                                         mask_tmp / Xbyak_aarch64::T_m, 0);
                             }
                             break;
-#endif
                         default: assert(!"unsupported data type");
                     }
                     if (jcp.dst_dt != data_type::f32)
@@ -572,26 +485,12 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                                 ZRegS(vmm_prev_dst.getIdx()));
 
                     if (*p_sum_scale == 1.f) {
-                        // vaddps(r, vmm_prev_dst);
                         xa_->fadd(r.s, r.s, vmm_prev_dst.s);
                     } else {
-                        // vfmadd231ps(
-                        //         r, vmm_prev_dst, zword_b[reg_ptr_sum_scale]);
-#if 0
-			xa_->sub(x22, x22, 64);
-                        str(ZReg(29), Xbyak_aarch64::ptr(x22));
-                        ld1rw(ZRegS(29), vmask / Xbyak_aarch64::T_z,
-                                Xbyak_aarch64::ptr(reg_ptr_sum_scale));
-                        fmla(r.s, vmask / Xbyak_aarch64::T_m, vmm_prev_dst.s,
-                                ZRegS(29));
-                        ldr(ZReg(29), Xbyak_aarch64::ptr(x22));
-                        xa_->add(x22, x22, 64);
-#else
                         ld1rw(ZRegS(27), vmask / Xbyak_aarch64::T_z,
                                 Xbyak_aarch64::ptr(reg_ptr_sum_scale));
                         fmla(r.s, vmask / Xbyak_aarch64::T_m, vmm_prev_dst.s,
                                 ZRegS(27));
-#endif
                     }
                 }
             }
@@ -600,15 +499,17 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
         if (maybe_eltwise(1))
             eltwise_injector_->compute_vector_range(0, ur * load_loop_blk);
 
-#if 0
+#if NOT_TESTED_ZERO_POINT
         if (jcp.dst_zero_point) {
-//            xa_->mov(reg_dst_zero_point,
-//                    EVEX_compress_addr(rsp, reg_dst_zero_point_off));
+            //            xa_->mov(reg_dst_zero_point,
+            //                    EVEX_compress_addr(rsp, reg_dst_zero_point_off));
             ldr(reg_dst_zero_point,
-                    SVE_compress_addr(reg_rsp, reg_dst_zero_point_off));
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_dst_zero_point_off)));
 
-//            vcvtdq2ps(vmm_zp, EVEX_compress_addr(reg_dst_zero_point, 0, true));
-            auto reg_addr = get_comp_addr_reg(reg_dst_zero_point, 0);
+            //            vcvtdq2ps(vmm_zp, EVEX_compress_addr(reg_dst_zero_point, 0, true));
+            auto reg_addr = get_comp_addr_reg(
+                    reg_dst_zero_point, reg_tmp0_adr, reg_tmp0_imm, 0);
             ldr(vmm_zp2.s, Xbyak_aarch64::ptr(reg_addr));
             scvtf(ZRegS(vmm_zp.getIdx()), vmask, ZRegS(vmm_zp2.getIdx()));
 
@@ -634,32 +535,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
             xa_->mov_imm(reg_tmp0_imm, float2int(saturation_ubound));
             dup(vmm_saturation.s, WReg(reg_tmp0_imm.getIdx()));
 
-#if 0 // optimize instruction order	    
-            for (int i_load = 0; i_load < load_loop_blk; ++i_load) {
-                for (int i_ur = 0; i_ur < ur; ++i_ur) {
-                    auto r = vreg_accum(i_load, i_ur);
-                    // saturate_f32(r, vmm_zero, vmm_saturation, jcp.dst_dt);
-
-                    if (jcp.dst_dt == data_type::u8) {
-                        // vmaxps(vmm, vmm, vmm_lbound);
-                        fmaxnm(r.s, vmask, vmm_zero.s);
-                        fmax(r.s, vmask, vmm_zero.s);
-                    }
-                    // vminps(vmm, vmm, vmm_ubound);
-                    fminnm(r.s, vmask, vmm_saturation.s);
-                    fmin(r.s, vmask, vmm_saturation.s);
-
-                    // vcvtps2dq(r, r);
-#if 1
-                    frintn(r.s, vmask, r.s); // T_rn_sae
-                    fcvtzs(r.s, vmask, r.s);
-#else
-                    frintm(r.s, vmask, r.s); // T_rd_sae
-                    fcvtzs(r.s, vmask, r.s);
-#endif
-                }
-            }
-#else
             using f = void (CodeGenerator::*)(
                     const ZRegS &, const _PReg &, const ZRegS &);
 
@@ -686,7 +561,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
             loop_mn(mn_fminnm, vmask, true, vmm_saturation.s);
             loop_mn(mn_frintn, vmask, false);
             loop_mn(mn_fcvtzs, vmask, false);
-#endif
         }
 
         // store to the destination
@@ -731,30 +605,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                         : ((i_ur % 4) == 1) ? reg_tmp1_imm
                                             : ((i_ur % 4) == 2) ? reg_tmp2_imm
                                                                 : reg_tmp3_imm;
-#if 0
-		add_imm(reg_tmp_adr, XReg(base.getIdx()), re, reg_tmp_imm);
-
-                auto _mask = mask_flag ? ktail_mask : vmask;
-                switch (jcp.dst_dt) {
-                    case data_type::f32:
-                    case data_type::s32:
-                        // vmovups(output_ptr(i_load, i_ur), r_vmm);
-                        st1w(r_vmm.s, _mask, Xbyak_aarch64::ptr(reg_tmp_adr));
-                        break;
-                    case data_type::s8:
-                        // vpmovsdb(output_ptr(i_load, i_ur), r_vmm);
-                        smin(r_vmm.s, 127);
-                        smax(r_vmm.s, -128);
-                        st1b(r_vmm.s, _mask, Xbyak_aarch64::ptr(reg_tmp_adr));
-                        break;
-                    case data_type::u8:
-                        // vpmovusdb(output_ptr(i_load, i_ur), r_vmm);
-                        umin(r_vmm.s, 255);
-                        st1b(r_vmm.s, _mask, Xbyak_aarch64::ptr(reg_tmp_adr));
-                        break;
-                    default: assert(!"unknown dst_dt");
-                }
-#else
                 auto _mask = mask_flag ? ktail_mask : vmask;
                 switch (jcp.dst_dt) {
                     case data_type::f32:
@@ -789,12 +639,15 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
                         break;
                     default: assert(!"unknown dst_dt");
                 }
-#endif
             }
         }
-        ldr(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+        ldr(reg_bcast_data,
+                Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                        reg_tmp0_imm, reg_bcast_data_off)));
         if (p_sum_scale && *p_sum_scale != 1.f)
-            ldr(reg_load_data, SVE_compress_addr(reg_rsp, reg_load_data_off));
+            ldr(reg_load_data,
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_load_data_off)));
     };
 
     auto compute = [=](ZReg vreg_acc, ZReg vreg_wei, ZReg vreg_src) {
@@ -995,7 +848,9 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
 
     if (jcp.oc_without_padding != jcp.oc) {
         Label end_store, common_store;
-        str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
+        str(reg_bcast_data,
+                Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                        reg_tmp0_imm, reg_bcast_data_off)));
 
         /*Check if it is the last load_loop_blk*/
         subs(reg_load_loop_work, reg_load_loop_work,
@@ -1060,46 +915,38 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
         ldr(reg_bias_data,
                 Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(bias_data)));
     if (!jcp.signed_input) {
-#if 0 // Address calculation change_2
-        str(reg_bias_data, SVE_compress_addr(reg_rsp, reg_bias_data_off));
+        str_offt(reg_bias_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_bias_data_off);
         ldr(reg_comp_data,
                 Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(compensation)));
-        str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-#else
-        if ((reg_bias_data_off > -257) && (reg_bias_data_off < 256))
-            str(reg_bias_data, Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
-        else
-            str(reg_bias_data, SVE_compress_addr(reg_rsp, reg_bias_data_off));
-        ldr(reg_comp_data,
-                Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(compensation)));
-        if ((reg_comp_data_off > -257) && (reg_comp_data_off < 256))
-            str(reg_comp_data, Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
-        else
-            str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-#endif
+        str_offt(reg_comp_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_comp_data_off);
     }
-#if 0
+#if NOT_TESTED_ZERO_POINT
     if (jcp.src_zero_point) {
-        ldr(reg_zp_compensation, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(zp_compensation)));
-        str(reg_zp_compensation, SVE_compress_addr(reg_rsp, reg_zp_compensation_off));
-        ldr(reg_src_zero_point, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(src_zero_point)));
-        str(reg_src_zero_point, SVE_compress_addr(reg_rsp, reg_src_zero_point_off));
+        ldr(reg_zp_compensation,
+                Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(zp_compensation)));
+        str(reg_zp_compensation,
+                Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                        reg_tmp0_imm, reg_zp_compensation_off)));
+        ldr(reg_src_zero_point,
+                Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(src_zero_point)));
+        str(reg_src_zero_point,
+                Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                        reg_tmp0_imm, reg_src_zero_point_off)));
     }
     if (jcp.dst_zero_point) {
-        ldr(reg_dst_zero_point, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(dst_zero_point)));
-        str(reg_dst_zero_point, SVE_compress_addr(reg_rsp, reg_dst_zero_point_off));
+        ldr(reg_dst_zero_point,
+                Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(dst_zero_point)));
+        str(reg_dst_zero_point,
+                Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                        reg_tmp0_imm, reg_dst_zero_point_off)));
     }
 #endif
 
     ldr(reg_ptr_scales, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(scales)));
-#if 0 // Address calculation change_2
-    str(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-#else
-    if ((reg_ptr_sum_scale_off > -257) && (reg_ptr_sum_scale_off < 256))
-        str(reg_ptr_scales, Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
-    else
-        str(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-#endif
+    str_offt(reg_ptr_scales, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+            reg_ptr_sum_scale_off);
     ldr(reg_bcast_data,
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(bcast_data)));
     ldr(reg_load_data, Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(load_data)));
@@ -1110,16 +957,8 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(load_dim)));
     ldr(reg_bcast_loop_work,
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(bcast_dim)));
-#if 0 // Address calculation change_2
-    str(reg_bcast_loop_work, SVE_compress_addr(reg_rsp, bcast_loop_work_off));
-#else
-    if ((bcast_loop_work_off > -257) && (bcast_loop_work_off < 256))
-        str(reg_bcast_loop_work,
-                Xbyak_aarch64::ptr(reg_rsp, bcast_loop_work_off));
-    else
-        str(reg_bcast_loop_work,
-                SVE_compress_addr(reg_rsp, bcast_loop_work_off));
-#endif
+    str_offt(reg_bcast_loop_work, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+            bcast_loop_work_off);
     ldr(reg_reduce_loop_work,
             Xbyak_aarch64::ptr(reg_abi_param1, GET_OFF(reduce_dim)));
     ldr(reg_reduce_pos_flag,
@@ -1130,109 +969,53 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
         add_imm(reg_load_data, reg_load_data,
                 load_loop_blk * jcp.load_loop_load_step, reg_tmp0_imm);
         if (jcp.with_bias) {
-#if 0 // Address calculation change_2
-            if (!jcp.signed_input)
-                ldr(reg_bias_data,
-                        SVE_compress_addr(reg_rsp, reg_bias_data_off));
-#else
             if (!jcp.signed_input) {
-                if ((reg_bias_data_off > -257) && (reg_bias_data_off < 256))
-                    ldr(reg_bias_data,
-                            Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
-                else
-                    ldr(reg_bias_data,
-                            SVE_compress_addr(reg_rsp, reg_bias_data_off));
+                str_offt(reg_bias_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                        reg_bias_data_off);
             }
-#endif
             add_imm(reg_bias_data, reg_bias_data,
                     load_loop_blk * jcp.load_block * jcp.typesize_bia,
                     reg_tmp0_imm);
-#if 0 // Address calculation change_2
-            if (!jcp.signed_input)
-                str(reg_bias_data,
-                        SVE_compress_addr(reg_rsp, reg_bias_data_off));
-#else
             if (!jcp.signed_input) {
-                if ((reg_bias_data_off > -257) && (reg_bias_data_off < 256))
-                    str(reg_bias_data,
-                            Xbyak_aarch64::ptr(reg_rsp, reg_bias_data_off));
-                else
-                    str(reg_bias_data,
-                            SVE_compress_addr(reg_rsp, reg_bias_data_off));
+                str_offt(reg_bias_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                        reg_bias_data_off);
             }
-#endif
         }
         if (!jcp.signed_input) {
-#if 0 // Address calculation change_2
-            ldr(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-#else
-            if ((reg_comp_data_off > -257) && (reg_comp_data_off < 256))
-                ldr(reg_comp_data,
-                        Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
-            else
-                ldr(reg_comp_data,
-                        SVE_compress_addr(reg_rsp, reg_comp_data_off));
-#endif
+            ldr_offt(reg_comp_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                    reg_comp_data_off);
             add_imm(reg_comp_data, reg_comp_data,
                     load_loop_blk * jcp.load_block * sizeof(int32_t),
                     reg_tmp0_imm);
-#if 0 // Address calculation change_2
-            str(reg_comp_data, SVE_compress_addr(reg_rsp, reg_comp_data_off));
-#else
-            if ((reg_comp_data_off > -257) && (reg_comp_data_off < 256))
-                str(reg_comp_data,
-                        Xbyak_aarch64::ptr(reg_rsp, reg_comp_data_off));
-            else
-                str(reg_comp_data,
-                        SVE_compress_addr(reg_rsp, reg_comp_data_off));
-#endif
+            str_offt(reg_comp_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                    reg_comp_data_off);
         }
 
-#if 0
+#if NOT_TESTED_ZERO_POINT
         if (jcp.src_zero_point) {
             ldr(reg_zp_compensation,
-                    SVE_compress_addr(reg_rsp, reg_zp_compensation_off));
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_zp_compensation_off)));
             add_imm(reg_zp_compensation, reg_zp_compensation,
-                    load_loop_blk * jcp.load_block * sizeof(int32_t), reg_tmp0_imm);
-            str(reg_zp_compensation, SVE_compress_addr(reg_rsp, reg_zp_compensation_off));
+                    load_loop_blk * jcp.load_block * sizeof(int32_t),
+                    reg_tmp0_imm);
+            str(reg_zp_compensation,
+                    Xbyak_aarch64::ptr(get_comp_addr_reg(reg_rsp, reg_tmp0_adr,
+                            reg_tmp0_imm, reg_zp_compensation_off)));
         }
 #endif
-#if 0 // Address calculation change_2
-        str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
-        ldr(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-#else
-        if ((reg_bcast_data_off > -257) && (reg_bcast_data_off < 256))
-            str(reg_bcast_data,
-                    Xbyak_aarch64::ptr(reg_rsp, reg_bcast_data_off));
-        else
-            str(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
-        if ((reg_ptr_sum_scale_off > -257) && (reg_ptr_sum_scale_off < 256))
-            ldr(reg_ptr_scales,
-                    Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
-        else
-            ldr(reg_ptr_scales,
-                    SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-#endif
+        str_offt(reg_bcast_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_bcast_data_off);
+        ldr_offt(reg_ptr_scales, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_ptr_sum_scale_off);
         add_imm(reg_ptr_scales, reg_ptr_scales,
                 jcp.is_oc_scale * load_loop_blk * jcp.load_block
                         * sizeof(float),
                 reg_tmp0_imm);
-#if 0 // Address calculation change_2
-        str(reg_ptr_scales, SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-        ldr(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
-#else
-        if ((reg_ptr_sum_scale_off > -257) && (reg_ptr_sum_scale_off < 256))
-            str(reg_ptr_scales,
-                    Xbyak_aarch64::ptr(reg_rsp, reg_ptr_sum_scale_off));
-        else
-            str(reg_ptr_scales,
-                    SVE_compress_addr(reg_rsp, reg_ptr_sum_scale_off));
-        if ((reg_bcast_data_off > -257) && (reg_bcast_data_off < 256))
-            ldr(reg_bcast_data,
-                    Xbyak_aarch64::ptr(reg_rsp, reg_bcast_data_off));
-        else
-            ldr(reg_bcast_data, SVE_compress_addr(reg_rsp, reg_bcast_data_off));
-#endif
+        str_offt(reg_ptr_scales, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_ptr_sum_scale_off);
+        ldr_offt(reg_bcast_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                reg_bcast_data_off);
         adds(reg_output_data, reg_output_data,
                 load_loop_blk * jcp.load_block * jcp.typesize_out);
         subs(reg_load_loop_work, reg_load_loop_work,
@@ -1269,14 +1052,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
                 for (int _i = 1; _i <= label_idx + 1; _i++) {
                     // prefetcht0(ptr[reg_load_data + _i * jcp.ic * jcp.oc_block]);
                     // prefetcht1(ptr[reg_output_data + _i * jcp.oc_block]);
-#if 0 // Address calculation change_4
-                    add_imm(reg_tmp0_adr, reg_load_data,
-                            (_i * jcp.ic * jcp.oc_block), reg_tmp0_imm);
-                    add_imm(reg_tmp1_adr, reg_output_data, (_i * jcp.oc_block),
-                            reg_tmp1_imm);
-                    prfm(PLDL1KEEP, Xbyak_aarch64::ptr(reg_tmp0_adr));
-                    prfm(PLDL2KEEP, Xbyak_aarch64::ptr(reg_tmp1_adr));
-#else
                     auto pf_ofs_1 = _i * jcp.ic * jcp.oc_block;
                     auto pf_ofs_2 = _i * jcp.oc_block;
                     if ((pf_ofs_1 < 32761) && ((pf_ofs_1 % 8) == 0)) {
@@ -1295,7 +1070,6 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
                                 reg_tmp1_imm);
                         prfm(PLDL2KEEP, Xbyak_aarch64::ptr(reg_tmp1_adr));
                     }
-#endif
                 }
 
                 load_loop_body(label_idx + 1);
@@ -1434,7 +1208,7 @@ status_t jit_sve_512_x8s8s32x_1x1_conv_kernel::init_conf(
             return status::unimplemented;
     }
 
-#if 0
+#if NOT_TESTED_ZERO_POINT
     const auto zp = attr.zero_points_;
     jcp.dst_zero_point = !zp.has_default_values(DNNL_ARG_DST);
     jcp.src_zero_point = !zp.has_default_values(DNNL_ARG_SRC);
@@ -1486,7 +1260,7 @@ status_t jit_sve_512_x8s8s32x_1x1_conv_kernel::init_conf(
                     // = mayiuse(avx512_core_vnni) ? 1.f : 0.5f;
                     = 1.f;
         }
-#if 0
+#if NOT_TESTED_ZERO_POINT
         if (jcp.src_zero_point) {
             want_wei_md.extra.flags |= compensation_conv_asymmetric_src;
             want_wei_md.extra.asymm_compensation_mask

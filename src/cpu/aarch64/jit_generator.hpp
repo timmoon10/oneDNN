@@ -26,6 +26,7 @@
 
 #include "cpu/aarch64/cpu_isa_traits.hpp"
 
+#include "cpu/aarch64/jit_op_imm_check.hpp"
 #include "cpu/aarch64/jit_utils/jit_utils.hpp"
 
 #define STRUCT_ALIGN(al, ...) __VA_ARGS__ __attribute__((__aligned__(al)))
@@ -224,6 +225,62 @@ public:
                 static_cast<int64_t>(preserved_stack_size) - 16);
         xa_->ldp(x29, x30, Xbyak_aarch64::post_ptr(xa_->sp, 16));
         xa_->ret();
+    }
+
+    int get_offset(int raw_offt) {
+
+        assert(raw_offt <= INT_MAX);
+        auto offt = static_cast<int>(raw_offt);
+
+        int scale = 0;
+        const int EVEX_max_8b_offt = 0x200;
+
+        if (EVEX_max_8b_offt <= offt && offt < 3 * EVEX_max_8b_offt) {
+            offt = offt - 2 * EVEX_max_8b_offt;
+            scale = 1;
+        } else if (3 * EVEX_max_8b_offt <= offt
+                && offt < 5 * EVEX_max_8b_offt) {
+            offt = offt - 4 * EVEX_max_8b_offt;
+            scale = 2;
+        }
+
+        auto re = offt;
+        if (scale) re = re + (2 * EVEX_max_8b_offt) * scale;
+
+        return re;
+    }
+
+    Xbyak_aarch64::XReg get_comp_addr_reg(const Xbyak_aarch64::XReg &base,
+            const Xbyak_aarch64::XReg &tmp0, const Xbyak_aarch64::XReg &tmp1,
+            const int offset) {
+        auto offt = get_offset(offset);
+
+        if (offt == 0) return base;
+        add_imm(tmp0, base, offt, tmp1);
+
+        return tmp0;
+    }
+
+    void ldr_offt(const Xbyak_aarch64::XReg &src,
+            const Xbyak_aarch64::XReg &addr, const Xbyak_aarch64::XReg &tmp0,
+            const Xbyak_aarch64::XReg &tmp1, const int offt = 0) {
+        if (ldr_imm_check(offt))
+            ldr(src, Xbyak_aarch64::ptr(addr, offt));
+        else
+            ldr(src,
+                    Xbyak_aarch64::ptr(
+                            get_comp_addr_reg(addr, tmp0, tmp1, offt)));
+    }
+
+    void str_offt(const Xbyak_aarch64::XReg &src,
+            const Xbyak_aarch64::XReg &addr, const Xbyak_aarch64::XReg &tmp0,
+            const Xbyak_aarch64::XReg &tmp1, const int offt = 0) {
+        if (str_imm_check(offt))
+            str(src, Xbyak_aarch64::ptr(addr, offt));
+        else
+            str(src,
+                    Xbyak_aarch64::ptr(
+                            get_comp_addr_reg(addr, tmp0, tmp1, offt)));
     }
 
     // Disallow char-based labels completely

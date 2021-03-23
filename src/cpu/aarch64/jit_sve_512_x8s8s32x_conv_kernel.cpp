@@ -85,7 +85,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::cvt2ps(data_type_t type_in,
         bool mask_flag) {
 
     auto vmm = vmm_in;
-    auto reg_addr = get_comp_addr_reg(reg_base, offset);
+    auto reg_addr
+            = get_comp_addr_reg(reg_base, reg_tmp0_adr, reg_tmp0_imm, offset);
     switch (type_in) {
         case data_type::f32:
         case data_type::s32:
@@ -164,7 +165,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::store_output(
         if (!jcp.signed_input) {
             int comp_offset = sizeof(int32_t) * k * oc_block;
 
-            auto reg_addr = get_comp_addr_reg(reg_compensation, comp_offset);
+            auto reg_addr = get_comp_addr_reg(
+                    reg_compensation, reg_tmp0_adr, reg_tmp0_imm, comp_offset);
             if (mask_flag)
                 ld1w(vmm_comp.s, ktail_mask / Xbyak_aarch64::T_z,
                         Xbyak_aarch64::ptr(reg_addr));
@@ -212,7 +214,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::store_output(
                 scvtf(vmm.s, mask_all_one, vmm.s);
                 if (add_flag) xa_->fadd(vmm.s, vmm.s, zmm_add_data.s);
 
-                auto reg_addr = get_comp_addr_reg(reg_ptr_scales, scale_offset);
+                auto reg_addr = get_comp_addr_reg(reg_ptr_scales, reg_tmp0_adr,
+                        reg_tmp0_imm, scale_offset);
                 xa_->sub(reg_stack, reg_stack, 64);
                 str(vmm_tmp, Xbyak_aarch64::ptr(reg_stack));
                 ld1w(vmm_tmp.s, mask_all_one, Xbyak_aarch64::ptr(reg_addr));
@@ -238,7 +241,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::store_output(
             }
 
             /* optimization under specific conditions: preload scale_offset data */
-            auto reg_addr = get_comp_addr_reg(reg_ptr_scales, scale_offset);
+            auto reg_addr = get_comp_addr_reg(
+                    reg_ptr_scales, reg_tmp0_adr, reg_tmp0_imm, scale_offset);
             ld1w(vmm_pre_load.s, mask_all_one, Xbyak_aarch64::ptr(reg_addr));
             if (add_flag) {
                 for (int j = 0; j < ur_w; j++)
@@ -345,29 +349,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::store_output(
                                               : ((j % 4) == 1)
                             ? reg_tmp1_imm
                             : ((j % 4) == 2) ? reg_tmp2_imm : reg_tmp3_imm;
-#if 0
-	    add_imm(reg_tmp_adr, base, re, reg_tmp_imm);
-
-            auto vmm = vmm_out(j, k);
-
-            auto _mask = mask_flag ? ktail_mask : mask_all_one;
-            switch (jcp.dst_dt) {
-                case data_type::f32:
-                case data_type::s32:
-                    st1w(vmm.s, _mask, Xbyak_aarch64::ptr(reg_tmp_adr));
-                    break;
-                case data_type::s8:
-                    smin(vmm.s, 127);
-                    smax(vmm.s, -128);
-                    st1b(vmm.s, _mask, Xbyak_aarch64::ptr(reg_tmp_adr));
-                    break;
-                case data_type::u8:
-                    umin(vmm.s, 255);
-                    st1b(vmm.s, _mask, Xbyak_aarch64::ptr(reg_tmp_adr));
-                    break;
-                default: assert(!"unknown dst_dt");
-            }
-#else
             auto vmm = vmm_out(j, k);
 
             auto _mask = mask_flag ? ktail_mask : mask_all_one;
@@ -399,7 +380,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::store_output(
                     break;
                 default: assert(!"unknown dst_dt");
             }
-#endif
         }
     }
 }
@@ -464,8 +444,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker_dw(int ur_w, int pad_l,
                 auto zmm_inp_msk = zmm_inp_tmp;
                 if (jcp.is_fast_depthwise) {
                     assert(!mask_flag);
-                    auto reg_addr
-                            = get_comp_addr_reg(aux_reg_inp, aux_input_offset);
+                    auto reg_addr = get_comp_addr_reg(aux_reg_inp, reg_tmp0_adr,
+                            reg_tmp0_imm, aux_input_offset);
                     ldr(QReg(zmm_inp_msk.getIdx()),
                             Xbyak_aarch64::ptr(reg_addr));
                     ptrue(mask_tmp.d, VL2);
@@ -473,8 +453,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker_dw(int ur_w, int pad_l,
                     ptrue(mask_tmp.d, VL4);
                     splice(zmm_inp_msk.d, mask_tmp.d, zmm_inp_msk.d);
                 } else {
-                    auto reg_addr
-                            = get_comp_addr_reg(aux_reg_inp, aux_input_offset);
+                    auto reg_addr = get_comp_addr_reg(aux_reg_inp, reg_tmp0_adr,
+                            reg_tmp0_imm, aux_input_offset);
                     auto zmm_tmp = ZReg(31);
                     xa_->sub(reg_stack, reg_stack, 64);
                     str(zmm_tmp, Xbyak_aarch64::ptr(reg_stack));
@@ -507,8 +487,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker_dw(int ur_w, int pad_l,
         for (int ki = 0; ki < jcp.kw; ki++) {
             int aux_kernel_offset = kernel_offset(ci, ki);
             if (jcp.is_fast_depthwise) {
-                auto reg_addr
-                        = get_comp_addr_reg(aux_reg_ker, aux_kernel_offset);
+                auto reg_addr = get_comp_addr_reg(aux_reg_ker, reg_tmp0_adr,
+                        reg_tmp0_imm, aux_kernel_offset);
                 ldr(QReg(zmm_wei.getIdx()), Xbyak_aarch64::ptr(reg_addr));
                 ptrue(mask_tmp.d, VL2);
                 splice(zmm_wei.d, mask_tmp.d, zmm_wei.d);
@@ -519,8 +499,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker_dw(int ur_w, int pad_l,
                         zmm_wei.b, kblend_mask / Xbyak_aarch64::T_m, zmm_wei.b);
                 xa_->mov(zmm_wei.b, mask_tmp / Xbyak_aarch64::T_m, 0);
             } else {
-                auto reg_addr
-                        = get_comp_addr_reg(aux_reg_ker, aux_kernel_offset);
+                auto reg_addr = get_comp_addr_reg(aux_reg_ker, reg_tmp0_adr,
+                        reg_tmp0_imm, aux_kernel_offset);
                 auto zmm_tmp = ZReg(30);
                 xa_->sub(reg_stack, reg_stack, 64);
                 str(zmm_tmp, Xbyak_aarch64::ptr(reg_stack));
@@ -550,8 +530,9 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker_dw(int ur_w, int pad_l,
                             int aux_input_offset = input_offset3(oi, ci, ki);
                             if (jcp.is_fast_depthwise) {
                                 assert(!mask_flag);
-                                auto reg_addr = get_comp_addr_reg(
-                                        aux_reg_inp, aux_input_offset);
+                                auto reg_addr = get_comp_addr_reg(aux_reg_inp,
+                                        reg_tmp0_adr, reg_tmp0_imm,
+                                        aux_input_offset);
                                 ldr(QReg(r_zmm_src.getIdx()),
                                         Xbyak_aarch64::ptr(reg_addr));
                                 ptrue(mask_tmp.d, VL2);
@@ -559,8 +540,9 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker_dw(int ur_w, int pad_l,
                                 ptrue(mask_tmp.d, VL4);
                                 splice(r_zmm_src.d, mask_tmp.d, r_zmm_src.d);
                             } else {
-                                auto reg_addr = get_comp_addr_reg(
-                                        aux_reg_inp, aux_input_offset);
+                                auto reg_addr = get_comp_addr_reg(aux_reg_inp,
+                                        reg_tmp0_adr, reg_tmp0_imm,
+                                        aux_input_offset);
                                 auto zmm_tmp = ZReg(31);
                                 xa_->sub(reg_stack, reg_stack, 64);
                                 str(zmm_tmp, Xbyak_aarch64::ptr(reg_stack));
@@ -690,8 +672,9 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                     for (int ii = 0; ii < nb_oc_block; ii++) {
                         if (!jcp.signed_input) {
                             int aux_kernel_offset = kernel_offset(ii, ic, ki);
-                            auto reg_addr = get_comp_addr_reg(
-                                    aux_reg_ker, aux_kernel_offset);
+                            auto reg_addr = get_comp_addr_reg(aux_reg_ker,
+                                    reg_tmp0_adr, reg_tmp0_imm,
+                                    aux_kernel_offset);
                             ld1w(vmm_wei.s, mask_all_one,
                                     Xbyak_aarch64::ptr(reg_addr));
                             for (int jj = _start; jj < _end; jj++) {
@@ -702,8 +685,9 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                             if (ii == 0) {
                                 int aux_kernel_offset
                                         = kernel_offset(ii, ic, ki);
-                                auto reg_addr = get_comp_addr_reg(
-                                        aux_reg_ker, aux_kernel_offset);
+                                auto reg_addr = get_comp_addr_reg(aux_reg_ker,
+                                        reg_tmp0_adr, reg_tmp0_imm,
+                                        aux_kernel_offset);
                                 ld1w(vmm_wei.s, mask_all_one,
                                         Xbyak_aarch64::ptr(reg_addr));
                             }
@@ -712,8 +696,9 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                         = kernel_offset((ii + 1), ic, ki);
                                 auto _vmm_wei
                                         = ((ii % 2) == 0) ? vmm_comp : vmm_wei;
-                                auto reg_addr = get_comp_addr_reg(
-                                        aux_reg_ker, aux_kernel_offset);
+                                auto reg_addr = get_comp_addr_reg(aux_reg_ker,
+                                        reg_tmp0_adr, reg_tmp0_imm,
+                                        aux_kernel_offset);
                                 ld1w(_vmm_wei.s, mask_all_one,
                                         Xbyak_aarch64::ptr(reg_addr));
                             }
@@ -776,14 +761,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                             vmm_inp(jj, nb_oc_block + a)
                                                     .getIdx());
                                     for (int r = 0; r < ic_tail_size; ++r) {
-#if 0 // Address calculation change_3
-                                        add_imm(reg_tmp0_adr, aux_reg_inp,
-                                                (aux_input_offset + r),
-                                                reg_tmp0_imm);
-                                        ldrb(WReg(reg_tmp1_imm.getIdx()),
-                                                Xbyak_aarch64::ptr(
-                                                        reg_tmp0_adr));
-#else
                                         if ((aux_input_offset + r) < 4096) {
                                             ldrb(WReg(reg_tmp1_imm.getIdx()),
                                                     Xbyak_aarch64::ptr(
@@ -798,7 +775,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                                     Xbyak_aarch64::ptr(
                                                             reg_tmp0_adr));
                                         }
-#endif
                                         ins(VReg16B(xmm_tmp.getIdx())[r],
                                                 WReg(reg_tmp1_imm.getIdx()));
                                     }
@@ -917,13 +893,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                 auto xmm_tmp = VReg16B(
                                         vmm_inp(jj, nb_oc_block).getIdx());
                                 for (int r = 0; r < ic_tail_size; ++r) {
-#if 0 // Address calculation change_3
-                                    add_imm(reg_tmp0_adr, aux_reg_inp,
-                                            (aux_input_offset + r),
-                                            reg_tmp0_imm);
-                                    ldrb(WReg(reg_tmp1_imm.getIdx()),
-                                            Xbyak_aarch64::ptr(reg_tmp0_adr));
-#else
                                     if ((aux_input_offset + r) < 4096) {
                                         ldrb(WReg(reg_tmp1_imm.getIdx()),
                                                 Xbyak_aarch64::ptr(aux_reg_inp,
@@ -937,7 +906,6 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                                 Xbyak_aarch64::ptr(
                                                         reg_tmp0_adr));
                                     }
-#endif
                                     ins(VReg16B(xmm_tmp.getIdx())[r],
                                             WReg(reg_tmp1_imm.getIdx()));
                                 }
@@ -1041,8 +1009,9 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                             if (!jcp.signed_input) {
                                 int aux_kernel_offset
                                         = kernel_offset(ii, ic, ki);
-                                auto reg_addr = get_comp_addr_reg(
-                                        aux_reg_ker, aux_kernel_offset);
+                                auto reg_addr = get_comp_addr_reg(aux_reg_ker,
+                                        reg_tmp0_adr, reg_tmp0_imm,
+                                        aux_kernel_offset);
                                 ld1w(vmm_wei.s, mask_all_one,
                                         Xbyak_aarch64::ptr(reg_addr));
                                 for (int jj = _start; jj < _end; jj++) {
@@ -1054,7 +1023,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                     int aux_kernel_offset
                                             = kernel_offset(ii, ic, ki);
                                     auto reg_addr = get_comp_addr_reg(
-                                            aux_reg_ker, aux_kernel_offset);
+                                            aux_reg_ker, reg_tmp0_adr,
+                                            reg_tmp0_imm, aux_kernel_offset);
                                     ld1w(vmm_wei.s, mask_all_one,
                                             Xbyak_aarch64::ptr(reg_addr));
                                 }
@@ -1064,7 +1034,8 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
                                     auto _vmm_wei = ((ii % 2) == 0) ? vmm_comp
                                                                     : vmm_wei;
                                     auto reg_addr = get_comp_addr_reg(
-                                            aux_reg_ker, aux_kernel_offset);
+                                            aux_reg_ker, reg_tmp0_adr,
+                                            reg_tmp0_imm, aux_kernel_offset);
                                     ld1w(_vmm_wei.s, mask_all_one,
                                             Xbyak_aarch64::ptr(reg_addr));
                                 }
