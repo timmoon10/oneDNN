@@ -1897,6 +1897,12 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
             {exp_pol, {0x3d2b9d0d, true}}, // p4 = 0.0418978221f
             {exp_pol, {0x3c07cfce, true}} // p5 = 0.00828929059f
     };
+#if 1
+    // exp(x) constants2
+    static const table_t exp_consts2 {{exp_coeff1, {0x3f31721, true}},
+            {exp_coeff2, {0x42b17218, true}},
+            {exp_ln_flt_min_f, {0x3e772df2, true}}};
+#endif
 
     // tanh(x) constants for four interval approximation
     static const table_t tanh_consts {{tanh_idx_bias, {0x39800000, true}},
@@ -2358,6 +2364,9 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     push_entries_of(common_values);
     if (need.exp()) push_entries_of(exp_consts);
     if (need.exp()) push_entries_of(exp_polynomial);
+#if 1
+    if (need.exp()) push_entries_of(exp_consts2);
+#endif
     if (need.tanh()) push_entries_of(tanh_consts);
     if (need.tanh()) push_entries_of(tanh_polynomial_table);
     if (need.soft_relu()) push_entries_of(soft_relu_consts);
