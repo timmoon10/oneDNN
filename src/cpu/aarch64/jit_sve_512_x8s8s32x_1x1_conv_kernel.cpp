@@ -970,7 +970,7 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
                 load_loop_blk * jcp.load_loop_load_step, reg_tmp0_imm);
         if (jcp.with_bias) {
             if (!jcp.signed_input) {
-                str_offt(reg_bias_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
+                ldr_offt(reg_bias_data, reg_rsp, reg_tmp0_adr, reg_tmp0_imm,
                         reg_bias_data_off);
             }
             add_imm(reg_bias_data, reg_bias_data,
