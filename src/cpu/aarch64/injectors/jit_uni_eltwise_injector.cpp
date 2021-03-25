@@ -1901,6 +1901,7 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     // exp(x) constants2
     static const table_t exp_consts2 {{exp_coeff1, {0x3f31721, true}},
             {exp_coeff2, {0x42b17218, true}},
+            {exp_not_mask17, {~((1u << 17) - 1), true}},
             {exp_ln_flt_min_f, {0x3e772df2, true}}};
 #endif
 

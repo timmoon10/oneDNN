@@ -258,6 +258,7 @@ private:
 #if 1
         exp_coeff1, // 0.6931473921 (0x3f31721c)
         exp_coeff2, // 0.2413862043 (0x3e772df2)
+        exp_not_mask17, // ~((1u << 17) - 1)
 #endif
         tanh_idx_bias, // bias applied during index computation
         tanh_idx_mask, // mask applied to extract index
