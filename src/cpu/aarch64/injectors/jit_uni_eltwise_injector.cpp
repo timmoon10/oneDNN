@@ -1639,7 +1639,8 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
     if (is_fwd_) {
         switch (alg_) {
             case eltwise_relu_use_dst_for_bwd:
-            case eltwise_relu: return (alpha_ == 0.f) ? 0 : 2;
+            case eltwise_relu: return (alpha_ == 0.f) ? 1 : 3;
+            //case eltwise_relu: return (alpha_ == 0.f) ? 0 : 2;
             case eltwise_elu_use_dst_for_bwd:
             case eltwise_elu: return 6; /* = exp + 2 */
             case eltwise_tanh_use_dst_for_bwd:
