@@ -25,6 +25,8 @@
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
+#define HW_PREFETCH_ENABLE_1x1 1
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -128,6 +130,10 @@ private:
     int reg_src_zero_point_off = 56;
     int reg_dst_zero_point_off = 64;
     int stack_space_needed = 72;
+
+#if HW_PREFETCH_ENABLE_1x1
+    bool hw_prf_flag;
+#endif
 
     void bcast_loop(int load_loop_blk);
     void reduce_loop(int load_loop_blk, int ur, int substep, bool wraparound);

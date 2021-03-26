@@ -25,6 +25,8 @@
 #include "cpu/aarch64/jit_generator.hpp"
 #include "cpu/aarch64/jit_primitive_conf.hpp"
 
+#define HW_PREFETCH_ENABLE 1
+
 namespace dnnl {
 namespace impl {
 namespace cpu {
@@ -168,6 +170,10 @@ private:
     ZReg zmm_permute = ZReg(0);
 
     bool mask_gflag;
+
+#if HW_PREFETCH_ENABLE
+    bool hw_prf_flag;
+#endif
 
     bool prepare_zregs_aux(std::vector<Xbyak_aarch64::ZReg> &zregs_aux,
             const std::vector<Xbyak_aarch64::ZReg> &zregs_to_avoid, int num) {

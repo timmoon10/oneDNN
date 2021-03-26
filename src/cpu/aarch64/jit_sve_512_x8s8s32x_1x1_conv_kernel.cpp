@@ -657,6 +657,11 @@ void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::reduce_loop(
     };
 
     auto fma_block = [=](bool last_block) {
+#if HW_PREFETCH_ENABLE_1x1
+        if (hw_prf_flag)
+            xa_->orr(aux_reg_bcast_data, aux_reg_bcast_data,
+                    (uint64_t(8) << 60));
+#endif
         int reduce_step = 4;
         int ic_tail_size = jcp.ic_without_padding % reduce_step;
         int loop_unroll = last_block && jcp.ic != jcp.ic_without_padding
@@ -881,6 +886,27 @@ template <typename Vmm>
 void _jit_sve_512_x8s8s32x_1x1_conv_kernel<Vmm>::generate() {
 
     preamble(true);
+
+#if HW_PREFETCH_ENABLE_1x1
+    hw_prf_flag = false;
+    uint64_t offset1 = get_offset(
+            jcp.typesize_in * (jcp.ic_without_padding * 0 * jcp.ngroups));
+    uint64_t offset2 = get_offset(
+            jcp.typesize_in * (jcp.ic_without_padding * 1 * jcp.ngroups));
+    if ((offset2 - offset1) == 0x200) {
+        uint64_t ctrl_val = (uint64_t(1) << 63) | (uint64_t(1) << 62)
+                | (uint64_t(1) << 61) | (uint64_t(1) << 58)
+                | ((offset2 - offset1) << 2);
+        xa_->mov_imm(reg_tmp0_imm, ctrl_val);
+        xa_->msr(0x3, 0x3, 0xb, 0x6, 0x0, reg_tmp0_imm);
+
+        uint64_t distance_val = (uint64_t(2048) << 34) | (uint64_t(20480) << 2);
+        xa_->mov_imm(reg_tmp0_imm, distance_val);
+        xa_->msr(0x3, 0x3, 0xb, 0x7, 0x0, reg_tmp0_imm);
+        hw_prf_flag = true;
+    }
+#endif
+
     const int simd_w = jcp.ic_block;
 
     ptrue(PRegB(vmask.getIdx()));

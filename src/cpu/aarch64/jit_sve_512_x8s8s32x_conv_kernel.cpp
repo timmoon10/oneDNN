@@ -728,6 +728,10 @@ void jit_sve_512_x8s8s32x_fwd_kernel::compute_ker(int ur_w, int pad_l,
         int a_offset = kernel_offset(0, 1, 0) - kernel_offset(0, 0, 0);
         int ii_offset = kernel_offset(1, 0, 0) - kernel_offset(0, 0, 0);
         int offset = 0;
+#if HW_PREFETCH_ENABLE
+        if (hw_prf_flag)
+            xa_->orr(aux_reg_inp, aux_reg_inp, (uint64_t(8) << 60));
+#endif
         for (int ki = 0; ki < kw; ki++) {
             int jj_start = get_ow_start(ki, pad_l);
             int jj_end = get_ow_end(ur_w, ki, pad_r);
@@ -1326,6 +1330,28 @@ void jit_sve_512_x8s8s32x_fwd_kernel::generate() {
     int out_shift = jcp.typesize_out
             * (jcp.ur_w * jcp.oc_without_padding * jcp.ngroups);
     preamble(true);
+
+#if HW_PREFETCH_ENABLE
+    hw_prf_flag = false;
+    uint64_t offset1
+            = get_offset(jcp.typesize_in * (0 * jcp.stride_w - jcp.l_pad)
+                    * jcp.ic_without_padding * jcp.ngroups);
+    uint64_t offset2
+            = get_offset(jcp.typesize_in * (1 * jcp.stride_w - jcp.l_pad)
+                    * jcp.ic_without_padding * jcp.ngroups);
+
+    if ((offset2 - offset1) >= 0x100) {
+        uint64_t ctrl_val = (uint64_t(7) << 61) | (uint64_t(1) << 58)
+                | ((offset2 - offset1) << 2);
+        xa_->mov_imm(reg_tmp0_imm, ctrl_val);
+        xa_->msr(0x3, 0x3, 0xb, 0x6, 0x0, reg_tmp0_imm);
+
+        uint64_t distance_val = (uint64_t(2048) << 34) | (uint64_t(20480) << 2);
+        xa_->mov_imm(reg_tmp0_imm, distance_val);
+        xa_->msr(0x3, 0x3, 0xb, 0x7, 0x0, reg_tmp0_imm);
+        hw_prf_flag = true;
+    }
+#endif
 
     vmm_mask_all_one();
     xa_->mov(reg_param1, abi_param1);
