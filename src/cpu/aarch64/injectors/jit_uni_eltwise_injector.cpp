@@ -454,6 +454,8 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     const auto& t0 = ZRegS(IDX(vmm_src));
     const auto& t1 = ZRegS(IDX(vmm_aux1));
     const auto& t2 = ZRegS(IDX(vmm_aux2));
+    code.fmin(t0, p_512, ZRegS(IDX(table_val(exp_ln_flt_max_f, z_tmp))));
+    code.fmax(t0, p_512, ZRegS(IDX(table_val(exp_ln_flt_min_f, z_tmp))));
     code.fmul(t0, t0, ZRegS(IDX(table_val(exp_log2ef, z_tmp))));
     code.movprfx(t1, p_512, t0);
     code.frintm(t1, p_512, t0);
