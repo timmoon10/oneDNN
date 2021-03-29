@@ -794,8 +794,8 @@ void jit_uni_eltwise_injector_f32<isa>::soft_relu_compute_vector_fwd(
     h->xa_->fmul(vmm_aux3, p_512 / T_m, 2.f); // 2*exp(r)
     h->xa_->fadd(vmm_aux3, vmm_aux3,
             vmm_aux1); // 2^-(n-1) + 2*exp(r)
-    h->xa_->fdiv(vmm_aux3, p_512 / T_m,
-            ZRegS(IDX(table_val(two, z_tmp)))); // (2^-(n-1) + 2*exp(r))/2
+    h->xa_->fmul(vmm_aux3, p_512 / T_m,
+            ZRegS(IDX(table_val(half, z_tmp)))); // (2^-(n-1) + 2*exp(r))/2
 
     // frexp()
     h->lsr(vmm_src, vmm_aux3, n_mantissa_bits);
