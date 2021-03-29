@@ -513,6 +513,34 @@ void jit_uni_eltwise_injector_f32<isa>::elu_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
         const TRegS &vmm_src) {
+#if 1
+    // tanh(x) = 1 - 2/(1 + exp(2 x))
+    auto& code = *(h->xa_);
+    const auto& t0 = ZRegS(IDX(vmm_src));
+    const auto& t1 = ZRegS(IDX(vmm_aux1));
+    const auto& t2 = ZRegS(IDX(vmm_aux2));
+    const auto& one = ZRegS(IDX(table_val(one, z_tmp)));
+    // 2x
+    code.fadd(t0, t0, t0);
+    // exp(2x)
+    exp_compute_vector_fwd(t0);
+    // 1+exp(2x)
+    code.fadd(t0, t0, one);
+    // 1/(1+exp(2x))
+    // 1st aprox ; a = 1/x + e
+    code.frecpe(t1, t0);
+    // 2nd aprox ; a' = (2 - ax)a = 1/x - e^2 x
+    code.frecps(t2, t0, t1);
+    code.fmul(t2, t2, t1);
+    // 3rd aprox ; a'' = (2 - a'x)a'
+    code.frecps(t0, t0, t2);
+    code.fmul(t0, t0, t2);
+
+    // 2/(1+exp(2x))
+    code.fadd(t0, t0, t0);
+    // 1-2/(1+exp(2x))
+    code.fsub(t0, one, t0);
+#else
     // we add a check as the avx2 code cannot be used for avx
     using namespace Xbyak_aarch64::util;
     const int tanh_n_polynomials = 32;
@@ -653,6 +681,7 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
 
     // We reapply the sign and return
     h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
+#endif
 }
 
 template <cpu_isa_t isa>
