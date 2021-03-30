@@ -519,13 +519,12 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     const auto& t0 = ZRegS(IDX(vmm_src));
     const auto& t1 = ZRegS(IDX(vmm_aux1));
     const auto& t2 = ZRegS(IDX(vmm_aux2));
-    const auto& one = ZRegS(IDX(table_val(one, z_tmp)));
     // 2x
     code.fadd(t0, t0, t0);
     // exp(2x)
     exp_compute_vector_fwd(t0);
     // 1+exp(2x)
-    code.fadd(t0, t0, one);
+    code.fadd(t0, t0, ZRegS(IDX(table_val(one, z_tmp))));
     // 1/(1+exp(2x))
     // 1st aprox ; a = 1/x + e
     code.frecpe(t1, t0);
@@ -539,7 +538,7 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     // 2/(1+exp(2x))
     code.fadd(t0, t0, t0);
     // 1-2/(1+exp(2x))
-    code.fsub(t0, one, t0);
+    code.fsub(t0, ZRegS(IDX(table_val(one, z_tmp))), t0);
 #else
     // we add a check as the avx2 code cannot be used for avx
     using namespace Xbyak_aarch64::util;
@@ -2301,11 +2300,11 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
                 case eltwise_logistic:
                 case eltwise_swish: exp_ = true; break;
                 case eltwise_gelu_erf: gelu_erf_ = true; break;
-                case eltwise_gelu_tanh: gelu_tanh_ = true; break;
+                case eltwise_gelu_tanh: exp_ = true; gelu_tanh_ = true; break;
                 case eltwise_log: log_ = true; break;
                 case eltwise_soft_relu: soft_relu_ = true; break;
                 case eltwise_tanh_use_dst_for_bwd:
-                case eltwise_tanh: tanh_ = true; break;
+                case eltwise_tanh: exp_ = true; tanh_ = true; break;
                 default: break;
             }
         }
