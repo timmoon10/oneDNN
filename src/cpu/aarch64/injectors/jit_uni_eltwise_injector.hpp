@@ -262,6 +262,8 @@ private:
         tanh_idx_mask, // mask applied to extract index
         tanh_linear_ubound, // arg below which tanh(x) = x
         tanh_saturation_lbound, // arg after which tanh(x) = 1.f
+        tanh_range, // tanh(x) = x - x^3/3 for |x| < tanh_range
+        tanh_m1d3, // -1/3
         tanh_pol_table, // table of polynomial coefficients
         soft_relu_one_twenty_six, // 126.f
         soft_relu_mantissa_sign_mask, // mask for mantissa bits and sign

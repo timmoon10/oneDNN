@@ -519,12 +519,22 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     const auto& t0 = ZRegS(IDX(vmm_src));
     const auto& t1 = ZRegS(IDX(vmm_aux1));
     const auto& t2 = ZRegS(IDX(vmm_aux2));
+    const auto& t3 = ZRegS(IDX(vmm_aux3));
+    const auto& oneS = ZRegS(IDX(vmm_aux4));
+    const auto& mask = PReg(3);
+
+    table_val(one, oneS);
+    // make mask
+    code.mov(t3, p_512, t0);
+    code.fabs(t1, p_512, t0);
+    code.cmplt(mask.s, p_512, t1, ZRegS(IDX(table_val(tanh_range, z_tmp))));
+
     // 2x
     code.fadd(t0, t0, t0);
     // exp(2x)
     exp_compute_vector_fwd(t0);
     // 1+exp(2x)
-    code.fadd(t0, t0, ZRegS(IDX(table_val(one, z_tmp))));
+    code.fadd(t0, t0, oneS);
     // 1/(1+exp(2x))
     // 1st aprox ; a = 1/x + e
     code.frecpe(t1, t0);
@@ -538,7 +548,14 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     // 2/(1+exp(2x))
     code.fadd(t0, t0, t0);
     // 1-2/(1+exp(2x))
-    code.fsub(t0, ZRegS(IDX(table_val(one, z_tmp))), t0);
+    code.fsub(t0, oneS, t0);
+
+    // tanh(x) = x(1 - x^2/3) for |x| < tanh_range
+    code.fmul(t1, t3, t3);
+    code.fmad(t1, p_512, ZRegS(IDX(table_val(tanh_m1d3, z_tmp))), oneS);
+    code.fmul(t1, p_512, t3);
+    // select the correct value according to mask
+    code.mov(t0, mask, t1);
 #else
     // we add a check as the avx2 code cannot be used for avx
     using namespace Xbyak_aarch64::util;
@@ -1890,7 +1907,10 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     static const table_t tanh_consts {{tanh_idx_bias, {0x39800000, true}},
             {tanh_idx_mask, {0xffc00000, true}},
             {tanh_linear_ubound, {0x39ddb3d7, true}},
-            {tanh_saturation_lbound, {0x41102cb3, true}}};
+            {tanh_saturation_lbound, {0x41102cb3, true}},
+            {tanh_range, {0x3d4ccccd, true}},
+            {tanh_m1d3, {0xbeaaaaab, true}},
+    };
 
     // tanh(x) polynomial approximation
     // For each coefficient, there is 32 entries
