@@ -523,7 +523,7 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     const auto& oneS = ZRegS(IDX(vmm_aux4));
     const auto& mask = PReg(6); // avoid pred regs used in *conv_kernel*
 
-    table_val(one, oneS);
+    code.fcpy(oneS, p_512, 1);
     // make mask for small x
     code.mov(t3, p_512, t0);
     code.fabs(t1, p_512, t0);
