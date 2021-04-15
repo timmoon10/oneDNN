@@ -521,15 +521,13 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     const auto& t2 = ZRegS(IDX(vmm_aux2));
     const auto& t3 = ZRegS(IDX(vmm_aux3));
     const auto& oneS = ZRegS(IDX(vmm_aux4));
-    const auto& mask = PReg(10);
+    const auto& mask = PReg(6); // avoid pred regs used in *conv_kernel*
 
     table_val(one, oneS);
-    // make mask
-#if 1
+    // make mask for small x
     code.mov(t3, p_512, t0);
     code.fabs(t1, p_512, t0);
     code.cmplt(mask.s, p_512, t1, ZRegS(IDX(table_val(tanh_range, z_tmp))));
-#endif
 
     // 2x
     code.fadd(t0, t0, t0);
@@ -552,14 +550,12 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     // 1-2/(1+exp(2x))
     code.fsub(t0, oneS, t0);
 
-#if 1
     // tanh(x) = x(1 - x^2/3) for |x| < tanh_range
     code.fmul(t1, t3, t3);
     code.fmad(t1, p_512, ZRegS(IDX(table_val(tanh_m1d3, z_tmp))), oneS);
     code.fmul(t1, p_512, t3);
     // select the correct value according to mask
     code.mov(t0, mask, t1);
-#endif
 #else
     // we add a check as the avx2 code cannot be used for avx
     using namespace Xbyak_aarch64::util;
