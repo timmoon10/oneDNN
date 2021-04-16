@@ -514,8 +514,8 @@ void jit_uni_eltwise_injector_f32<isa>::elu_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
         const TRegS &vmm_src) {
-#if 1
-    // tanh(x) = 1 - 2/(1 + exp(2 x))
+    // tanh(x) = x(1 + (-1/3)x^2) for |x| < tanh_range
+    // tanh(x) = 1 - 2/(1 + exp(2 x)) for otherwise
     auto &code = *(h->xa_);
     const auto &t0 = ZRegS(IDX(vmm_src));
     const auto &t1 = ZRegS(IDX(vmm_aux1));
@@ -557,148 +557,6 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
     code.fmul(t1, p_512, t3);
     // select the correct value according to mask
     code.mov(t0, mask, t1);
-#else
-    // we add a check as the avx2 code cannot be used for avx
-    using namespace Xbyak_aarch64::util;
-    const int tanh_n_polynomials = 32;
-
-    // register mapping
-    // TODO: put sign on stack and alias zmm_table2 with vmm_sign to save a reg ?
-    TRegS vmm_dst = vmm_aux1, vmm_src_shift = vmm_aux1, vmm_coeff = vmm_aux1,
-          vmm_pol = vmm_aux2, vmm_indices = vmm_aux3,
-          vmm_src_original = vmm_aux4, vmm_sign = vmm_aux4;
-
-    auto vpermt2ps_aarch64 =
-            [&](const ZRegS &d, const ZRegS &s, const ZRegS &s2, const ZRegS &t,
-                    const ZRegS &t2, const ZRegS &t3, const PReg &p) {
-                h->ptrue(p.b);
-                h->xa_->mov(t, 0x1f);
-                h->xa_->and_(ZRegB(t.getIdx()), p, ZRegB(s.getIdx()));
-                for (int i = 0; i < 16; i++) {
-                    h->cmpeq(h->P_TMP_0.s, p, t, 0);
-                    h->xa_->sub(t, 0x1);
-                    h->dup(t2, d[i]);
-                    h->xa_->mov(t3, h->P_TMP_0 / T_m, t2);
-                }
-                for (int i = 0; i < 16; i++) {
-                    h->cmpeq(h->P_TMP_0.s, p, t, i);
-                    h->dup(t2, s2[i]);
-                    h->xa_->mov(t3, h->P_TMP_0 / T_m, t2);
-                }
-                h->xa_->mov(ZRegD(d.getIdx()), ZRegD(t3.getIdx()));
-            };
-
-    // We split the positive domain in 33 intervals:
-    // a) [0; linear_ubound]: in this interval tanh(x) = x
-    // b) [linear_ubound; 0x1.8p-12]: This interval spans part of a
-    //    half binade
-    // c) [0x1.8p-12; 0x1.0p-11], ..., [0x1.8p2; 0x1.0p3]:
-    //    one interval for each half binade, there are 29 of those
-    // d) [0x1.0p3; saturation_ubound]:
-    //    This interval spans part of a half binade
-    // e) [0x1.205966p3; saturation_ubound]: in this interval, tanh(x) = 1
-    // For b-d, we need 31 polynomials and will do a table lookup for those.
-    // To simplify the logic, we will also put a) in the table.
-
-    // The polynomials are of degree 6, so we need to gather 7 coefficients.
-    // - sse4.1: we do it the naive way using vextract/vinsert.
-    //           Here we will extract the indices in gpr only once and
-    //           reuse them as there are only 4 of them.
-    // - avx2: we use vpermps and blend for each coefficient.
-    //         This needs an extra vmm to store the mask
-    // - avx512: because the table fits in 2 registers, we can use vpermi2d.
-    auto coeffs_address = [&](int coeff_off, int off = 0) {
-        return table_val(
-                tanh_pol_table, z_tmp, coeff_off * tanh_n_polynomials + off);
-    };
-    auto gather_coefficient_init = [&](TRegS vmm_pol_idx, int nelems) {
-        switch (isa) {
-            case sve_512: break;
-            default: assert(!"unimplemented");
-        }
-    };
-    auto gather_coefficient = [&](TRegS vmm_coeff, int coeff_idx,
-                                      TRegS vmm_pol_idx) {
-        switch (isa) {
-                // use gather instruction
-            case sve_512:
-                // we use vpermt2ps to not override the indices
-                // this also enables to save a register for table loading
-                {
-                    ZReg zmm_coeff(vmm_coeff.getIdx());
-                    ZReg zmm_pol_idx(vmm_pol_idx.getIdx());
-                    h->xa_->mov(ZRegD(IDX(zmm_coeff)),
-                            ZRegD(IDX(coeffs_address(coeff_idx, 0))));
-
-                    vpermt2ps_aarch64(ZRegS(IDX(zmm_coeff)),
-                            ZRegS(IDX(zmm_pol_idx)),
-                            ZRegS(IDX(coeffs_address(coeff_idx, 16))), vmm_aux5,
-                            vmm_aux6, vmm_aux7, p_tmp0);
-                    break;
-                }
-            default: assert(!"unimplemented");
-        }
-    };
-
-    // because tanh(x) = -tanh(-x), we extract sign to make x postive
-    // and reapply sign at the end
-    h->xa_->mov(ZRegD(IDX(vmm_src_original)), ZRegD(IDX(vmm_src)));
-    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask, z_tmp))));
-
-    // We compute the indices for the table lookup
-    h->xa_->mov(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_src)));
-    h->xa_->sub(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)),
-            ZRegS(IDX(table_val(tanh_idx_bias, z_tmp))));
-    h->xa_->and_(ZRegD(IDX(vmm_indices)), ZRegD(IDX(vmm_indices)),
-            ZRegD(IDX(table_val(tanh_idx_mask, z_tmp))));
-    h->lsr(ZRegS(IDX(vmm_indices)), ZRegS(IDX(vmm_indices)), 22);
-
-    // we do the argument reduction
-    h->xa_->mov(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src)));
-    h->xa_->and_(ZRegD(IDX(vmm_src_shift)), ZRegD(IDX(vmm_src_shift)),
-            ZRegD(IDX(table_val(tanh_idx_mask, z_tmp))));
-    h->xa_->fsub(vmm_src, vmm_src, ZRegS(IDX(vmm_src_shift)));
-
-    // we gather and evaluate the polynonials
-    gather_coefficient_init(vmm_indices, vlen / sizeof(float));
-    gather_coefficient(vmm_pol, 6, vmm_indices);
-
-    for (int deg = 5; deg >= 0; --deg) {
-        gather_coefficient(vmm_coeff, deg, vmm_indices);
-        h->fmad(ZRegS(IDX(vmm_pol)), p_512 / T_m, vmm_src,
-                ZRegS(IDX(vmm_coeff)));
-    }
-
-    // we restore src with cleared sign, and keep sign
-    assert(vmm_sign.getIdx() == vmm_src_original.getIdx());
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src_original)));
-    h->xa_->and_(ZRegD(IDX(vmm_sign)), ZRegD(IDX(vmm_sign)),
-            ZRegD(IDX(table_val(sign_mask, z_tmp))));
-    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(positive_mask, z_tmp))));
-
-    // Now we blend the results
-    // [saturation_ubound; +inf[ : we return +/- 1
-    h->xa_->mov(ZRegD(IDX(vmm_dst)), ZRegD(IDX(table_val(one, z_tmp))));
-
-    // [linear_ubound; saturation_lbound] : we return +/- P(x)
-    h->xa_->mov(ZRegD(IDX(vmm_mask)),
-            ZRegD(IDX(table_val(tanh_saturation_lbound, z_tmp))));
-
-    compute_cmp_mask(vmm_mask, vmm_src, _cmp_gt_os);
-    blend_with_mask(vmm_dst, vmm_pol);
-
-    // [0; linear_ubound]  : we return x
-    h->xa_->mov(ZRegD(IDX(vmm_mask)),
-            ZRegD(IDX(table_val(tanh_linear_ubound, z_tmp))));
-
-    compute_cmp_mask(vmm_mask, vmm_src, _cmp_gt_os);
-    blend_with_mask(vmm_dst, vmm_src);
-
-    // We reapply the sign and return
-    h->eor(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_dst)), ZRegD(IDX(vmm_sign)));
-#endif
 }
 
 template <cpu_isa_t isa>
