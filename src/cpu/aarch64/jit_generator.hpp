@@ -140,6 +140,7 @@ public:
     const int x_tmp_vec_size = x_tmp_vec.size();
 
     const Xbyak_aarch64::XReg param1 = abi_param1;
+    const Xbyak::Reg64 param1_x64 = abi_param1_x64;
     constexpr static size_t translator_stack_offset = 1024 * 128;
     constexpr static uint32_t DUMMY_IDX = 99;
 
@@ -235,6 +236,76 @@ public:
                 static_cast<int64_t>(preserved_stack_size) - 16);
         xa_->ldp(x29, x30, Xbyak_aarch64::post_ptr(xa_->sp, 16));
         xa_->ret();
+    }
+
+    template <typename T>
+    Xbyak::Address EVEX_compress_addr(
+            Xbyak::Reg64 base, T raw_offt, bool bcast = false) {
+        using Xbyak::Address;
+        using Xbyak::Reg64;
+        using Xbyak::RegExp;
+        using Xbyak::Zmm;
+
+        assert(raw_offt <= INT_MAX);
+        auto offt = static_cast<int>(raw_offt);
+
+        int scale = 0;
+
+        if (EVEX_max_8b_offt <= offt && offt < 3 * EVEX_max_8b_offt) {
+            offt = offt - 2 * EVEX_max_8b_offt;
+            scale = 1;
+        } else if (3 * EVEX_max_8b_offt <= offt
+                && offt < 5 * EVEX_max_8b_offt) {
+            offt = offt - 4 * EVEX_max_8b_offt;
+            scale = 2;
+        }
+
+        auto re = RegExp() + base + offt;
+        if (scale) re = re + reg_EVEX_max_8b_offt * scale;
+
+        if (bcast)
+            return zword_b[re];
+        else
+            return zword[re];
+    }
+
+    Xbyak::Address make_safe_addr(const Xbyak::Reg64 &reg_out, size_t offt,
+            const Xbyak::Reg64 &tmp_reg, bool bcast = false) {
+        if (offt > INT_MAX) {
+            mov(tmp_reg, offt);
+            return bcast ? ptr_b[reg_out + tmp_reg] : ptr[reg_out + tmp_reg];
+        } else {
+            return bcast ? ptr_b[reg_out + offt] : ptr[reg_out + offt];
+        }
+    }
+
+    Xbyak::Address EVEX_compress_addr_safe(const Xbyak::Reg64 &base,
+            size_t raw_offt, const Xbyak::Reg64 &reg_offt, bool bcast = false) {
+        if (raw_offt > INT_MAX) {
+            return make_safe_addr(base, raw_offt, reg_offt, bcast);
+        } else {
+            return EVEX_compress_addr(base, raw_offt, bcast);
+        }
+    }
+
+    void safe_add(const Xbyak::Reg64 &base, size_t raw_offt,
+            const Xbyak::Reg64 &reg_offt) {
+        if (raw_offt > INT_MAX) {
+            mov(reg_offt, raw_offt);
+            add(base, reg_offt);
+        } else {
+            add(base, raw_offt);
+        }
+    }
+
+    void safe_sub(const Xbyak::Reg64 &base, size_t raw_offt,
+            const Xbyak::Reg64 &reg_offt) {
+        if (raw_offt > INT_MAX) {
+            mov(reg_offt, raw_offt);
+            sub(base, reg_offt);
+        } else {
+            sub(base, raw_offt);
+        }
     }
 
     int get_offset(int raw_offt) {
@@ -1313,6 +1384,248 @@ public:
             fmin(v_tmp, v_tmp, v_ubound);
         else
             assert(!"unreachable");
+    }
+    /**
+    * load_bytes is the utility function to facilitate loading of
+    * load_size (0 <= load_size <= 32) many contiguous bytes into the Xmm/Ymm
+    * register from the memory referenced by ptr[reg + offset] address.
+    *
+    * Functionally, invocation of load_bytes is equivalent to
+    * the following loop:
+    *
+    * for (int idx = 0; idx < load_size; ++idx)
+    *     vpinsrb(xmm, xmm, ptr[reg + offset + idx], idx);
+    *
+    * TODO: Add an option to zero-out unloaded bytes in the Xmm register.
+    * TODO: Add an option for unsafe_load wherein one could read outside the
+    * provided memory buffer so as to minimize the total number of read
+    * memory instructions.
+    */
+    template <typename Vmm>
+    void load_bytes(const Vmm &vmm, const Xbyak::Reg64 &reg, int64_t offset,
+            int load_size) {
+
+        constexpr bool is_xmm = std::is_same<Vmm, Xbyak::Xmm>::value;
+        constexpr bool is_ymm = std::is_same<Vmm, Xbyak::Ymm>::value;
+        static_assert(
+                is_xmm || is_ymm, "only Xmm or Ymm registers are allowed");
+
+        MAYBE_UNUSED(is_xmm);
+        MAYBE_UNUSED(is_ymm);
+
+        // Ensure data fits completely inside the Xmm/Ymm register
+        assert(load_size >= 0 && load_size <= 32);
+
+        // Ensure offset is at most 4 bytes to be encoded in the instruction
+        assert(offset >= INT_MIN && offset <= INT_MAX);
+
+        // At most 16 bytes can fit inside the Xmm register
+        assert(IMPLICATION(load_size > 16, is_ymm));
+
+        // Ensure that vector register is compatible with the ISA in hand
+        assert(IMPLICATION(is_ymm, is_valid_isa(avx)));
+
+        assert(is_valid_isa(sse41)
+                && "routine is not supported for the current isa");
+
+        auto xmm = Xbyak::Xmm(vmm.getIdx());
+        auto ymm = Xbyak::Ymm(vmm.getIdx());
+
+        // addr(i) denotes the memory pointed by ptr[reg + offset + (i bytes)]
+        const auto addr = [&](int bytes_offset) {
+            return ptr[reg + offset + bytes_offset * sizeof(int8_t)];
+        };
+
+        if (load_size == 32) {
+            vmovups(ymm, addr(0));
+            return;
+        }
+
+        int start_bytes = 0;
+        int bytes_to_load = load_size;
+
+        if (load_size > 16) {
+            // Prepare to insert to upper bits of ymm
+            start_bytes = 16;
+            bytes_to_load -= 16;
+        }
+
+        if (bytes_to_load >= 8 && bytes_to_load < 16)
+            uni_vpinsrq(xmm, xmm, addr(start_bytes), 0);
+        else if (bytes_to_load == 16)
+            uni_vmovdqu(xmm, addr(start_bytes));
+
+        switch (bytes_to_load) {
+            case 0: break;
+            case 1: uni_vpinsrb(xmm, xmm, addr(start_bytes), 0); break;
+            case 2: uni_vpinsrw(xmm, xmm, addr(start_bytes), 0); break;
+            case 3:
+                uni_vpinsrw(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 2), 2);
+                break;
+            case 4: uni_vpinsrd(xmm, xmm, addr(start_bytes), 0); break;
+            case 5:
+                uni_vpinsrd(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 4), 4);
+                break;
+            case 6:
+                uni_vpinsrd(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 4), 2);
+                break;
+            case 7:
+                uni_vpinsrd(xmm, xmm, addr(start_bytes), 0);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 4), 2);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 6), 6);
+                break;
+            case 8: break;
+            case 9: uni_vpinsrb(xmm, xmm, addr(start_bytes + 8), 8); break;
+            case 10: uni_vpinsrw(xmm, xmm, addr(start_bytes + 8), 4); break;
+            case 11:
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 8), 4);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 10), 10);
+                break;
+            case 12: uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2); break;
+            case 13:
+                uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 12), 12);
+                break;
+            case 14:
+                uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 12), 6);
+                break;
+            case 15:
+                uni_vpinsrd(xmm, xmm, addr(start_bytes + 8), 2);
+                uni_vpinsrw(xmm, xmm, addr(start_bytes + 12), 6);
+                uni_vpinsrb(xmm, xmm, addr(start_bytes + 14), 14);
+                break;
+            case 16: break;
+            default: assert(!"improper load size");
+        }
+
+        if (load_size > 16) {
+            vinsertf128(ymm, ymm, xmm, 1); // insert to upper bits of ymm
+            vinsertf128(ymm, ymm, addr(0), 0); // insert to lower bits of ymm
+        }
+    }
+
+    /**
+    * store_bytes is the utility function to facilitate storing of
+    * store_size (0 <= store_size <= 32) many contiguous bytes from the Xmm/Ymm
+    * register into the memory referenced by ptr[reg + offset] address.
+    *
+    * Additionally, when store_size > 16, the input Ymm register will not be
+    * preserved due to the usage of vextracti128 instruction.
+    *
+    * Functionally, invocation of store_bytes is equivalent
+    * to the following loop:
+    *
+    * for (int idx = 0; idx < store_size; ++idx)
+    *     vpextrb(ptr[reg + offset + idx], xmm, idx);
+    *
+    * TODO: Add an option for unsafe_store wherein one could store extra dwords
+    * past the provided memory buffer so as to minimize the total number of
+    * write memory instructions.
+    */
+    template <typename Vmm>
+    void store_bytes(const Vmm &vmm, const Xbyak::Reg64 &reg, int64_t offset,
+            int store_size) {
+
+        constexpr bool is_xmm = std::is_same<Vmm, Xbyak::Xmm>::value;
+        constexpr bool is_ymm = std::is_same<Vmm, Xbyak::Ymm>::value;
+        static_assert(
+                is_xmm || is_ymm, "only Xmm or Ymm registers are allowed");
+
+        MAYBE_UNUSED(is_xmm);
+        MAYBE_UNUSED(is_ymm);
+
+        // Ensure data fits completely inside the Xmm/Ymm register
+        assert(store_size >= 0 && store_size <= 32);
+
+        // Ensure offset is at most 4 bytes to be encoded in the instruction
+        assert(offset >= INT_MIN && offset <= INT_MAX);
+
+        // At most 16 bytes can fit inside the Xmm register
+        assert(IMPLICATION(store_size > 16, is_ymm));
+
+        // Ensure that vector register is compatible with the ISA in hand
+        assert(IMPLICATION(is_ymm, is_valid_isa(avx)));
+
+        assert(is_valid_isa(sse41)
+                && "routine is not supported for the current isa");
+
+        auto xmm = Xbyak::Xmm(vmm.getIdx());
+        auto ymm = Xbyak::Ymm(vmm.getIdx());
+
+        const auto addr = [&](int bytes_offset) {
+            return ptr[reg + offset + bytes_offset * sizeof(int8_t)];
+        };
+
+        if (store_size == 32) {
+            vmovups(addr(0), ymm);
+            return;
+        }
+
+        int start_bytes = 0;
+        int bytes_to_store = store_size;
+
+        if (store_size > 16) {
+            vmovdqu(addr(0), xmm); // load lower bits from ymm
+            start_bytes = 16;
+            bytes_to_store -= 16;
+            vextractf128(xmm, ymm, 1); // load upper bits from ymm into xmm
+        }
+
+        if (bytes_to_store >= 8 && bytes_to_store < 16)
+            uni_vpextrq(addr(start_bytes), xmm, 0);
+        else if (bytes_to_store == 16)
+            uni_vmovdqu(addr(start_bytes), xmm);
+
+        switch (bytes_to_store) {
+            case 0: break;
+            case 1: uni_vpextrb(addr(start_bytes), xmm, 0); break;
+            case 2: uni_vpextrw(addr(start_bytes), xmm, 0); break;
+            case 3:
+                uni_vpextrw(addr(start_bytes), xmm, 0);
+                uni_vpextrb(addr(start_bytes + 2), xmm, 2);
+                break;
+            case 4: uni_vpextrd(addr(start_bytes), xmm, 0); break;
+            case 5:
+                uni_vpextrd(addr(start_bytes), xmm, 0);
+                uni_vpextrb(addr(start_bytes + 4), xmm, 4);
+                break;
+            case 6:
+                uni_vpextrd(addr(start_bytes), xmm, 0);
+                uni_vpextrw(addr(start_bytes + 4), xmm, 2);
+                break;
+            case 7:
+                uni_vpextrd(addr(start_bytes), xmm, 0);
+                uni_vpextrw(addr(start_bytes + 4), xmm, 2);
+                uni_vpextrb(addr(start_bytes + 6), xmm, 6);
+                break;
+            case 8: break;
+            case 9: uni_vpextrb(addr(start_bytes + 8), xmm, 8); break;
+            case 10: uni_vpextrw(addr(start_bytes + 8), xmm, 4); break;
+            case 11:
+                uni_vpextrw(addr(start_bytes + 8), xmm, 4);
+                uni_vpextrb(addr(start_bytes + 10), xmm, 10);
+                break;
+            case 12: uni_vpextrd(addr(start_bytes + 8), xmm, 2); break;
+            case 13:
+                uni_vpextrd(addr(start_bytes + 8), xmm, 2);
+                uni_vpextrb(addr(start_bytes + 12), xmm, 12);
+                break;
+            case 14:
+                uni_vpextrd(addr(start_bytes + 8), xmm, 2);
+                uni_vpextrw(addr(start_bytes + 12), xmm, 6);
+                break;
+            case 15:
+                uni_vpextrd(addr(start_bytes + 8), xmm, 2);
+                uni_vpextrw(addr(start_bytes + 12), xmm, 6);
+                uni_vpextrb(addr(start_bytes + 14), xmm, 14);
+                break;
+            case 16: break;
+            default: assert(!"improper store size");
+        }
     }
 
     DNNL_DISALLOW_COPY_AND_ASSIGN(jit_generator);

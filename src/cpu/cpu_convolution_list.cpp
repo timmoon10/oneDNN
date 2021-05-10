@@ -65,6 +65,7 @@ using namespace dnnl::impl::cpu::x64;
 #include "cpu/aarch64/jit_aarch64_sve_512_1x1_convolution.hpp"
 #include "cpu/aarch64/jit_aarch64_sve_512_conv_kernel.hpp"
 #include "cpu/aarch64/jit_aarch64_sve_512_convolution.hpp"
+#include "cpu/aarch64/jit_avx2_convolution.hpp"
 //#include "cpu/aarch64/jit_sve_512_x8s8s32x_1x1_conv_kernel.hpp"
 #include "cpu/aarch64/jit_sve_512_x8s8s32x_1x1_convolution.hpp"
 //#include "cpu/aarch64/jit_sve_512_x8s8s32x_conv_kernel.hpp"
@@ -127,6 +128,7 @@ const std::map<conv_impl_key_t, std::vector<pd_create_f>> impl_list_map {
         CPU_INSTANCE_AARCH64(jit_aarch64_sve_512_dw_convolution_fwd_t)
         CPU_INSTANCE_AARCH64(jit_aarch64_sve_512_1x1_convolution_fwd_f32_t)
         CPU_INSTANCE_AARCH64(jit_aarch64_sve_512_convolution_fwd_t<f32>)
+        CPU_INSTANCE_AARCH64(jit_avx2_convolution_fwd_t)
         CPU_INSTANCE_AARCH64_ACL(acl_gemm_convolution_fwd_t<f32>)
         CPU_INSTANCE(gemm_convolution_fwd_t)
         CPU_INSTANCE(ref_convolution_fwd_t<f32>)
