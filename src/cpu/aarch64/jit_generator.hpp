@@ -131,8 +131,8 @@ public:
     const Xbyak_aarch64::PReg P_TMP_0 = p11;
     const Xbyak_aarch64::PReg P_TMP_1 = p12;
     const Xbyak_aarch64::PReg P_ALL_ZERO = p10;
-    const Xbyak_aarch64::PReg P_MSB_256 = p13;
-    const Xbyak_aarch64::PReg P_MSB_384 = p14;
+    const Xbyak_aarch64::PReg P_NOT_256 = p13;
+    const Xbyak_aarch64::PReg P_NOT_128 = p14;
     const Xbyak_aarch64::PReg P_ALL_ONE = p15;
 
     const std::vector<Xbyak_aarch64::XReg> x_tmp_vec
@@ -149,6 +149,8 @@ public:
     inline size_t get_size_of_abi_save_regs() { return size_of_abi_save_regs; }
 
     void preamble(bool isDirect = false) {
+        using namespace Xbyak_aarch64::util;
+        uint64_t sveLen = get_sve_length();
         xa_->stp(x29, x30, pre_ptr(xa_->sp, -16));
         /* x29 is a frame pointer. */
         xa_->mov(x29, xa_->sp);
@@ -168,15 +170,18 @@ public:
                     post_ptr(x9, xreg_len * 2));
         }
 
-        if (mayiuse(sve_512)) {
+        if (sveLen) { /* SVE is available. */
             xa_->ptrue(P_ALL_ONE.b);
-            xa_->ptrue(P_MSB_384.b, Xbyak_aarch64::VL16);
-            xa_->ptrue(P_MSB_256.b, Xbyak_aarch64::VL32);
-            xa_->not_(P_MSB_384.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_384.b);
-            xa_->not_(P_MSB_256.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_MSB_256.b);
             xa_->pfalse(P_ALL_ZERO.b);
         }
-
+        if (sveLen >= SVE_256) {
+            xa_->ptrue(P_NOT_128.b, Xbyak_aarch64::VL16);
+            xa_->not_(P_NOT_128.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_NOT_128.b);
+        }
+        if (sveLen >= SVE_512) {
+            xa_->ptrue(P_NOT_256.b, Xbyak_aarch64::VL32);
+            xa_->not_(P_NOT_256.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_NOT_256.b);
+        }
         /* arg values are passed different registers between x86_64 and aarch64. */
         /* Note:If # of args is more than 6, 7-th, 8-th, ..., args are passed by stack. */
         if (isDirect == false) {
@@ -200,15 +205,20 @@ public:
     }
 
     void postamble() {
+        using namespace Xbyak_aarch64::util;
+        uint64_t sveLen = get_sve_length();
+
         xa_->mov(x9, xa_->sp);
-        if (mayiuse(sve_512)) {
-            xa_->eor(P_ALL_ONE.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_ALL_ONE.b,
+
+        if (sveLen) /* SVE is available. */
+            eor(P_ALL_ONE.b, P_ALL_ONE / Xbyak_aarch64::T_z, P_ALL_ONE.b,
                     P_ALL_ONE.b);
-            xa_->eor(P_MSB_384.b, P_MSB_384 / Xbyak_aarch64::T_z, P_MSB_384.b,
-                    P_MSB_384.b);
-            xa_->eor(P_MSB_256.b, P_MSB_256 / Xbyak_aarch64::T_z, P_MSB_256.b,
-                    P_MSB_256.b);
-        }
+        if (sveLen >= SVE_256)
+            eor(P_NOT_128.b, P_NOT_128 / Xbyak_aarch64::T_z, P_NOT_128.b,
+                    P_NOT_128.b);
+        if (sveLen >= SVE_512)
+            eor(P_NOT_256.b, P_NOT_256 / Xbyak_aarch64::T_z, P_NOT_256.b,
+                    P_NOT_256.b);
 
         if (vreg_to_preserve) {
             xa_->ld4((v8.d - v11.d)[0], post_ptr(x9, vreg_len_preserve * 4));
@@ -1236,6 +1246,8 @@ public:
     void init_saturate_f32(Vmm vmm_lbound, Vmm vmm_ubound,
             Xbyak_aarch64::XReg reg_tmp, data_type_t idt, data_type_t odt) {
         using namespace data_type;
+        bool isSVE = get_sve_length() ? true : false;
+
         if (!((idt == f32) && utils::one_of(odt, u8, data_type::s8, s32)))
             return;
 
@@ -1245,7 +1257,7 @@ public:
         // the conversion to int would return INT_MIN, and then proper
         // saturation will happen in store_data
         if (odt == u8) {
-            if (mayiuse(sve_512))
+            if (isSVE) /* SVE is available. */
                 dup(Xbyak_aarch64::ZRegS(vmm_lbound.getIdx()), 0);
             else if (mayiuse(asimd))
                 movi(Xbyak_aarch64::VReg4S(vmm_lbound.getIdx()), 0);
@@ -1254,10 +1266,14 @@ public:
         }
 
         Xbyak_aarch64::ZRegS z_tmp(vmm_ubound.getIdx());
+        Xbyak_aarch64::VReg4S v_tmp(vmm_ubound.getIdx());
         Xbyak_aarch64::WReg w_tmp(reg_tmp.getIdx());
         float saturation_ubound = types::max_value<float>(odt);
         xa_->mov_imm(w_tmp, float2int(saturation_ubound));
-        dup(z_tmp, w_tmp);
+        if (isSVE) /* SVE is available. */
+            dup(z_tmp, w_tmp);
+        else
+            dup(v_tmp, w_tmp);
     }
 
     template <typename Vmm>
@@ -1269,6 +1285,8 @@ public:
         // behavior (it returns INT_MIN if the f32 is out of the
         // s32 range)
         using namespace data_type;
+        bool isSVE = get_sve_length() ? true : false;
+
         if (!utils::one_of(odt, u8, data_type::s8, s32)) return;
 
         Xbyak_aarch64::VReg4S v_tmp(vmm.getIdx());
@@ -1282,14 +1300,14 @@ public:
         // signed, as cvtps2dq will return MIN_INT if the value
         // does not fit
         if (odt == u8) {
-            if (mayiuse(sve_512))
+            if (isSVE) /* SVE is available. */
                 fmax(z_tmp, p_true / Xbyak_aarch64::T_m, z_lbound);
             else if (mayiuse(asimd))
                 fmax(v_tmp, v_tmp, v_lbound);
             else
                 assert(!"unreachable");
         }
-        if (mayiuse(sve_512))
+        if (isSVE) /* SVE is available. */
             fmin(z_tmp, p_true / Xbyak_aarch64::T_m, z_ubound);
         else if (mayiuse(asimd))
             fmin(v_tmp, v_tmp, v_ubound);

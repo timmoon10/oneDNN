@@ -306,10 +306,7 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
     if ((cpu_isa_mask & cpu_isa) != cpu_isa) return false;
 
     switch (cpu_isa) {
-        case asimd:
-            /* Advanced SIMD and floating-point instructions are
-         mondatory for AArch64. */
-            return true;
+        case asimd: return cpu().has(Cpu::tADVSIMD);
         case sve_128:
             return cpu().has(Cpu::tSVE) && cpu().getSveLen() == SVE_128;
         case sve_256:
@@ -325,6 +322,10 @@ static inline bool mayiuse(const cpu_isa_t cpu_isa, bool soft = false) {
         case isa_all: return false;
     }
     return false;
+}
+
+static inline uint64_t get_sve_length() {
+    return cpu().getSveLen();
 }
 
 static inline bool mayiuse_atomic() {
@@ -344,9 +345,10 @@ inline bool isa_has_bf16(cpu_isa_t isa) {
 #define JIT_IMPL_NAME_HELPER(prefix, isa, suffix_if_any) \
     ((isa) == isa_any ? prefix STRINGIFY(any) : \
     ((isa) == asimd ? prefix STRINGIFY(asimd) : \
+    ((isa) == sve_128 ? prefix STRINGIFY(sve_128) : \
     ((isa) == sve_256 ? prefix STRINGIFY(sve_256) : \
     ((isa) == sve_512 ? prefix STRINGIFY(sve_512) : \
-    prefix suffix_if_any))))
+     prefix suffix_if_any)))))
 /* clang-format on */
 
 } // namespace aarch64
