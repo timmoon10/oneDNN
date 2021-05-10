@@ -6,11 +6,11 @@ stages:
 
 before_script:
 
-#ClangFormatCheck:
-#  stage: test
-#  image: bce7edfda510
-#  script:
-#  - ./.github/automation/clang-format.sh
+ClangFormatCheck:
+  stage: test
+  image: bce7edfda510
+  script:
+  - ./.github/automation/clang-format.sh
 
 fcc_w/_SSL2:
   stage: test
