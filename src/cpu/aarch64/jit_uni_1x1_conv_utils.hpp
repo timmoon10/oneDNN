@@ -739,7 +739,7 @@ struct rtus_driver_t : public jit_generator {
 #endif
     }
 
-    void generate() {
+    void generate() override {
 #if 1
         using namespace Xbyak_aarch64;
         assert(isa == sve_512);
