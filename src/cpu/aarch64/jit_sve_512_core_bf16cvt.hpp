@@ -459,7 +459,7 @@ struct jit_avx512_core_cvt_ps_to_bf16_t : public jit_generator {
 
     ~jit_avx512_core_cvt_ps_to_bf16_t() { delete bf16_emu_; }
 
-    void generate() {
+    void generate() override {
         preamble();
 
         //bool use_bf16_emu = !mayiuse(avx512_core_bf16);
@@ -712,7 +712,7 @@ struct jit_avx512_core_cvt_bf16_to_ps_t : public jit_generator {
         create_kernel();
     }
 
-    void generate();
+    void generate() override;
 
     void jit_ker(float *out, const bfloat16_t *inp, size_t nelems,
             size_t rows = 1) const {
@@ -733,7 +733,7 @@ private:
 struct jit_avx512_core_add_cvt_ps_to_bf16_t : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_core_add_cvt_ps_to_bf16)
 
-    jit_avx512_core_add_cvt_ps_to_bf16_t() : simd_w_(16) {
+    jit_avx512_core_add_cvt_ps_to_bf16_t() /*: simd_w_(16) */ {
         bf16_emu_ = new bf16_emulation_t(
                 this, one, even, selector, scratch, fp32_tmp, fp32_tmp);
 
@@ -814,8 +814,8 @@ struct jit_avx512_core_add_cvt_ps_to_bf16_t : public jit_generator {
     }
 
 private:
-    int simd_w_;
-    void (*jit_ker_)(bf16_support::jit_call_t *);
+    //    int simd_w_;
+    //    void (*jit_ker_)(bf16_support::jit_call_t *);
 
     bf16_emulation_t *bf16_emu_;
     /*
@@ -871,7 +871,7 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
     DECLARE_CPU_JIT_AUX_FUNCTIONS(jit_avx512_core_bf16_reorder_s16c_to_S16c2s)
 
     jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t()
-        : simd_w_(16), in_stride_(16) {
+    /*: simd_w_(16), in_stride_(16) */ {
         /*
         generate();
         jit_ker_ = (void (*)(bf16_support::jit_call_t *))getCode();
@@ -879,7 +879,7 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
     }
 
     jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t(int in_stride)
-        : simd_w_(16), in_stride_(in_stride) {
+    /*: simd_w_(16), in_stride_(in_stride) */ {
         /*
         generate();
         jit_ker_ = (void (*)(bf16_support::jit_call_t *))getCode();
@@ -975,8 +975,8 @@ struct jit_avx512_core_bf16_reorder_s16c_to_S16c2s_t : public jit_generator {
     }
 
 private:
-    int simd_w_;
-    int in_stride_;
+    //    int simd_w_;
+    //    int in_stride_;
     void (*jit_ker_)(bf16_support::jit_call_t *);
     /*
     Xbyak::Opmask ktail_mask_lo = k2;

@@ -89,12 +89,14 @@ static broadcasting_strategy_t get_rhs_arg_broadcasting_strategy(
         //unsupported
     } else if (broadcast_per_oc) {
         if (use_per_oc_spatial_strategy && dst_d.is_blocking_desc()) {
-            const auto &strides = dst_d.blocking_desc().strides;
+            //            const auto &strides = dst_d.blocking_desc().strides;
             return broadcasting_strategy_t::per_oc;
         } else {
             return broadcasting_strategy_t::per_oc;
         }
     }
+
+    return broadcasting_strategy_t::per_oc; /* dummy for warning */
 }
 
 bool binary_args_broadcast_supported(
@@ -176,9 +178,9 @@ static bool rhs_arg_params_differ(size_t vmm_idx1, size_t vmm_idx2,
         const rhs_arg_dynamic_params_t &rhs_arg_params,
         broadcasting_strategy_t rhs_broadcasting_strategy) {
 
-    const auto &out_elem_off_addr = rhs_arg_params.vmm_idx_to_out_elem_off_addr;
-    const auto &out_elem_off_val = rhs_arg_params.vmm_idx_to_out_elem_off_val;
-    const auto &out_off_oprnd = rhs_arg_params.vmm_idx_to_out_off_oprnd;
+    //    const auto &out_elem_off_addr = rhs_arg_params.vmm_idx_to_out_elem_off_addr;
+    //    const auto &out_elem_off_val = rhs_arg_params.vmm_idx_to_out_elem_off_val;
+    //    const auto &out_off_oprnd = rhs_arg_params.vmm_idx_to_out_off_oprnd;
     const auto &oc_off_addr = rhs_arg_params.vmm_idx_to_oc_elem_off_addr;
     const auto &oc_off_val = rhs_arg_params.vmm_idx_to_oc_elem_off_val;
     const auto &oc_off_oprnd = rhs_arg_params.vmm_idx_to_oc_off_oprnd;
@@ -195,6 +197,8 @@ static bool rhs_arg_params_differ(size_t vmm_idx1, size_t vmm_idx2,
                 || params_differ(oc_off_val, vmm_idx1, vmm_idx2)
                 || params_differ(oc_off_oprnd, vmm_idx1, vmm_idx2);
     }
+
+    return false; /* dummy for warning */
 }
 
 template <cpu_isa_t isa>
@@ -273,7 +277,7 @@ void jit_uni_binary_injector_t<isa>::compute_vector_range(
                                     {xa::VReg(vmm_hint)})
                             : std::initializer_list<Xbyak_aarch64::VReg>())};
 
-    bool vmm0_was_preserved = false;
+    //    bool vmm0_was_preserved = false;
     static const TReg zero_vmm(0);
 
     Xbyak_aarch64::AdrNoOfs rhs_arg_addr(xa::XReg(0));
@@ -340,6 +344,8 @@ Xbyak_aarch64::AdrNoOfs jit_uni_binary_injector_t<isa>::prepare_rhs_arg_addr(
         }
         default: assert(false && "Broadcasting type not supported");
     }
+
+    return xa::ptr(rhs_addr_reg); /* dummy for warning */
 }
 
 template <cpu_isa_t isa>
@@ -447,7 +453,7 @@ void jit_uni_binary_injector_t<isa>::load_rhs(const dnnl_data_type_t &data_type,
     }
 }
 
-static constexpr int xmm_size_elem = 4;
+//static constexpr int xmm_size_elem = 4;
 
 template <cpu_isa_t isa>
 void jit_uni_binary_injector_t<isa>::load_rhs_tail(

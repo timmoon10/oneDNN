@@ -81,7 +81,7 @@ register_preserve_guard_t::register_preserve_guard_t(jit_generator *host,
 register_preserve_guard_t::~register_preserve_guard_t() {
 
     auto tmp_stack_offset = 0;
-    int i = 0;
+    //    int i = 0;
 
     while (!vmm_stack_.empty()) {
         const xa::VReg &vmm = vmm_stack_.top();

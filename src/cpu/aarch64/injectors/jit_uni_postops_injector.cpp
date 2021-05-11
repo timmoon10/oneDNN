@@ -165,7 +165,7 @@ post_ops_ok_args_t::post_ops_ok_args_t(const cpu_isa_t isa,
     , dst_d(dst_d) {}
 
 bool post_ops_ok(const post_ops_ok_args_t &post_ops_ok_args) {
-    const cpu_isa_t isa = post_ops_ok_args.isa;
+    //    const cpu_isa_t isa = post_ops_ok_args.isa;
     const std::vector<post_op_type> &accepted_post_op_types
             = post_ops_ok_args.accepted_post_op_types;
     const post_ops_t &post_ops = post_ops_ok_args.post_ops;

@@ -82,11 +82,12 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
     const memory_desc_wrapper src_d(pd()->src_md());
     const memory_desc_wrapper dst_d(pd()->dst_md());
     const memory_desc_wrapper weights_d(pd()->weights_md(0));
+#ifndef DISABLE_DW
     const memory_desc_wrapper dw_weights_d(
             pd()->arg_md(DNNL_ARG_ATTR_POST_OP_DW | DNNL_ARG_WEIGHTS));
     const memory_desc_wrapper dw_bias_d(
             pd()->arg_md(DNNL_ARG_ATTR_POST_OP_DW | DNNL_ARG_BIAS));
-
+#endif
     const auto &jcp = kernel_->jcp;
     auto rtus_space = pd()->rtus_.reduce_src_
             ? scratchpad.get<src_data_t>(key_conv_rtus_space)
@@ -125,7 +126,9 @@ void jit_aarch64_sve_512_1x1_convolution_fwd_t<src_type, wei_type,
     dst_data_t *pbuf;
     size_t row_offset;
     const int jcp_dw_kh = 3;
+#ifndef DISABLE_DW
     const int nb_buffer = jcp.nb_load_blocking;
+#endif
     std::vector<dst_data_t *> addrs;
     // End
 
@@ -913,14 +916,14 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                     int os;
                     asm volatile(
                             "ldr z1, [%4];"
-                            "mov %0, %2;"
-                            "cmp %0, 0x0;"
+                            "mov %w0, %w2;"
+                            "cmp %w0, 0x0;"
                             "b.eq label20;"
                             "label10:"
                             "ldr z0, [%1];"
                             "fadd z1.s, z1.s, z0.s;"
-                            "add %1, %1, %3, lsl #2;"
-                            "subs %0, %0, 0x1;"
+                            "add %1, %1, %w3, lsl #2;"
+                            "subs %w0, %w0, 0x1;"
                             "b.ne label10;"
                             "label20:"
                             "str z1, [%4];"
@@ -934,16 +937,16 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                     asm volatile(
                             "ldr z2, [%4];"
                             "ldr z3, [%4, #1, mul vl];"
-                            "mov %0, %2;"
-                            "cmp %0, 0x0;"
+                            "mov %w0, %w2;"
+                            "cmp %w0, 0x0;"
                             "b.eq label21;"
                             "label11:"
                             "ldr z0, [%1];"
                             "ldr z1, [%1, #1, mul vl];"
                             "fadd z2.s, z2.s, z0.s;"
                             "fadd z3.s, z3.s, z1.s;"
-                            "add %1, %1, %3, lsl #2;"
-                            "subs %0, %0, 0x1;"
+                            "add %w1, %w1, %w3, lsl #2;"
+                            "subs %w0, %w0, 0x1;"
                             "b.ne label11;"
                             "label21:"
                             "str z2, [%4];"
@@ -959,8 +962,8 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                             "ldr z3, [%4];"
                             "ldr z4, [%4, #1, mul vl];"
                             "ldr z5, [%4, #2, mul vl];"
-                            "mov %0, %2;"
-                            "cmp %0, 0x0;"
+                            "mov %w0, %w2;"
+                            "cmp %w0, 0x0;"
                             "b.eq label22;"
                             "label12:"
                             "ldr z0, [%1];"
@@ -969,8 +972,8 @@ void jit_aarch64_sve_512_1x1_convolution_bwd_weights_t::
                             "fadd z3.s, z3.s, z0.s;"
                             "fadd z4.s, z4.s, z1.s;"
                             "fadd z5.s, z5.s, z2.s;"
-                            "add %1, %1, %3, lsl #2;"
-                            "subs %0, %0, 0x1;"
+                            "add %1, %1, %w3, lsl #2;"
+                            "subs %w0, %w0, 0x1;"
                             "b.ne label12;"
                             "label22:"
                             "str z3, [%4];"
