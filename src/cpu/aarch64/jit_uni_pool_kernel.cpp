@@ -922,7 +922,7 @@ void jit_uni_pool_kernel<isa>::zero_diff_src(
     add_imm(X_DEFAULT_ADDR, reg_param, GET_OFF(zero_ptr), X_TMP_0);
     ldr(reg_zero_ptr, Xbyak_aarch64::ptr(X_DEFAULT_ADDR));
 
-    using TReg = typename Xbyak_aarch64::ZReg;
+    typedef Xbyak_aarch64::ZReg TReg;
     TReg vzero = vmm_tmp;
     eor(vzero.d, vzero.d, vzero.d);
 
