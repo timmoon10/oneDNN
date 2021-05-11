@@ -450,10 +450,10 @@ void jit_uni_eltwise_injector_f32<isa>::blend_with_mask(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
         const TRegS &vmm_src) {
-    auto& code = *(h->xa_);
-    const auto& t0 = ZRegS(IDX(vmm_src));
-    const auto& t1 = ZRegS(IDX(vmm_aux1));
-    const auto& t2 = ZRegS(IDX(vmm_aux2));
+    auto &code = *(h->xa_);
+    const auto &t0 = ZRegS(IDX(vmm_src));
+    const auto &t1 = ZRegS(IDX(vmm_aux1));
+    const auto &t2 = ZRegS(IDX(vmm_aux2));
     code.fmin(t0, p_512, ZRegS(IDX(table_val(exp_ln_flt_max_f, z_tmp))));
     code.fmax(t0, p_512, ZRegS(IDX(table_val(exp_ln_flt_min_f, z_tmp))));
     code.fmul(t0, t0, ZRegS(IDX(table_val(exp_log2ef, z_tmp))));
@@ -465,7 +465,8 @@ void jit_uni_eltwise_injector_f32<isa>::exp_compute_vector_fwd(
     code.lsr(t1, t0, 17);
     code.fexpa(t1, t1);
     code.fscale(t1, p_512, t2);
-    code.and_(ZRegD(t2.getIdx()), ZRegD(t0.getIdx()), ZRegD(IDX(table_val(exp_not_mask17, z_tmp))));
+    code.and_(ZRegD(t2.getIdx()), ZRegD(t0.getIdx()),
+            ZRegD(IDX(table_val(exp_not_mask17, z_tmp))));
     code.fsub(t2, t0, t2);
     code.movprfx(t0, p_512, ZRegS(IDX(table_val(exp_coeff2, z_tmp))));
     code.fmad(t0, p_512, t2, ZRegS(IDX(table_val(exp_coeff1, z_tmp))));
@@ -515,13 +516,13 @@ void jit_uni_eltwise_injector_f32<isa>::tanh_compute_vector_fwd(
         const TRegS &vmm_src) {
 #if 1
     // tanh(x) = 1 - 2/(1 + exp(2 x))
-    auto& code = *(h->xa_);
-    const auto& t0 = ZRegS(IDX(vmm_src));
-    const auto& t1 = ZRegS(IDX(vmm_aux1));
-    const auto& t2 = ZRegS(IDX(vmm_aux2));
-    const auto& t3 = ZRegS(IDX(vmm_aux3));
-    const auto& oneS = ZRegS(IDX(vmm_aux4));
-    const auto& mask = PReg(6); // avoid pred regs used in *conv_kernel*
+    auto &code = *(h->xa_);
+    const auto &t0 = ZRegS(IDX(vmm_src));
+    const auto &t1 = ZRegS(IDX(vmm_aux1));
+    const auto &t2 = ZRegS(IDX(vmm_aux2));
+    const auto &t3 = ZRegS(IDX(vmm_aux3));
+    const auto &oneS = ZRegS(IDX(vmm_aux4));
+    const auto &mask = PReg(6); // avoid pred regs used in *conv_kernel*
 
     code.fcpy(oneS, p_512, 1);
     // make mask for small x
@@ -1898,13 +1899,15 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
             {exp_pol, {0x3c07cfce, true}} // p5 = 0.00828929059f
     };
     // exp(x) constants2
-    static const table_t exp_consts2 {{exp_coeff1, {0x3f31721c, true}},
+    static const table_t exp_consts2 {
+            {exp_coeff1, {0x3f31721c, true}},
             {exp_coeff2, {0x3e772df2, true}},
             {exp_not_mask17, {~((1u << 17) - 1), true}},
     };
 
     // tanh(x) constants for four interval approximation
-    static const table_t tanh_consts {{tanh_idx_bias, {0x39800000, true}},
+    static const table_t tanh_consts {
+            {tanh_idx_bias, {0x39800000, true}},
             {tanh_idx_mask, {0xffc00000, true}},
             {tanh_linear_ubound, {0x39ddb3d7, true}},
             {tanh_saturation_lbound, {0x41102cb3, true}},
@@ -2320,11 +2323,17 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
                 case eltwise_logistic:
                 case eltwise_swish: exp_ = true; break;
                 case eltwise_gelu_erf: gelu_erf_ = true; break;
-                case eltwise_gelu_tanh: exp_ = true; gelu_tanh_ = true; break;
+                case eltwise_gelu_tanh:
+                    exp_ = true;
+                    gelu_tanh_ = true;
+                    break;
                 case eltwise_log: log_ = true; break;
                 case eltwise_soft_relu: soft_relu_ = true; break;
                 case eltwise_tanh_use_dst_for_bwd:
-                case eltwise_tanh: exp_ = true; tanh_ = true; break;
+                case eltwise_tanh:
+                    exp_ = true;
+                    tanh_ = true;
+                    break;
                 default: break;
             }
         }
