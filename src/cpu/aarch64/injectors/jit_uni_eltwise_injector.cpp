@@ -806,6 +806,33 @@ void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
         const TRegS &vmm_src) {
+#if 1
+    auto &code = *(h->xa_);
+    const auto &t0 = ZRegS(IDX(vmm_src));
+    const auto &t1 = ZRegS(IDX(vmm_aux1));
+    const auto &t2 = ZRegS(IDX(vmm_aux2));
+    //code.brk(0);
+    code.sub(t1, t0, ZRegS(IDX(table_val(log_i127shl23, z_tmp))));
+    code.asr(t1, t1, 23);
+    // int -> float
+    code.scvtf(t1, p_512, t1);
+    code.and_(t0, p_512, ZRegS(IDX(table_val(log_x7fffffff, z_tmp))));
+    code.orr(t0, p_512, ZRegS(IDX(table_val(log_i127shl23, z_tmp))));
+    // fnmsb(a, b, c) = a * b - c
+    code.fcpy(t2, p_512, 1.0f);
+    code.fnmsb(t0, p_512, ZRegS(IDX(table_val(log_f2div3, z_tmp))), t2);
+    table_val(log_log2, t2);
+    code.fmad(t1, p_512, t2, ZRegS(IDX(table_val(log_log1p5, z_tmp))));
+    const int logN = 9;
+    // fmad(a, b, c) ; a = a * b + c
+    code.movprfx(t2, p_512, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 1))));
+    code.fmad(t2, p_512, t0, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 2))));
+    for (int j = logN - 3; j >= 0; j--) {
+        code.fmad(t2, p_512, t0, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, j))));
+    }
+    // a * x + e
+    code.fmad(t0, p_512, t2, t1);
+#else
     // From J.-M. Muller and others, Handbook of Floating-Point Arithmetic, 2010
     // Here is a brief mathematics to approximate log(x):
     // log(x) = E * log(2) + log(y), where -log(2)/2 <= log(y) <= log(2)/2;
@@ -938,6 +965,7 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     blend_with_mask(vmm_src, table_val(log_qnan, z_tmp));
 
     h->L(end_log_label);
+#endif
 }
 
 template <cpu_isa_t isa>
@@ -1928,6 +1956,26 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
                     {0xc2b00f34, true}}, // 63: -88.029693603515625
     };
 
+    // log(x) constants2
+    static const table_t log_consts2 {
+            {log_i127shl23, {0x3f800000, true}},
+            {log_x7fffffff, {0x7fffffff, true}},
+            {log_log2, {0x3f317218, true}},
+            {log_log1p5, {0x3ecf991f, true}},
+            {log_f2div3, {0x3f2aaaab, true}},
+    };
+    static const table_t log_poly2 {
+            {log_coeffTbl, {0x3f800000, true}},
+            {log_coeffTbl, {0xbefffffb, true}},
+            {log_coeffTbl, {0x3eaaaa85, true}},
+            {log_coeffTbl, {0xbe800583, true}},
+            {log_coeffTbl, {0x3e4ce999, true}},
+            {log_coeffTbl, {0xbe28c570, true}},
+            {log_coeffTbl, {0x3e0f3d69, true}},
+            {log_coeffTbl, {0xbe1a1b60, true}},
+            {log_coeffTbl, {0x3e105710, true}},
+    };
+
     // This object takes care about which constants and polynomials to include.
     struct need_t {
         need_t(alg_kind_t alg) {
@@ -2003,6 +2051,9 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     if (need.log()) push_entries_of(log_consts);
     if (need.log()) push_entries_of(log_polynomial);
     if (need.log()) push_entries_of(log_predefined_values);
+
+    if (need.log()) push_entries_of(log_consts2);
+    if (need.log()) push_entries_of(log_poly2);
 
     // Now that we registered the entries, we set the offsets.  No
     // entries should be registered after this point.  This allows to
