@@ -820,7 +820,7 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     code.asr(t1, t1, 23);
     // int -> float
     code.scvtf(t1, p_512, t1);
-    code.and_(t0, p_512, ZRegS(IDX(table_val(log_x7fffffff, z_tmp))));
+    code.and_(t0, p_512, ZRegS(IDX(table_val(log_x7fffff, z_tmp))));
     code.orr(t0, p_512, t2);
     // fnmsb(a, b, c) = a * b - c
     code.fcpy(t4, p_512, 1.0f);
@@ -1978,7 +1978,7 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     // log(x) constants2
     static const table_t log_consts2 {
             {log_i127shl23, {0x3f800000, true}},
-            {log_x7fffffff, {0x7fffffff, true}},
+            {log_x7fffff, {0x7fffff, true}},
             {log_log2, {0x3f317218, true}},
             {log_log1p5, {0x3ecf991f, true}},
             {log_f2div3, {0x3f2aaaab, true}},

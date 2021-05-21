@@ -279,7 +279,7 @@ private:
         log_pol, // see correspondent table for float values
         log_predefined_vals, // see correspondent table for float values
         log_i127shl23,
-        log_x7fffffff,
+        log_x7fffff,
         log_log2,
         log_log1p5,
         log_f2div3,
