@@ -1564,7 +1564,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
             case eltwise_exp: return 4;
             case eltwise_gelu_tanh: return 9; /* = tanh */
             case eltwise_swish: return 6; /* = logistic */
-            case eltwise_log: return 5;
+            case eltwise_log: return 6;
             case eltwise_clip: return 2;
             case eltwise_pow: return 3;
             case eltwise_gelu_erf: return 6;
