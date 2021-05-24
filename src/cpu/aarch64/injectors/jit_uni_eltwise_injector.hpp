@@ -278,6 +278,12 @@ private:
         log_five_bit_offset, // 5 bits off (31 = 2^5 - 1)
         log_pol, // see correspondent table for float values
         log_predefined_vals, // see correspondent table for float values
+        log_i127shl23,
+        log_x7fffff,
+        log_log2,
+        log_log1p5,
+        log_f2div3,
+        log_coeffTbl,
         undef_key,
     };
 

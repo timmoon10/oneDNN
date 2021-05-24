@@ -806,138 +806,50 @@ void jit_uni_eltwise_injector_f32<isa>::swish_compute_vector_fwd(
 template <cpu_isa_t isa>
 void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
         const TRegS &vmm_src) {
-    // From J.-M. Muller and others, Handbook of Floating-Point Arithmetic, 2010
-    // Here is a brief mathematics to approximate log(x):
-    // log(x) = E * log(2) + log(y), where -log(2)/2 <= log(y) <= log(2)/2;
-    // log(y) = log(1 + z) - log(r_i), where z = y * r_i - 1, r_i approximates
-    //   1 / y, i is index of one of precomputed values;
-    // log(1 + z) ~~ polynomial(z), =>
-    // if (x is normal)
-    //     log(x) ~~ E * log(2) + polynomial(z) - log(r_i),
-    // where log(r_i) is table value.
-    //
-    // If (x == 0) result = -inf;
-    // If (x < 0) result = qnan;
-
-    // save source on stack to check neg and zero values at the end
-    h->sub_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
-    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
-    h->str(ZReg(IDX(vmm_src)), ptr(h->X_TMP_0));
-
-    // compute i
-    const int approx_order = 5;
-    h->lsr(vmm_aux1, vmm_src, n_mantissa_bits - approx_order);
-    h->xa_->and_(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_aux1)),
-            ZRegD(IDX(table_val(log_five_bit_offset, z_tmp))));
-    h->lsl(vmm_aux1, vmm_aux1,
-            1); // multiply i by 2
-
-    // compute anticancellation i
-    h->lsr(vmm_aux2, vmm_aux1, approx_order);
-
-    // get E, don't care about sign as only positive numbers are considered
-    h->lsr(vmm_aux3, vmm_src, n_mantissa_bits);
-    h->xa_->add(vmm_aux3, vmm_aux3, vmm_aux2);
-    h->scvtf(vmm_aux3, p_512 / T_m, vmm_aux3);
-
-    // get m (mantissa)
-    h->eor(ZRegD(IDX(vmm_aux2)), ZRegD(IDX(vmm_aux2)),
-            ZRegD(IDX(table_val(exponent_bias, z_tmp))));
-    h->lsl(vmm_aux2, vmm_aux2, n_mantissa_bits);
-    h->xa_->and_(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)),
-            ZRegD(IDX(table_val(log_mantissa_mask, z_tmp))));
-    h->orr(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux2)));
-
-    // At first, adjust indices for table structure which broadcasts elements
-    h->lsl(vmm_aux1, vmm_aux1,
-            4); // multiply by simd_w = 16
-
-    const auto it = entry_map_.find(log_predefined_vals);
-    assert(it != entry_map_.end());
-    const auto table_start_idx = (*it).second.off;
-
-    auto gather_table_values = [&](const TRegS &vmm_dst, const TRegS &vmm_idxs,
-                                       size_t offt = 0) {
-        h->ptrue(PRegS(IDX(p_mask)), VL16);
-        h->add_imm(
-                h->X_DEFAULT_ADDR, x_table, table_start_idx + offt, h->X_TMP_1);
-
-        h->xa_->mov(ZRegD(IDX(z_tmp)), ZRegD(IDX(vmm_idxs)));
-        h->xa_->mul(z_tmp, 4);
-
-        h->ld1w(z_tmp, p_mask / T_z, ptr(h->X_DEFAULT_ADDR, z_tmp, SXTW));
-        h->xa_->mov(vmm_dst, p_mask / T_m, z_tmp);
-        h->pfalse(PRegB(IDX(p_mask)));
-    };
-
-    // get r_i, same as table(i)
-    gather_table_values(vmm_aux2, vmm_aux1, 0);
-
-    // compute relative error (rel_err = m * r_i - 1)
-    /* [info]Expand from the content of the process, not from the instruction. */
-    h->xa_->fmul(vmm_aux2, vmm_aux2, vmm_src);
-    h->xa_->fsub(vmm_aux2, p_512 / T_m, 1.f);
-
-    // compute polynomial(rel_err)
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(table_val(log_pol, z_tmp, 3))));
-    h->fmad(vmm_src, p_512 / T_m, vmm_aux2,
-            ZRegS(IDX(table_val(log_pol, z_tmp, 2))));
-    h->fmad(vmm_src, p_512 / T_m, vmm_aux2,
-            ZRegS(IDX(table_val(log_pol, z_tmp, 1))));
-    h->fmad(vmm_src, p_512 / T_m, vmm_aux2,
-            ZRegS(IDX(table_val(log_pol, z_tmp, 0))));
-    h->fmad(vmm_src, p_512 / T_m, vmm_aux2, ZRegS(IDX(table_val(one, z_tmp))));
-    h->xa_->fmul(vmm_src, vmm_src, vmm_aux2);
-
-    // get log(r_i) = table(i+1)
-    gather_table_values(vmm_aux2, vmm_aux1, vlen);
-
-    // compute partial result (pres = E * ln(2) - log(r_i))
-    h->fmla(vmm_aux2, p_512 / T_m, vmm_aux3,
-            ZRegS(IDX(table_val(ln2f, z_tmp))));
-
-    // compute (result = polynomial + pres) w/ TwoSum algorithm
-    // TODO: restore this instead of version below when asserts are gone
-    // h->uni_vaddps(vmm_aux1, vmm_src, vmm_aux2); // res_hi = pol + pres
-    // h->uni_vsubps(vmm_aux3, vmm_aux1, vmm_aux2); // res_lo = res_hi - pres
-    // h->uni_vsubps(vmm_aux3, vmm_aux3, vmm_src); // res_lo = res_lo - pol
-    // h->uni_vaddps(vmm_src, vmm_aux1, vmm_aux3); // res_hi = pol + pres
-
-    h->xa_->mov(ZRegD(IDX(vmm_aux1)), ZRegD(IDX(vmm_src)));
-    h->xa_->fadd(vmm_aux1, vmm_aux1, vmm_aux2);
-    h->xa_->mov(ZRegD(IDX(vmm_aux3)), ZRegD(IDX(vmm_aux1)));
-    h->xa_->fsub(vmm_aux3, vmm_aux3,
-            vmm_aux2); // res_lo = res_hi - pres
-    h->xa_->fsub(vmm_aux3, vmm_aux3,
-            vmm_src); // res_lo = res_lo - pol
-    h->xa_->mov(ZRegD(IDX(vmm_src)), ZRegD(IDX(vmm_aux1)));
-    h->xa_->fadd(vmm_src, vmm_src, vmm_aux3);
-
-    // Check original source for zero and neg values. skip blend w/ extreme
-    // values if all src values were positive.
-    h->add_imm(h->X_TMP_0, h->X_SP, 0, h->X_TMP_1);
-    h->ldr(ZReg(IDX(vmm_aux1)), ptr(h->X_TMP_0));
-    h->add_imm(h->X_SP, h->X_SP, vlen, h->X_TMP_0);
-
-    Label end_log_label;
-    compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_le_os);
-
-    h->orrs(h->P_TMP_0.b, h->P_ALL_ONE / Xbyak_aarch64::T_z,
-            Xbyak_aarch64::PRegB(p_mask.getIdx()),
-            Xbyak_aarch64::PRegB(p_mask.getIdx()));
-
-    h->b(EQ, end_log_label);
-
-    // Blend extreme values into src if reach here.
-    // First zero for -inf values...
-    compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_eq_oq);
-    blend_with_mask(vmm_src, table_val(log_minus_inf, z_tmp));
-
-    // ...then negative for qnan values.
-    compute_cmp_mask(vmm_aux1, table_val(zero, z_tmp), _cmp_lt_os);
-    blend_with_mask(vmm_src, table_val(log_qnan, z_tmp));
-
-    h->L(end_log_label);
+    auto &code = *(h->xa_);
+    const auto &t0 = ZRegS(IDX(vmm_src));
+    const auto &t1 = ZRegS(IDX(vmm_aux1));
+    const auto &t2 = ZRegS(IDX(vmm_aux2));
+    const auto &t3 = ZRegS(IDX(vmm_aux3));
+    const auto &t4 = ZRegS(IDX(vmm_aux4));
+    const auto &mask = PRegS(6);
+    code.mov(t3, p_512, t0);
+    table_val(log_i127shl23, t2);
+    code.sub(t1, t0, t2);
+    code.asr(t1, t1, 23);
+    // int -> float
+    code.scvtf(t1, p_512, t1);
+    code.and_(t0, p_512, ZRegS(IDX(table_val(log_x7fffff, z_tmp))));
+    code.orr(t0, p_512, t2);
+    // fnmsb(a, b, c) = a * b - c
+    code.fcpy(t4, p_512, 1.0f);
+    code.fnmsb(t0, p_512, ZRegS(IDX(table_val(log_f2div3, z_tmp))), t4);
+    table_val(log_log2, t2);
+    code.fmad(t1, p_512, t2, ZRegS(IDX(table_val(log_log1p5, z_tmp))));
+    // check if |x-1| < 1/8
+    code.fsub(t2, t3, t4);
+    code.fcpy(z_tmp, p_512, 1.0f / 8);
+    code.facge(mask, p_512, z_tmp, t2); // 1/8 >= abs(x-1)
+    code.mov(t0, mask, t2);
+    code.eor(t1, mask, t1); // t1 = 0
+    const int logN = 9;
+    // fmad(a, b, c) ; a = a * b + c
+    code.movprfx(
+            t2, p_512, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 1))));
+    code.fmad(t2, p_512, t0,
+            ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 2))));
+    for (int j = logN - 3; j >= 0; j--) {
+        code.fmad(t2, p_512, t0, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, j))));
+    }
+    // a * x + e
+    code.fmad(t0, p_512, t2, t1);
+    // check nan/inf
+    code.fcmlt(mask, p_512, t3, 0.0f); // neg
+    code.mov(h->W_TMP_0, 0x7fc00000); // qnan
+    code.cpy(t0, mask, h->W_TMP_0);
+    code.fcmeq(mask, p_512, t3, 0.0f); // = 0
+    code.mov(h->W_TMP_0, 0xff800000); // -Inf
+    code.cpy(t0, mask, h->W_TMP_0);
 }
 
 template <cpu_isa_t isa>
@@ -1517,7 +1429,7 @@ size_t jit_uni_eltwise_injector_f32<isa>::aux_vecs_count() {
             case eltwise_exp: return 4;
             case eltwise_gelu_tanh: return 9; /* = tanh */
             case eltwise_swish: return 6; /* = logistic */
-            case eltwise_log: return 5;
+            case eltwise_log: return 6;
             case eltwise_clip: return 2;
             case eltwise_pow: return 3;
             case eltwise_gelu_erf: return 6;
@@ -1928,6 +1840,26 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
                     {0xc2b00f34, true}}, // 63: -88.029693603515625
     };
 
+    // log(x) constants2
+    static const table_t log_consts2 {
+            {log_i127shl23, {0x3f800000, true}},
+            {log_x7fffff, {0x7fffff, true}},
+            {log_log2, {0x3f317218, true}},
+            {log_log1p5, {0x3ecf991f, true}},
+            {log_f2div3, {0x3f2aaaab, true}},
+    };
+    static const table_t log_poly2 {
+            {log_coeffTbl, {0x3f800000, true}},
+            {log_coeffTbl, {0xbefffffb, true}},
+            {log_coeffTbl, {0x3eaaaa85, true}},
+            {log_coeffTbl, {0xbe800583, true}},
+            {log_coeffTbl, {0x3e4ce999, true}},
+            {log_coeffTbl, {0xbe28c570, true}},
+            {log_coeffTbl, {0x3e0f3d69, true}},
+            {log_coeffTbl, {0xbe1a1b60, true}},
+            {log_coeffTbl, {0x3e105710, true}},
+    };
+
     // This object takes care about which constants and polynomials to include.
     struct need_t {
         need_t(alg_kind_t alg) {
@@ -2003,6 +1935,9 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     if (need.log()) push_entries_of(log_consts);
     if (need.log()) push_entries_of(log_polynomial);
     if (need.log()) push_entries_of(log_predefined_values);
+
+    if (need.log()) push_entries_of(log_consts2);
+    if (need.log()) push_entries_of(log_poly2);
 
     // Now that we registered the entries, we set the offsets.  No
     // entries should be registered after this point.  This allows to
