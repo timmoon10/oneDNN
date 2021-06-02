@@ -814,10 +814,75 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     const auto &t4 = ZRegS(IDX(vmm_aux4));
     const auto &mask = PRegS(6);
     const auto &wt0 = h->W_TMP_0;
+    const auto &xt0 = h->X_TMP_0;
     auto set_imm = [&](const ZRegS &dst, uint32_t imm) {
         code.mov_imm(wt0, imm);
         code.cpy(dst, p_512, wt0);
+        return dst;
     };
+#if 1
+    Label tbl1L, tbl2L, exitL;
+    const size_t tblL = 5;
+    const size_t tblN = 1 << tblL;
+    union fi {
+        float f;
+        uint32_t i;
+    };
+    //code.brk(0);
+    code.mov(t4, p_512, t0);
+    code.fmul(t0, t0, set_imm(z_tmp, float2int(std::sqrt(2))));
+    code.sub(t1, t0, set_imm(z_tmp, 127 << 23));
+    code.asr(t1, t1, 23); // n
+    code.scvtf(t1, p_512, t1); // int -> float
+    code.and_(t0, p_512, set_imm(z_tmp, 0x7fffff));
+    code.asr(t2, t0, 23 - tblL); // d
+    code.lsl(t2, t2, 2); // d *= 4
+    code.orr(t0, p_512, set_imm(z_tmp, 127 << 23)); // y
+    code.fmul(t0, t0, set_imm(z_tmp, float2int(1 / std::sqrt(2))));
+    code.adr(xt0, tbl1L);
+    code.ld1w(t3, p_512, ptr(xt0, t2, SXTW)); // f
+    code.fcpy(z_tmp, p_512, 1.0f);
+    code.fnmsb(t0, p_512, t3, z_tmp); // y = y * f - 1
+    code.adr(xt0, tbl2L);
+    code.ld1w(t2, p_512, ptr(xt0, t2, SXTW)); // h
+    code.fsub(t3, t4, z_tmp); // x-1
+    set_imm(z_tmp, float2int(1.0 / 32));
+    code.facge(mask, p_512, z_tmp, t3); // 1/32 >= abs(x-1)
+    code.mov(t0, mask, t3);
+    code.eor(t2, mask, t2);
+    code.fnmsb(t1, p_512, set_imm(z_tmp, float2int(std::log(2))),
+            t2); // x = n * log2 - h
+    code.movprfx(t2, p_512, set_imm(z_tmp, float2int(1.0f / 3)));
+    code.fcpy(z_tmp, p_512, -0.5f);
+    code.fmad(t2, p_512, t0, z_tmp); // f
+    code.fcpy(z_tmp, p_512, 1.0f);
+    code.fmad(t2, p_512, t0, z_tmp); // f * y + 1
+    code.fmad(t0, p_512, t2, t1); // y * f + x
+    // check nan/inf
+    code.fcmlt(mask, p_512, t4, 0.0f); // neg
+    code.mov(wt0, 0x7fc00000); // qnan
+    code.cpy(t0, mask, wt0);
+    code.fcmeq(mask, p_512, t4, 0.0f); // = 0
+    code.mov(wt0, 0xff800000); // -Inf
+    code.cpy(t0, mask, wt0);
+
+    code.b(exitL);
+    code.L(tbl1L);
+    const float *tbl1Addr = (const float *)code.getCurr();
+    for (size_t i = 0; i < tblN; i++) {
+        fi fi;
+        fi.i = (127 << 23) | (i << (23 - tblL));
+        fi.f = std::sqrt(2) / fi.f;
+        code.dd(fi.i);
+    }
+    code.L(tbl2L);
+    for (size_t i = 0; i < tblN; i++) {
+        fi fi;
+        fi.f = std::log(tbl1Addr[i]);
+        code.dd(fi.i);
+    }
+    code.L(exitL);
+#else
     code.mov(t3, p_512, t0);
     table_val(log_i127shl23, t2);
     code.sub(t1, t0, t2);
@@ -858,6 +923,7 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     code.fcmeq(mask, p_512, t3, 0.0f); // = 0
     code.mov(h->W_TMP_0, 0xff800000); // -Inf
     code.cpy(t0, mask, h->W_TMP_0);
+#endif
 }
 
 template <cpu_isa_t isa>
