@@ -831,13 +831,14 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     //code.brk(0);
     code.mov(t4, p_512, t0);
     code.fmul(t0, t0, set_imm(z_tmp, float2int(std::sqrt(2))));
-    code.sub(t1, t0, set_imm(z_tmp, 127 << 23));
+    set_imm(t3, 127 << 23);
+    code.sub(t1, t0, t3);
     code.asr(t1, t1, 23); // n
     code.scvtf(t1, p_512, t1); // int -> float
     code.and_(t0, p_512, set_imm(z_tmp, 0x7fffff));
     code.asr(t2, t0, 23 - tblL); // d
     code.lsl(t2, t2, 2); // d *= 4
-    code.orr(t0, p_512, set_imm(z_tmp, 127 << 23)); // y
+    code.orr(t0, p_512, t3); // y
     code.fmul(t0, t0, set_imm(z_tmp, float2int(1 / std::sqrt(2))));
     code.adr(xt0, tbl1L);
     code.ld1w(t3, p_512, ptr(xt0, t2, SXTW)); // f
