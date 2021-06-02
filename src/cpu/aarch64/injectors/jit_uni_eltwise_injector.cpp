@@ -813,19 +813,27 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     const auto &t3 = ZRegS(IDX(vmm_aux3));
     const auto &t4 = ZRegS(IDX(vmm_aux4));
     const auto &mask = PRegS(6);
+    const auto &wt0 = h->W_TMP_0;
+    auto set_imm = [&](const ZRegS &dst, uint32_t imm) {
+        code.mov_imm(wt0, imm);
+        code.cpy(dst, p_512, wt0);
+    };
     code.mov(t3, p_512, t0);
     table_val(log_i127shl23, t2);
     code.sub(t1, t0, t2);
     code.asr(t1, t1, 23);
     // int -> float
     code.scvtf(t1, p_512, t1);
-    code.and_(t0, p_512, ZRegS(IDX(table_val(log_x7fffff, z_tmp))));
+    set_imm(z_tmp, 0x7fffff);
+    code.and_(t0, p_512, z_tmp);
     code.orr(t0, p_512, t2);
     // fnmsb(a, b, c) = a * b - c
     code.fcpy(t4, p_512, 1.0f);
-    code.fnmsb(t0, p_512, ZRegS(IDX(table_val(log_f2div3, z_tmp))), t4);
+    set_imm(z_tmp, float2int(2.0f / 3));
+    code.fnmsb(t0, p_512, z_tmp, t4);
     table_val(log_log2, t2);
-    code.fmad(t1, p_512, t2, ZRegS(IDX(table_val(log_log1p5, z_tmp))));
+    set_imm(z_tmp, float2int(std::log(1.5f)));
+    code.fmad(t1, p_512, t2, z_tmp);
     // check if |x-1| < 1/8
     code.fsub(t2, t3, t4);
     code.fcpy(z_tmp, p_512, 1.0f / 8);
