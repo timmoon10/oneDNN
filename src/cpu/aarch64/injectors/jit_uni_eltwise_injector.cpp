@@ -820,7 +820,6 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
         code.cpy(dst, p_512, wt0);
         return dst;
     };
-#if 1
     Label tbl1L, tbl2L, exitL;
     const size_t tblL = 5;
     const size_t tblN = 1 << tblL;
@@ -883,48 +882,6 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
         code.dd(fi.i);
     }
     code.L(exitL);
-#else
-    code.mov(t3, p_512, t0);
-    table_val(log_i127shl23, t2);
-    code.sub(t1, t0, t2);
-    code.asr(t1, t1, 23);
-    // int -> float
-    code.scvtf(t1, p_512, t1);
-    set_imm(z_tmp, 0x7fffff);
-    code.and_(t0, p_512, z_tmp);
-    code.orr(t0, p_512, t2);
-    // fnmsb(a, b, c) = a * b - c
-    code.fcpy(t4, p_512, 1.0f);
-    set_imm(z_tmp, float2int(2.0f / 3));
-    code.fnmsb(t0, p_512, z_tmp, t4);
-    table_val(log_log2, t2);
-    set_imm(z_tmp, float2int(std::log(1.5f)));
-    code.fmad(t1, p_512, t2, z_tmp);
-    // check if |x-1| < 1/8
-    code.fsub(t2, t3, t4);
-    code.fcpy(z_tmp, p_512, 1.0f / 8);
-    code.facge(mask, p_512, z_tmp, t2); // 1/8 >= abs(x-1)
-    code.mov(t0, mask, t2);
-    code.eor(t1, mask, t1); // t1 = 0
-    const int logN = 9;
-    // fmad(a, b, c) ; a = a * b + c
-    code.movprfx(
-            t2, p_512, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 1))));
-    code.fmad(t2, p_512, t0,
-            ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 2))));
-    for (int j = logN - 3; j >= 0; j--) {
-        code.fmad(t2, p_512, t0, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, j))));
-    }
-    // a * x + e
-    code.fmad(t0, p_512, t2, t1);
-    // check nan/inf
-    code.fcmlt(mask, p_512, t3, 0.0f); // neg
-    code.mov(h->W_TMP_0, 0x7fc00000); // qnan
-    code.cpy(t0, mask, h->W_TMP_0);
-    code.fcmeq(mask, p_512, t3, 0.0f); // = 0
-    code.mov(h->W_TMP_0, 0xff800000); // -Inf
-    code.cpy(t0, mask, h->W_TMP_0);
-#endif
 }
 
 template <cpu_isa_t isa>
