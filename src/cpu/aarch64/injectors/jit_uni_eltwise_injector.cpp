@@ -813,43 +813,75 @@ void jit_uni_eltwise_injector_f32<isa>::log_compute_vector_fwd(
     const auto &t3 = ZRegS(IDX(vmm_aux3));
     const auto &t4 = ZRegS(IDX(vmm_aux4));
     const auto &mask = PRegS(6);
-    code.mov(t3, p_512, t0);
-    table_val(log_i127shl23, t2);
-    code.sub(t1, t0, t2);
-    code.asr(t1, t1, 23);
-    // int -> float
-    code.scvtf(t1, p_512, t1);
-    code.and_(t0, p_512, ZRegS(IDX(table_val(log_x7fffff, z_tmp))));
-    code.orr(t0, p_512, t2);
-    // fnmsb(a, b, c) = a * b - c
-    code.fcpy(t4, p_512, 1.0f);
-    code.fnmsb(t0, p_512, ZRegS(IDX(table_val(log_f2div3, z_tmp))), t4);
-    table_val(log_log2, t2);
-    code.fmad(t1, p_512, t2, ZRegS(IDX(table_val(log_log1p5, z_tmp))));
-    // check if |x-1| < 1/8
-    code.fsub(t2, t3, t4);
-    code.fcpy(z_tmp, p_512, 1.0f / 8);
-    code.facge(mask, p_512, z_tmp, t2); // 1/8 >= abs(x-1)
-    code.mov(t0, mask, t2);
-    code.eor(t1, mask, t1); // t1 = 0
-    const int logN = 9;
-    // fmad(a, b, c) ; a = a * b + c
-    code.movprfx(
-            t2, p_512, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 1))));
-    code.fmad(t2, p_512, t0,
-            ZRegS(IDX(table_val(log_coeffTbl, z_tmp, logN - 2))));
-    for (int j = logN - 3; j >= 0; j--) {
-        code.fmad(t2, p_512, t0, ZRegS(IDX(table_val(log_coeffTbl, z_tmp, j))));
-    }
-    // a * x + e
-    code.fmad(t0, p_512, t2, t1);
+    const auto &wt0 = h->W_TMP_0;
+    const auto &xt0 = h->X_TMP_0;
+    auto set_imm = [&](const ZRegS &dst, uint32_t imm) {
+        code.mov_imm(wt0, imm);
+        code.cpy(dst, p_512, wt0);
+        return dst;
+    };
+    Label tbl1L, tbl2L, exitL;
+    const size_t tblL = 5;
+    const size_t tblN = 1 << tblL;
+    union fi {
+        float f;
+        uint32_t i;
+    };
+    //code.brk(0);
+    code.mov(t4, p_512, t0);
+    code.fmul(t0, t0, set_imm(z_tmp, float2int(std::sqrt(2))));
+    set_imm(t3, 127 << 23);
+    code.sub(t1, t0, t3);
+    code.asr(t1, t1, 23); // n
+    code.scvtf(t1, p_512, t1); // int -> float
+    code.and_(t0, p_512, set_imm(z_tmp, 0x7fffff));
+    code.asr(t2, t0, 23 - tblL); // d
+    code.lsl(t2, t2, 2); // d *= 4
+    code.orr(t0, p_512, t3); // y
+    code.fmul(t0, t0, set_imm(z_tmp, float2int(1 / std::sqrt(2))));
+    code.adr(xt0, tbl1L);
+    code.ld1w(t3, p_512, ptr(xt0, t2, SXTW)); // f
+    code.fcpy(z_tmp, p_512, 1.0f);
+    code.fnmsb(t0, p_512, t3, z_tmp); // y = y * f - 1
+    code.adr(xt0, tbl2L);
+    code.ld1w(t2, p_512, ptr(xt0, t2, SXTW)); // h
+    code.fsub(t3, t4, z_tmp); // x-1
+    set_imm(z_tmp, float2int(1.0 / 32));
+    code.facge(mask, p_512, z_tmp, t3); // 1/32 >= abs(x-1)
+    code.mov(t0, mask, t3);
+    code.eor(t2, mask, t2);
+    code.fnmsb(t1, p_512, set_imm(z_tmp, float2int(std::log(2))),
+            t2); // x = n * log2 - h
+    code.movprfx(t2, p_512, set_imm(z_tmp, float2int(1.0f / 3)));
+    code.fcpy(z_tmp, p_512, -0.5f);
+    code.fmad(t2, p_512, t0, z_tmp); // f
+    code.fcpy(z_tmp, p_512, 1.0f);
+    code.fmad(t2, p_512, t0, z_tmp); // f * y + 1
+    code.fmad(t0, p_512, t2, t1); // y * f + x
     // check nan/inf
-    code.fcmlt(mask, p_512, t3, 0.0f); // neg
-    code.mov(h->W_TMP_0, 0x7fc00000); // qnan
-    code.cpy(t0, mask, h->W_TMP_0);
-    code.fcmeq(mask, p_512, t3, 0.0f); // = 0
-    code.mov(h->W_TMP_0, 0xff800000); // -Inf
-    code.cpy(t0, mask, h->W_TMP_0);
+    code.fcmlt(mask, p_512, t4, 0.0f); // neg
+    code.mov(wt0, 0x7fc00000); // qnan
+    code.cpy(t0, mask, wt0);
+    code.fcmeq(mask, p_512, t4, 0.0f); // = 0
+    code.mov(wt0, 0xff800000); // -Inf
+    code.cpy(t0, mask, wt0);
+
+    code.b(exitL);
+    code.L(tbl1L);
+    const float *tbl1Addr = (const float *)code.getCurr();
+    for (size_t i = 0; i < tblN; i++) {
+        fi fi;
+        fi.i = (127 << 23) | (i << (23 - tblL));
+        fi.f = std::sqrt(2) / fi.f;
+        code.dd(fi.i);
+    }
+    code.L(tbl2L);
+    for (size_t i = 0; i < tblN; i++) {
+        fi fi;
+        fi.f = std::log(tbl1Addr[i]);
+        code.dd(fi.i);
+    }
+    code.L(exitL);
 }
 
 template <cpu_isa_t isa>
@@ -1723,143 +1755,6 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
             {gelu_erf_pol, {0x3f87dc22, true}}, // p5 = 1.061405429f
     };
 
-    // log(x) constants
-    static const table_t log_consts {
-            {log_minus_inf, {0xff800000, true}},
-            {log_qnan, {0x7fc00000, true}},
-            {log_mantissa_mask, {0x007fffff, true}},
-            {log_full_k_reg_mask, {0x0000ffff, true}},
-            {log_five_bit_offset, {0x0000001f, true}},
-    };
-
-    // log(x) polynomial approximation
-    static const table_t log_polynomial {
-            {log_pol, {0xbf000000, true}}, // p1 = -0.5f
-            {log_pol, {0x3eaaaaab, true}}, // p2 =  0.333333343f
-            {log_pol, {0xbe8004ab, true}}, // p3 = -0.250035613f
-            {log_pol, {0x3e4cc8a3, true}}, // p4 =  0.199984118f
-    };
-
-    // log(x) pre-defined values. First goes index}, then val[index].
-    static const table_t log_predefined_values {
-            {log_predefined_vals, {0x3f800000, true}}, //  0: 1
-            {log_predefined_vals,
-                    {0xc2b00f34, true}}, //  1: -88.029693603515625
-            {log_predefined_vals, {0x3f780000, true}}, //  2: 0.96875
-            {log_predefined_vals,
-                    {0xc2affef2, true}}, //  3: -87.9979400634765625
-            {log_predefined_vals, {0x3f700000, true}}, //  4: 0.9375
-            {log_predefined_vals,
-                    {0xc2afee29, true}}, //  5: -87.9651565551757812
-            {log_predefined_vals, {0x3f680000, true}}, //  6: 0.90625
-            {log_predefined_vals,
-                    {0xc2afdccd, true}}, //  7: -87.9312515258789062
-            {log_predefined_vals, {0x3f600000, true}}, //  8: 0.875
-            {log_predefined_vals,
-                    {0xc2afcad6, true}}, //  9: -87.8961639404296875
-            {log_predefined_vals, {0x3f580000, true}}, // 10: 0.84375
-            {log_predefined_vals,
-                    {0xc2afb837, true}}, // 11: -87.859794616699218
-            {log_predefined_vals, {0x3f580000, true}}, // 12: 0.84375
-            {log_predefined_vals,
-                    {0xc2afb837, true}}, // 13: -87.859794616699218
-            {log_predefined_vals, {0x3f500000, true}}, // 14: 0.8125
-            {log_predefined_vals,
-                    {0xc2afa4e4, true}}, // 15: -87.822052001953125
-            {log_predefined_vals, {0x3f480000, true}}, // 16: 0.78125
-            {log_predefined_vals,
-                    {0xc2af90cf, true}}, // 17: -87.782829284667968
-            {log_predefined_vals, {0x3f480000, true}}, // 18: 0.78125
-            {log_predefined_vals,
-                    {0xc2af90cf, true}}, // 19: -87.782829284667968
-            {log_predefined_vals, {0x3f400000, true}}, // 20: 0.75
-            {log_predefined_vals,
-                    {0xc2af7be9, true}}, // 21: -87.742012023925781
-            {log_predefined_vals, {0x3f400000, true}}, // 22: 0.75
-            {log_predefined_vals,
-                    {0xc2af7be9, true}}, // 23: -87.742012023925781
-            {log_predefined_vals, {0x3f380000, true}}, // 24: 0.71875
-            {log_predefined_vals,
-                    {0xc2af661e, true}}, // 25: -87.699447631835937
-            {log_predefined_vals, {0x3f380000, true}}, // 26: 0.71875
-            {log_predefined_vals,
-                    {0xc2af661e, true}}, // 27: -87.699447631835937
-            {log_predefined_vals, {0x3f300000, true}}, // 28: 0.6875
-            {log_predefined_vals,
-                    {0xc2af4f5c, true}}, // 29: -87.654998779296875
-            {log_predefined_vals, {0x3f300000, true}}, // 30: 0.6875
-            {log_predefined_vals,
-                    {0xc2af4f5c, true}}, // 31: -87.654998779296875
-            {log_predefined_vals, {0x3fa80000, true}}, // 32: 1.3125
-            {log_predefined_vals,
-                    {0xc2b09a6f, true}}, // 33: -88.301628112792968
-            {log_predefined_vals, {0x3fa80000, true}}, // 34: 1.3125
-            {log_predefined_vals,
-                    {0xc2b09a6f, true}}, // 35: -88.301628112792968
-            {log_predefined_vals, {0x3fa00000, true}}, // 36: 1.25
-            {log_predefined_vals,
-                    {0xc2b08174, true}}, // 37: -88.252838134765625
-            {log_predefined_vals, {0x3fa00000, true}}, // 38: 1.25
-            {log_predefined_vals,
-                    {0xc2b08174, true}}, // 39: -88.252838134765625
-            {log_predefined_vals, {0x3fa00000, true}}, // 40: 1.25
-            {log_predefined_vals,
-                    {0xc2b08174, true}}, // 41: -88.252838134765625
-            {log_predefined_vals, {0x3f980000, true}}, // 42: 1.1875
-            {log_predefined_vals,
-                    {0xc2b06731, true}}, // 43: -88.201545715332031
-            {log_predefined_vals, {0x3f980000, true}}, // 44: 1.1875
-            {log_predefined_vals,
-                    {0xc2b06731, true}}, // 45: -88.201545715332031
-            {log_predefined_vals, {0x3f900000, true}}, // 46: 1.125
-            {log_predefined_vals,
-                    {0xc2b04b82, true}}, // 47: -88.147476196289062
-            {log_predefined_vals, {0x3f900000, true}}, // 48: 1.125
-            {log_predefined_vals,
-                    {0xc2b04b82, true}}, // 49: -88.147476196289062
-            {log_predefined_vals, {0x3f900000, true}}, // 50: 1.125
-            {log_predefined_vals,
-                    {0xc2b04b82, true}}, // 51: -88.147476196289062
-            {log_predefined_vals, {0x3f900000, true}}, // 52: 1.125
-            {log_predefined_vals,
-                    {0xc2b04b82, true}}, // 53: -88.147476196289062
-            {log_predefined_vals, {0x3f880000, true}}, // 54: 1.0625
-            {log_predefined_vals,
-                    {0xc2b02e3e, true}}, // 55: -88.090316772460937
-            {log_predefined_vals, {0x3f880000, true}}, // 56: 1.0625
-            {log_predefined_vals,
-                    {0xc2b02e3e, true}}, // 57: -88.090316772460937
-            {log_predefined_vals, {0x3f880000, true}}, // 58: 1.0625
-            {log_predefined_vals,
-                    {0xc2b02e3e, true}}, // 59: -88.090316772460937
-            {log_predefined_vals, {0x3f800000, true}}, // 60: 1
-            {log_predefined_vals,
-                    {0xc2b00f34, true}}, // 61: -88.029693603515625
-            {log_predefined_vals, {0x3f800000, true}}, // 62: 1
-            {log_predefined_vals,
-                    {0xc2b00f34, true}}, // 63: -88.029693603515625
-    };
-
-    // log(x) constants2
-    static const table_t log_consts2 {
-            {log_i127shl23, {0x3f800000, true}},
-            {log_x7fffff, {0x7fffff, true}},
-            {log_log2, {0x3f317218, true}},
-            {log_log1p5, {0x3ecf991f, true}},
-            {log_f2div3, {0x3f2aaaab, true}},
-    };
-    static const table_t log_poly2 {
-            {log_coeffTbl, {0x3f800000, true}},
-            {log_coeffTbl, {0xbefffffb, true}},
-            {log_coeffTbl, {0x3eaaaa85, true}},
-            {log_coeffTbl, {0xbe800583, true}},
-            {log_coeffTbl, {0x3e4ce999, true}},
-            {log_coeffTbl, {0xbe28c570, true}},
-            {log_coeffTbl, {0x3e0f3d69, true}},
-            {log_coeffTbl, {0xbe1a1b60, true}},
-            {log_coeffTbl, {0x3e105710, true}},
-    };
-
     // This object takes care about which constants and polynomials to include.
     struct need_t {
         need_t(alg_kind_t alg) {
@@ -1932,12 +1827,6 @@ void jit_uni_eltwise_injector_f32<isa>::register_table_entries() {
     if (need.gelu_tanh()) push_entries_of(gelu_tanh_consts);
     if (need.gelu_erf()) push_entries_of(gelu_erf_consts);
     if (need.gelu_erf()) push_entries_of(gelu_erf_polynomial);
-    if (need.log()) push_entries_of(log_consts);
-    if (need.log()) push_entries_of(log_polynomial);
-    if (need.log()) push_entries_of(log_predefined_values);
-
-    if (need.log()) push_entries_of(log_consts2);
-    if (need.log()) push_entries_of(log_poly2);
 
     // Now that we registered the entries, we set the offsets.  No
     // entries should be registered after this point.  This allows to
