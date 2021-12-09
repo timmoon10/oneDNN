@@ -54,29 +54,95 @@ void gru_lbr_fwd_postgemm_template(T1 func1, T2 func2, T3 to_src,
     ws_gates_aoc<scratch_data_t> scratch_cell(rnn, scratch_cell_);
     AOC<src_data_t, 2> ws_Wh_b(ws_grid_, rnn.mb, rnn.dhc);
 
-    parallel_nd(rnn.mb, [&](int i) {
-        PRAGMA_OMP_SIMD()
-        for (int j = 0; j < rnn.dhc; j++) {
-            float Wh_b = scratch_cell(i, 2, j) + bias(3, j);
-            auto G0 = func1(scales, // default func1 is sigmoid
-                    scratch_gates(i, 0, j) + scratch_cell(i, 0, j)
-                            + bias(0, j));
-            auto G1 = func1(scales + 1, // default func1 is sigmoid
-                    scratch_gates(i, 1, j) + scratch_cell(i, 1, j)
-                            + bias(1, j));
-            auto G2 = func2(scales + 2, // default func2 is tanh
-                    scratch_gates(i, 2, j) + G1 * Wh_b + bias(2, j));
-            auto tmp = to_src(src_iter(i, j) * G0 + (1.0f - G0) * G2);
-            if (dst_layer_ != nullptr) dst_layer(i, j) = tmp;
-            if (dst_iter_ != nullptr) dst_iter(i, j) = tmp;
-            if (rnn.is_training) {
-                ws_gates(i, 0, j) = to_src(G0);
-                ws_gates(i, 1, j) = to_src(G1);
-                ws_gates(i, 2, j) = to_src(G2);
-                ws_Wh_b(i, j) = to_src(Wh_b);
+    if (dst_layer_ != nullptr && rnn.is_training) {
+        // Optimized kernel with no branching behavior
+        // Note: dst_iter_ is uncooperative.
+        // Note: The driver function sets dst_iter_=nullptr since it
+        // is redundant with dst_layer_.
+        parallel_nd(rnn.mb, [&](int i) {
+            constexpr int block_size = 64 / sizeof(src_data_t);
+            for (int j_begin = 0; j_begin < rnn.dhc; j_begin += block_size) {
+                int j_end = j_begin + block_size;
+                if (j_end > rnn.dhc) j_end = rnn.dhc;
+                float Wh_b_block[block_size];
+                src_data_t G0_block[block_size], G1_block[block_size], G2_block[block_size];
+                PRAGMA_OMP_SIMD()
+                for (int j = j_begin; j < j_end; ++j) {
+                    const auto j_block = j - j_begin;
+                    auto& Wh_b = Wh_b_block[j_block];
+                    auto& G0 = G0_block[j_block];
+                    auto& G1 = G1_block[j_block];
+                    auto& G2 = G2_block[j_block];
+                    Wh_b = scratch_cell(i, 2, j) + bias(3, j);
+                    G0 = scratch_gates(i, 0, j) + scratch_cell(i, 0, j) + bias(0, j);
+                    G1 = scratch_gates(i, 1, j) + scratch_cell(i, 1, j) + bias(1, j);
+                    G2 = scratch_gates(i, 2, j) + G1 * Wh_b + bias(2, j);
+                }
+                PRAGMA_OMP_SIMD()
+                for (int j_block = 0; j_block < block_size; ++j_block) {
+                    auto& G0 = G0_block[j_block];
+                    G0 = func1(scales, G0);
+                }
+                PRAGMA_OMP_SIMD()
+                for (int j_block = 0; j_block < block_size; ++j_block) {
+                    auto& G1 = G1_block[j_block];
+                    G1 = func1(scales+1, G1);
+                }
+                PRAGMA_OMP_SIMD()
+                for (int j_block = 0; j_block < block_size; ++j_block) {
+                    auto& G2 = G2_block[j_block];
+                    G2 = func2(scales+2, G2);
+                }
+                PRAGMA_OMP_SIMD()
+                for (int j = j_begin; j < j_end; ++j) {
+                    const auto j_block = j - j_begin;
+                    const auto& Wh_b = Wh_b_block[j_block];
+                    const auto& G0 = G0_block[j_block];
+                    const auto& G1 = G1_block[j_block];
+                    const auto& G2 = G2_block[j_block];
+                    const auto tmp = to_src(src_iter(i, j) * G0 + (1.0f - G0) * G2);
+                    dst_layer(i, j) = tmp;
+                    if (dst_iter_ != nullptr) dst_iter(i, j) = tmp;
+                    ws_gates(i, 0, j) = to_src(G0);
+                    ws_gates(i, 1, j) = to_src(G1);
+                    ws_gates(i, 2, j) = to_src(G2);
+                    ws_Wh_b(i, j) = to_src(Wh_b);
+                }
             }
-        }
-    });
+        });
+    }
+    else {
+        // General kernel with branching behavior
+        fprintf(
+          stderr,
+          "unoptimized kernel: dst_layer=%d, dst_iter=%d, is_training=%d\n",
+          int(dst_layer_ != nullptr),
+          int(dst_iter_ != nullptr),
+          int(rnn.is_training)); /// @todo Remove
+        parallel_nd(rnn.mb, [&](int i) {
+            PRAGMA_OMP_SIMD()
+            for (int j = 0; j < rnn.dhc; j++) {
+                float Wh_b = scratch_cell(i, 2, j) + bias(3, j);
+                auto G0 = func1(scales, // default func1 is sigmoid
+                                scratch_gates(i, 0, j) + scratch_cell(i, 0, j)
+                                + bias(0, j));
+                auto G1 = func1(scales + 1, // default func1 is sigmoid
+                                scratch_gates(i, 1, j) + scratch_cell(i, 1, j)
+                                + bias(1, j));
+                auto G2 = func2(scales + 2, // default func2 is tanh
+                                scratch_gates(i, 2, j) + G1 * Wh_b + bias(2, j));
+                auto tmp = to_src(src_iter(i, j) * G0 + (1.0f - G0) * G2);
+                if (dst_layer_ != nullptr) dst_layer(i, j) = tmp;
+                if (dst_iter_ != nullptr) dst_iter(i, j) = tmp;
+                if (rnn.is_training) {
+                    ws_gates(i, 0, j) = to_src(G0);
+                    ws_gates(i, 1, j) = to_src(G1);
+                    ws_gates(i, 2, j) = to_src(G2);
+                    ws_Wh_b(i, j) = to_src(Wh_b);
+                }
+            }
+        });
+    }
 }
 
 template <>
